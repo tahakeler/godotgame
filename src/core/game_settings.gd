@@ -93,6 +93,10 @@ const DIFFICULTY_PROFILES := {
 }
 
 var mouse_sensitivity := 0.0022
+## Stick turn rate in radians per second at full deflection. Kept separate from
+## the mouse figure because the two are not the same unit: one is radians per
+## pixel moved, the other radians per second held.
+var gamepad_sensitivity := 2.7
 var invert_look_y := false
 var master_volume := 0.8
 var fullscreen := true
@@ -155,12 +159,14 @@ func apply_window() -> void:
 ## Push look preferences onto a player that just entered the scene.
 func apply_to_player(player: Player) -> void:
 	player.mouse_sensitivity = mouse_sensitivity
+	player.gamepad_sensitivity = gamepad_sensitivity
 	player.invert_look_y = invert_look_y
 
 
 func save_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value(SECTION, "mouse_sensitivity", mouse_sensitivity)
+	config.set_value(SECTION, "gamepad_sensitivity", gamepad_sensitivity)
 	config.set_value(SECTION, "invert_look_y", invert_look_y)
 	config.set_value(SECTION, "master_volume", master_volume)
 	config.set_value(SECTION, "fullscreen", fullscreen)
@@ -179,6 +185,7 @@ func load_settings() -> void:
 		return
 
 	mouse_sensitivity = config.get_value(SECTION, "mouse_sensitivity", mouse_sensitivity)
+	gamepad_sensitivity = config.get_value(SECTION, "gamepad_sensitivity", gamepad_sensitivity)
 	invert_look_y = config.get_value(SECTION, "invert_look_y", invert_look_y)
 	master_volume = config.get_value(SECTION, "master_volume", master_volume)
 	fullscreen = config.get_value(SECTION, "fullscreen", fullscreen)

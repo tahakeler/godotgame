@@ -94,6 +94,34 @@ text = "5.0"
 horizontal_alignment = 2
 vertical_alignment = 1
 
+[node name="PadSensitivityRow" type="HBoxContainer" parent="Panel/Layout"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_constants/separation = 18
+
+[node name="Label" type="Label" parent="Panel/Layout/PadSensitivityRow"]
+custom_minimum_size = Vector2(230, 0)
+theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
+text = "Gamepad sensitivity"
+vertical_alignment = 1
+
+[node name="PadSensitivitySlider" type="HSlider" parent="Panel/Layout/PadSensitivityRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 1.0
+max_value = 10.0
+step = 0.1
+value = 5.0
+
+[node name="PadSensitivityValue" type="Label" parent="Panel/Layout/PadSensitivityRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(52, 0)
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+text = "5.0"
+horizontal_alignment = 2
+vertical_alignment = 1
+
 [node name="InvertRow" type="HBoxContainer" parent="Panel/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18

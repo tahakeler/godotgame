@@ -11,8 +11,16 @@ signal closed()
 const SENSITIVITY_MIN := 0.0008
 const SENSITIVITY_MAX := 0.0055
 
+## Stick turn rate in radians per second at full deflection. The floor is a
+## deliberate half-turn per second: anything slower cannot get you facing a
+## zombie that has walked up behind you.
+const PAD_SENSITIVITY_MIN := 1.4
+const PAD_SENSITIVITY_MAX := 4.6
+
 @onready var _sensitivity_slider: HSlider = %SensitivitySlider
 @onready var _sensitivity_value: Label = %SensitivityValue
+@onready var _pad_sensitivity_slider: HSlider = %PadSensitivitySlider
+@onready var _pad_sensitivity_value: Label = %PadSensitivityValue
 @onready var _invert_check: Button = %InvertCheck
 @onready var _volume_slider: HSlider = %VolumeSlider
 @onready var _volume_value: Label = %VolumeValue
@@ -39,6 +47,7 @@ func _ready() -> void:
 	_load_from_settings()
 
 	_sensitivity_slider.value_changed.connect(_on_sensitivity_changed)
+	_pad_sensitivity_slider.value_changed.connect(_on_pad_sensitivity_changed)
 	_invert_check.toggled.connect(_on_invert_toggled)
 	_volume_slider.value_changed.connect(_on_volume_changed)
 	_fullscreen_check.toggled.connect(_on_fullscreen_toggled)
@@ -74,6 +83,12 @@ func _load_from_settings() -> void:
 	_sensitivity_slider.value = clampf(sensitivity_fraction, 0.0, 1.0) * 9.0 + 1.0
 	_update_sensitivity_label()
 
+	var pad_fraction := inverse_lerp(
+		PAD_SENSITIVITY_MIN, PAD_SENSITIVITY_MAX, _settings.gamepad_sensitivity
+	)
+	_pad_sensitivity_slider.value = clampf(pad_fraction, 0.0, 1.0) * 9.0 + 1.0
+	_update_pad_sensitivity_label()
+
 	_invert_check.button_pressed = _settings.invert_look_y
 	_invert_check.text = "ON" if _settings.invert_look_y else "OFF"
 	_volume_slider.value = _settings.master_volume * 100.0
@@ -90,6 +105,16 @@ func _on_sensitivity_changed(value: float) -> void:
 		SENSITIVITY_MIN, SENSITIVITY_MAX, (value - 1.0) / 9.0
 	)
 	_update_sensitivity_label()
+	_settings.save_settings()
+
+
+## The stick setting is live: a player adjusting it is doing so because the
+## turn rate feels wrong, and they need to feel the new one to judge it.
+func _on_pad_sensitivity_changed(value: float) -> void:
+	_settings.gamepad_sensitivity = lerpf(
+		PAD_SENSITIVITY_MIN, PAD_SENSITIVITY_MAX, (value - 1.0) / 9.0
+	)
+	_update_pad_sensitivity_label()
 	_settings.save_settings()
 
 
@@ -121,6 +146,10 @@ func _on_difficulty_selected(index: int) -> void:
 
 func _update_sensitivity_label() -> void:
 	_sensitivity_value.text = "%.1f" % _sensitivity_slider.value
+
+
+func _update_pad_sensitivity_label() -> void:
+	_pad_sensitivity_value.text = "%.1f" % _pad_sensitivity_slider.value
 
 
 func _update_volume_label() -> void:

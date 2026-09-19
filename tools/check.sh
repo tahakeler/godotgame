@@ -65,11 +65,13 @@ run_step() {
 
 run_step "import" "$GODOT" --headless --import
 run_step "static-checks" "$GODOT" --headless --script tests/manual/verify_project.gd
+run_step "input-map" "$GODOT" --headless --script tests/manual/verify_input_map.gd
 run_step "arena" "$GODOT" --headless --script tests/manual/verify_arena.gd
 run_step "navmesh" "$GODOT" --headless --script tests/manual/verify_navmesh.gd
 run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_types.gd
 run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
+run_step "pause" "$GODOT" --headless --script tests/manual/verify_pause.gd
 run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
 run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
 run_step "no-phantom-fire" "$GODOT" --headless --script tests/manual/verify_no_phantom_fire.gd

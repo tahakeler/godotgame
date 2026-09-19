@@ -181,13 +181,14 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 92.0
-offset_top = -58.0
+offset_top = -76.0
 offset_right = -48.0
 offset_bottom = -30.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.376, 0.4, 0.443, 1)
 theme_override_font_sizes/font_size = 15
-text = "WASD MOVE      MOUSE LOOK      LMB FIRE      R RELOAD      SPACE JUMP      ENTER RESTART      ESC PAUSE"
+text = "WASD MOVE      MOUSE LOOK      LMB FIRE      R RELOAD      SPACE JUMP      ENTER RESTART      ESC PAUSE
+STICKS MOVE / LOOK      RT FIRE      X RELOAD      A JUMP      Y RESTART      START PAUSE"
 
 [node name="Version" type="Label" parent="UI/MainPanel"]
 anchors_preset = 3
