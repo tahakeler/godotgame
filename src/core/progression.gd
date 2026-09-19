@@ -24,6 +24,7 @@ enum Upgrade {
 	ADRENALINE,
 	SCAVENGER,
 	BANDOLIER,
+	SUBSONIC,
 }
 
 const UPGRADES := {
@@ -54,6 +55,10 @@ const UPGRADES := {
 	Upgrade.BANDOLIER: {
 		"name": "Bandolier",
 		"detail": "+15 reserve capacity, and fill it now",
+	},
+	Upgrade.SUBSONIC: {
+		"name": "Subsonic Rounds",
+		"detail": "Gunfire carries 35% less far",
 	},
 }
 

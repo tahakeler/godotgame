@@ -79,6 +79,7 @@ func _ready() -> void:
 	_capture_baselines()
 	_wire_audio()
 	_wire_statistics()
+	_wire_noise()
 	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
 	start_round()
@@ -121,6 +122,20 @@ func _wire_audio() -> void:
 	)
 	round_lost.connect(
 		func(_kills: int, _time: float, _record: bool) -> void: sounds.play("round_lost")
+	)
+
+
+## A gunshot is heard by anything nearby, and what it draws is a crowd to the
+## place the shot came from — not to the player.
+##
+## This is what makes the game's first pillar literally true. Ammunition
+## scarcity alone means a bullet costs a bullet; with noise it also costs your
+## position, and moving after shooting becomes a real play rather than a habit.
+## The noise is emitted from the muzzle rather than from the player so that a
+## shot fired from cover gives away the cover, which is the intended lesson.
+func _wire_noise() -> void:
+	weapon.fired.connect(func(from: Vector3, _to: Vector3) -> void:
+		spawner.broadcast_noise(from, weapon.noise_loudness)
 	)
 
 
@@ -274,6 +289,7 @@ func _capture_baselines() -> void:
 		"move_speed": player.move_speed,
 		"max_health": player.health.max_health,
 		"ammo_bonus_per_kill": ammo_bonus_per_kill,
+		"noise_loudness": weapon.noise_loudness,
 	}
 
 
@@ -288,6 +304,7 @@ func _restore_baselines() -> void:
 	player.move_speed = _baselines.move_speed
 	player.health.max_health = _baselines.max_health
 	ammo_bonus_per_kill = _baselines.ammo_bonus_per_kill
+	weapon.noise_loudness = _baselines.noise_loudness
 
 
 ## Apply a chosen upgrade. Progression decides what was offered and picked;
@@ -312,6 +329,11 @@ func _apply_upgrade(upgrade_id: int) -> void:
 		Progression.Upgrade.BANDOLIER:
 			weapon.max_reserve += 15
 			weapon.add_reserve_ammo(15)
+		Progression.Upgrade.SUBSONIC:
+			# Buys back some of what firing costs you in position, which is
+			# the only upgrade here that trades against the noise system
+			# rather than against a number on the weapon.
+			weapon.noise_loudness = maxf(0.25, weapon.noise_loudness - 0.35)
 
 	# Handing control back is the same job as leaving the pause menu.
 	_on_resumed()
