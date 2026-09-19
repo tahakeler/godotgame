@@ -54,7 +54,7 @@ const DIFFICULTY_PROFILES := {
 var mouse_sensitivity := 0.0022
 var invert_look_y := false
 var master_volume := 0.8
-var fullscreen := false
+var fullscreen := true
 var difficulty: Difficulty = Difficulty.SOLDIER
 
 

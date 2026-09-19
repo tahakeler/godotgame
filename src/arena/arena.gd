@@ -64,6 +64,9 @@ const SPAWN_CELLS := [
 ]
 
 @export var generation_seed := 20260919
+## The main menu uses this scene purely as a backdrop and has nothing to
+## navigate, so it can skip the bake.
+@export var bake_navigation := true
 
 var spawn_points: Array[Vector3] = []
 
@@ -82,7 +85,8 @@ func _ready() -> void:
 	_build_cover()
 	_build_props()
 	_build_spawn_points()
-	_bake()
+	if bake_navigation:
+		_bake()
 
 
 ## Half-extent of the central room.
