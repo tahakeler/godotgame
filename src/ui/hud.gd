@@ -21,6 +21,8 @@ const PIP_SPENT := Color(0.929, 0.933, 0.949, 0.16)
 const FULL_FLASH_ALPHA := 0.32
 const REDUCED_FLASH_ALPHA := 0.1
 
+const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
+
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
 
@@ -47,6 +49,14 @@ var _weapon: Weapon
 @onready var _experience_bar: ProgressBar = %ExperienceBar
 @onready var _hurt_vignette: TextureRect = %HurtVignette
 @onready var _magazine_pips: HBoxContainer = %MagazinePips
+@onready var _stats_row: HBoxContainer = %StatsRow
+@onready var _play_again_button: Button = %PlayAgainButton
+@onready var _menu_button: Button = %MenuButton
+@onready var _crosshair: Control = $Crosshair
+@onready var _top_bar: Control = $TopBar
+@onready var _objective_block: Control = $ObjectiveBlock
+@onready var _vitals_block: Control = $VitalsBlock
+@onready var _ammo_block: Control = $AmmoBlock
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -60,6 +70,11 @@ func _ready() -> void:
 	_hitmarker.modulate.a = 0.0
 	_damage_flash.color.a = 0.0
 	_damage_indicator.draw.connect(_draw_damage_markers)
+
+	# The results buttons must keep working after the round ends. Nothing pauses
+	# the tree here, but the HUD outliving a round is the point of them.
+	_play_again_button.pressed.connect(_on_play_again_pressed)
+	_menu_button.pressed.connect(_on_menu_pressed)
 
 
 func _process(delta: float) -> void:
@@ -96,8 +111,21 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	_on_ammo_changed(weapon.magazine_ammo, weapon.reserve_ammo)
 
 
+## Hide the live readouts while the results are up.
+##
+## A crosshair sitting in the middle of the results, and a kill counter still
+## reading out next to the figure that summarises it, both say the round is
+## still running when it is not. The results screen should be the only thing
+## asking for attention.
+func _set_round_readouts_visible(shown: bool) -> void:
+	for node in [_crosshair, _top_bar, _objective_block, _vitals_block, _ammo_block]:
+		if node != null:
+			node.visible = shown
+
+
 func _on_round_started() -> void:
 	_overlay.visible = false
+	_set_round_readouts_visible(true)
 	_damage_markers.clear()
 	_flash_remaining = 0.0
 	_damage_flash.color.a = 0.0
@@ -246,10 +274,9 @@ func _on_round_won(kills: int, time_taken: float, is_record: bool) -> void:
 	_show_record_banner(is_record)
 	_show_overlay(
 		"SURVIVED" if _game != null and _game.mode == GameSettings.Mode.TIMED else "EXTRACTED",
-		Color(0.45, 0.85, 0.5),
-		"%d kills  ·  extracted in %s\n\nPress ENTER to play again" % [
-			kills, _format_duration(time_taken)
-		]
+		GameSettings.colour(self, "safe", Color(0.45, 0.85, 0.5)),
+		kills,
+		time_taken
 	)
 
 
@@ -257,11 +284,66 @@ func _on_round_lost(kills: int, time_survived: float, is_record: bool) -> void:
 	_show_record_banner(is_record)
 	_show_overlay(
 		"YOU DIED",
-		Color(0.88, 0.26, 0.22),
-		"%d kills  ·  survived %s\n\nPress ENTER to try again" % [
-			kills, _format_duration(time_survived)
-		]
+		GameSettings.colour(self, "danger", Color(0.88, 0.26, 0.22)),
+		kills,
+		time_survived
 	)
+
+
+## Build the stats row for a finished round.
+##
+## A round ends with a number of things the player wants to know and one line
+## of text can only carry two of them. Each figure gets its own column with a
+## quiet caption underneath, so the result can be read at a glance and compared
+## against the last run without parsing a sentence.
+func _build_results(kills: int, duration: float) -> void:
+	for child in _stats_row.get_children():
+		child.queue_free()
+
+	_add_stat(str(kills), "KILLS")
+	_add_stat(_format_duration(duration), "TIME")
+
+	if _game != null and _game.progression != null:
+		_add_stat("%d" % _game.progression.level, "LEVEL")
+
+	# Accuracy is only meaningful once a shot has been taken. Showing 0% to
+	# someone who never fired reads as a judgement rather than a statistic.
+	if _game != null and _game.shots_fired > 0:
+		var accuracy := float(_game.shots_hit) / float(_game.shots_fired)
+		_add_stat("%d%%" % roundi(accuracy * 100.0), "ACCURACY")
+
+
+func _add_stat(value: String, caption: String) -> void:
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", 4)
+
+	var figure := Label.new()
+	figure.text = value
+	figure.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	figure.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	figure.add_theme_font_size_override("font_size", 40)
+	figure.add_theme_color_override("font_color", Color(0.957, 0.949, 0.933))
+	column.add_child(figure)
+
+	var label := Label.new()
+	label.text = caption
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", Color(0.463, 0.494, 0.553))
+	column.add_child(label)
+
+	_stats_row.add_child(column)
+
+
+func _on_play_again_pressed() -> void:
+	if _game != null:
+		_game.start_round()
+
+
+func _on_menu_pressed() -> void:
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
 ## A run that beat the previous best should say so on the results screen. In
@@ -270,11 +352,18 @@ func _show_record_banner(is_record: bool) -> void:
 	_record_label.visible = is_record
 
 
-func _show_overlay(title: String, color: Color, detail: String) -> void:
+func _show_overlay(title: String, color: Color, kills: int, duration: float) -> void:
 	_overlay_title.text = title
 	_overlay_title.modulate = color
-	_overlay_detail.text = detail
+	_build_results(kills, duration)
+	_overlay_detail.text = "Enter to play again  ·  Esc for the menu"
 	_overlay.visible = true
+	_set_round_readouts_visible(false)
+
+	# The round is over and the cursor has to be usable again, or the buttons
+	# below are decorative.
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	_play_again_button.grab_focus()
 
 
 func _tick_damage_markers(delta: float) -> void:
