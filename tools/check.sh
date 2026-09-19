@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Pre-merge verification for LAST MAGAZINE.
+# Runs import, static project checks, and a headless boot, then fails on any
+# engine error. Run this before merging any branch to main.
+
+set -uo pipefail
+
+GODOT="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="${TMPDIR:-/tmp}/lastmagazine-check"
+
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+
+mkdir -p "$LOG_DIR"
+cd "$PROJECT_DIR" || exit 1
+
+if [[ ! -x "$GODOT" ]]; then
+  echo "FATAL: Godot binary not found at $GODOT"
+  echo "Set GODOT_BIN to override."
+  exit 127
+fi
+
+fail_count=0
+
+# Engine errors that must fail the build. Godot exits 0 on script errors, so the
+# only reliable signal is the log text itself.
+ERROR_PATTERN='SCRIPT ERROR|Parse Error|ERROR:|Failed to load|Cannot open|error CS[0-9]+'
+
+run_step() {
+  local name="$1"
+  local log="$LOG_DIR/${name}.log"
+  shift
+
+  echo "--- $name ---"
+  "$@" >"$log" 2>&1
+  local code=$?
+
+  if [[ $code -ne 0 ]]; then
+    echo "FAIL: $name exited $code"
+    grep -E "$ERROR_PATTERN" "$log" | head -20
+    fail_count=$((fail_count + 1))
+    return 1
+  fi
+
+  if grep -qE "$ERROR_PATTERN" "$log"; then
+    echo "FAIL: $name reported engine errors"
+    grep -E "$ERROR_PATTERN" "$log" | head -20
+    fail_count=$((fail_count + 1))
+    return 1
+  fi
+
+  echo "PASS: $name"
+  return 0
+}
+
+run_step "import" "$GODOT" --headless --import
+run_step "static-checks" "$GODOT" --headless --script tests/manual/verify_project.gd
+run_step "boot" "$GODOT" --headless --quit-after 120
+
+echo
+if [[ $fail_count -gt 0 ]]; then
+  echo "RESULT: FAILED ($fail_count step(s)). Logs in $LOG_DIR"
+  exit 1
+fi
+
+echo "RESULT: PASSED — safe to merge"
+exit 0

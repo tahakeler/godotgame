@@ -233,6 +233,17 @@ we choose clarity.*
   steering toward the player if navmesh proves unnecessary for a flat arena.
 - **Input**: keyboard/mouse primary; action map defined so gamepad can be added.
 
+### Control Bindings
+
+| Action | Binding |
+|--------|---------|
+| Move | `W` `A` `S` `D` |
+| Look | Mouse |
+| Fire | Left mouse button |
+| Reload | `R` |
+| Restart | `Enter` |
+| Release mouse capture | `Esc` |
+
 ---
 
 ## Risks and Open Questions
@@ -303,7 +314,7 @@ optional polish.
 | Collision/overlap triggers gameplay response | Bullet raycast hits zombie (damage/death); zombie body contact hits player (damage) |
 | Display progress | HUD: extraction countdown, health bar, ammo counter, kill count |
 | Win/loss result | Win when extraction timer reaches zero; loss when health reaches zero |
-| Restart control | `R` key restores player position, health, ammo, timer, and clears zombies |
+| Restart control | `Enter` key restores player position, health, ammo, timer, and clears zombies (`R` is bound to reload) |
 | **Feature 1 — Player Health** | Trigger: zombie contact. State: `current_health` decrements. Result: health bar drops, damage flash, loss screen at zero. |
 | **Feature 2 — Ammunition and Reload** | Trigger: fire input / reload input. State: `magazine_ammo` and `reserve_ammo`. Result: HUD counter updates, firing blocked at zero, reload refills magazine from reserve. |
 | Bonus mechanic | Kills subtract seconds from the extraction timer. |
