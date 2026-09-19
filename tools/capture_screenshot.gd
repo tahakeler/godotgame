@@ -21,6 +21,9 @@ var _output_path := "res://screenshot.png"
 var _delay := 7.5
 ## Line up one of each zombie kind instead of aiming at the nearest one.
 var pose_variety := false
+## Camera pitch in degrees, positive looking up. Lets a capture check the
+## ceiling, which is otherwise never in frame.
+var _pitch := 0.0
 
 var _root_node: Node
 var _elapsed := 0.0
@@ -54,6 +57,9 @@ func _process(delta: float) -> bool:
 	if _root_node is Game and _root_node.player != null:
 		_root_node.spawner.minimum_spawn_distance = 6.0
 		_face_nearest_zombie()
+
+		if not is_zero_approx(_pitch):
+			_root_node.player.head.rotation.x = deg_to_rad(_pitch)
 
 	if _elapsed < _delay:
 		return false
@@ -105,6 +111,8 @@ func _parse_arguments() -> void:
 			pose_variety = true
 		elif argument.begins_with("--delay="):
 			_delay = float(argument.trim_prefix("--delay="))
+		elif argument.begins_with("--pitch="):
+			_pitch = float(argument.trim_prefix("--pitch="))
 
 
 func _install_autoload() -> void:
