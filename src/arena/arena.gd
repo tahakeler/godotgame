@@ -32,9 +32,9 @@ var spawn_points: Array[Vector3] = []
 var _obstacle_bounds: Array[AABB] = []
 var _rng := RandomNumberGenerator.new()
 
-@onready var _floor_material := _make_material(Color(0.13, 0.13, 0.16), 0.9)
-@onready var _wall_material := _make_material(Color(0.09, 0.09, 0.12), 0.85)
-@onready var _obstacle_material := _make_material(Color(0.22, 0.20, 0.17), 0.75)
+@onready var _floor_material := _make_material(Color(0.3, 0.31, 0.35), 0.88)
+@onready var _wall_material := _make_material(Color(0.22, 0.23, 0.28), 0.82)
+@onready var _obstacle_material := _make_material(Color(0.44, 0.39, 0.32), 0.72)
 
 
 func _ready() -> void:
