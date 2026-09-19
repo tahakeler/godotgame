@@ -31,6 +31,42 @@ const WIDE_ROOM := "room-wide"
 const CORRIDOR := "corridor"
 const DEAD_END := "corridor-end"
 
+## Interchangeable sculpts of the same chamber: identical footprint, identical
+## openings, different rock. Measured, not assumed — see tools/measure_models.
+const VARIANTS := {
+	CENTRE_ROOM: ["room-large", "room-large-variation"],
+	OUTER_ROOM: ["room-small", "room-small-variation"],
+	WIDE_ROOM: ["room-wide", "room-wide-variation"],
+}
+
+## Chambers that are square, and so can be turned without changing what they
+## connect to.
+const SQUARE_ROOMS := [CENTRE_ROOM, OUTER_ROOM]
+
+## Spawn scoring. Relative weights for a point directly behind the player
+## versus directly ahead, how quickly preference falls off with distance past
+## the minimum, and how hard a recently used chamber is damped.
+const BEHIND_WEIGHT := 1.0
+const AHEAD_WEIGHT := 0.12
+const SPAWN_FALLOFF := 22.0
+const REPEAT_DAMPING := 0.2
+const RECENT_CHAMBER_MEMORY := 3
+
+## Light every Nth corridor cell, and fade lights out beyond this range.
+const CORRIDOR_LIGHT_SPACING := 3
+const LIGHT_FADE_BEGIN := 34.0
+const LIGHT_FADE_LENGTH := 12.0
+
+## Where inside a chamber a zombie can appear, as offsets from its centre.
+## Several points per chamber so arrivals are not all from one exact spot.
+const SPAWN_SPREAD := [
+	Vector2(0.0, 0.0),
+	Vector2(3.0, 2.4),
+	Vector2(-2.8, 2.6),
+	Vector2(2.6, -2.8),
+	Vector2(-2.4, -3.0),
+]
+
 ## Walkable footprint per piece, before rotation. Measured with
 ## tools/probe_openings.gd rather than guessed — every room in this kit opens
 ## on all four sides, while an unrotated corridor runs along X.
@@ -42,62 +78,123 @@ const FOOTPRINTS := {
 	DEAD_END: Vector2(5.0, 2.6),
 }
 
-## The cave network, as {model, cell, rotation}. Deliberately irregular: arms
-## differ in length, chambers differ in size, and the two loops are not mirror
-## images. A symmetric grid reads as a diagram; an uneven one reads as a place.
+
+## The cave network, as {model, cell, rotation}.
+##
+## Rooms are the nodes and corridors are the edges. Every bend happens inside a
+## room, never between two corridors — an unrotated corridor runs along X and
+## presents a solid end wall on its Z faces, so two corridors meeting at a
+## right angle produce a dead end that looks like a passage. Rooms open on all
+## four sides, which is what makes them safe to turn in.
+##
+## Fourteen chambers on four rings, with every outer chamber reachable by at
+## least two routes. Deliberately irregular: arms differ in length, chambers
+## differ in size, and no two loops are mirror images. A symmetric grid reads
+## as a diagram; an uneven one reads as a place.
 const LAYOUT := [
-	# Central arena.
+	# ---- Core -------------------------------------------------------------
 	{"model": CENTRE_ROOM, "cell": Vector2i(0, 0), "rotation": 0},
 
-	# North run to a small chamber.
+	# ---- North spine ------------------------------------------------------
 	{"model": CORRIDOR, "cell": Vector2i(0, 3), "rotation": 90},
 	{"model": CORRIDOR, "cell": Vector2i(0, 4), "rotation": 90},
 	{"model": OUTER_ROOM, "cell": Vector2i(0, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(0, 8), "rotation": 90},
+	{"model": WIDE_ROOM, "cell": Vector2i(0, 11), "rotation": 90},
 
-	# Short east run into the long hall.
+	# ---- East spine -------------------------------------------------------
 	{"model": CORRIDOR, "cell": Vector2i(3, 0), "rotation": 0},
 	{"model": WIDE_ROOM, "cell": Vector2i(6, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(9, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(10, 0), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(12, 0), "rotation": 0},
 
-	# Long west run.
+	# East chamber up to the north-east corner.
+	{"model": CORRIDOR, "cell": Vector2i(12, 2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(12, 3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(12, 4), "rotation": 90},
+	{"model": OUTER_ROOM, "cell": Vector2i(12, 6), "rotation": 0},
+
+	# The long north hall, closing the biggest loop on the map.
+	{"model": CORRIDOR, "cell": Vector2i(2, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(4, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(5, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(6, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(7, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(8, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(9, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(10, 6), "rotation": 0},
+
+	# ---- West spine -------------------------------------------------------
 	{"model": CORRIDOR, "cell": Vector2i(-3, 0), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(-4, 0), "rotation": 0},
 	{"model": OUTER_ROOM, "cell": Vector2i(-6, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-8, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-9, 0), "rotation": 0},
+	{"model": WIDE_ROOM, "cell": Vector2i(-12, 0), "rotation": 0},
 
-	# Short south run.
-	{"model": CORRIDOR, "cell": Vector2i(0, -3), "rotation": 90},
-	{"model": OUTER_ROOM, "cell": Vector2i(0, -5), "rotation": 0},
-
-	# North-west chamber, closing the upper loop.
+	# North-west chamber, closing the upper-left loop.
+	{"model": CORRIDOR, "cell": Vector2i(-6, 2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-6, 3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-6, 4), "rotation": 90},
 	{"model": OUTER_ROOM, "cell": Vector2i(-6, 6), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(-2, 6), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(-3, 6), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(-4, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-6, 2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(-6, 3), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(-6, 4), "rotation": 90},
 
-	# South-east chamber, closing the lower loop.
-	{"model": OUTER_ROOM, "cell": Vector2i(6, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(6, -2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(6, -3), "rotation": 90},
+	# ---- South ring -------------------------------------------------------
+	{"model": CORRIDOR, "cell": Vector2i(0, -3), "rotation": 90},
+	{"model": OUTER_ROOM, "cell": Vector2i(0, -5), "rotation": 0},
+
 	{"model": CORRIDOR, "cell": Vector2i(2, -5), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(3, -5), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(4, -5), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(6, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(6, -2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(6, -3), "rotation": 90},
 
-	# Alcoves. Short stubs that go nowhere, purely so the map has edges that
-	# are not all routes — a network where every passage leads somewhere reads
-	# as a puzzle rather than a cave.
-	{"model": CORRIDOR, "cell": Vector2i(-8, 0), "rotation": 0},
-	{"model": DEAD_END, "cell": Vector2i(-9, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(0, 8), "rotation": 90},
-	{"model": DEAD_END, "cell": Vector2i(0, 9), "rotation": 270},
+	{"model": CORRIDOR, "cell": Vector2i(-2, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-3, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-4, -5), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(-6, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-6, -2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-6, -3), "rotation": 90},
+
+	# South-east chamber, hung off the south-east corner.
+	{"model": CORRIDOR, "cell": Vector2i(9, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(10, -5), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(12, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(12, -2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(12, -3), "rotation": 90},
+
+	# The deep south chamber, furthest point on the map from the centre.
+	{"model": CORRIDOR, "cell": Vector2i(0, -7), "rotation": 90},
+	{"model": CENTRE_ROOM, "cell": Vector2i(0, -10), "rotation": 0},
+
+	# ---- Alcoves ----------------------------------------------------------
+	# Short stubs that go nowhere, purely so the map has edges that are not all
+	# routes — a network where every passage leads somewhere reads as a puzzle
+	# rather than a cave.
+	{"model": CORRIDOR, "cell": Vector2i(-15, 0), "rotation": 0},
+	{"model": DEAD_END, "cell": Vector2i(-16, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(0, 14), "rotation": 90},
+	{"model": DEAD_END, "cell": Vector2i(0, 15), "rotation": 270},
+	{"model": CORRIDOR, "cell": Vector2i(15, 0), "rotation": 0},
+	{"model": DEAD_END, "cell": Vector2i(16, 0), "rotation": 0},
 ]
 
 ## Chambers zombies arrive from.
+##
+## Every outer chamber on the map, so pressure can come from any bearing. Which
+## of them is actually used for a given spawn is decided at runtime — see
+## pick_spawn_point.
 const SPAWN_CELLS := [
-	Vector2i(0, 6), Vector2i(6, 0), Vector2i(-6, 0), Vector2i(0, -5),
-	Vector2i(-6, 6), Vector2i(6, -5),
+	Vector2i(0, 11), Vector2i(0, 6), Vector2i(12, 0), Vector2i(12, 6),
+	Vector2i(-6, 0), Vector2i(-12, 0), Vector2i(-6, 6), Vector2i(0, -5),
+	Vector2i(6, -5), Vector2i(-6, -5), Vector2i(12, -5), Vector2i(0, -10),
 ]
+
 
 ## Half-extent of each piece in grid cells. Every piece spans an odd number of
 ## cells, so it sits centred on its own cell.
@@ -210,9 +307,13 @@ const PROPS := [
 @export var stalactite_count := 90
 
 var spawn_points: Array[Vector3] = []
+## Chamber index for each entry in spawn_points, parallel array.
+var spawn_chambers: Array[int] = []
 
 var _rng := RandomNumberGenerator.new()
 var _geometry_root: Node3D
+## Chambers used for the last few spawns.
+var _recent_chambers: Array[int] = []
 
 
 func _ready() -> void:
@@ -272,18 +373,78 @@ func get_play_radius() -> float:
 
 ## A spawn position biased away from the player, so zombies never appear on
 ## top of them.
-func pick_spawn_point(away_from: Vector3, minimum_distance: float) -> Vector3:
+## Choose where the next zombie comes from.
+##
+## Uniform random across every chamber sounds fair and plays badly. It puts
+## roughly as many zombies in front of the player as behind — so they appear
+## out of nothing in plain view — and with no memory it will happily use the
+## same doorway five times running, which reads as a spawn closet rather than a
+## cave full of things.
+##
+## Candidates are scored instead of filtered: arrivals behind the player are
+## strongly preferred, chambers used recently are damped, and distance is
+## scored as a band rather than "further is safer" so a zombie spawned across
+## the map does not spend a minute walking. Everything still has some weight,
+## so pressure can come from any bearing.
+func pick_spawn_point(away_from: Vector3, minimum_distance: float,
+		facing := Vector3.ZERO) -> Vector3:
 	if spawn_points.is_empty():
 		return Vector3.ZERO
 
-	var candidates: Array[Vector3] = spawn_points.filter(
-		func(point: Vector3) -> bool:
-			return point.distance_to(away_from) >= minimum_distance
-	)
-	if candidates.is_empty():
-		candidates = spawn_points
+	var best_index := -1
+	var best_score := -1.0
+	var total := 0.0
 
-	return candidates[_rng.randi_range(0, candidates.size() - 1)]
+	for index in spawn_points.size():
+		var score := _score_spawn(index, away_from, minimum_distance, facing)
+		if score <= 0.0:
+			continue
+
+		# Weighted reservoir sampling: one pass, no candidate array, and the
+		# chance of holding any given point stays proportional to its score.
+		total += score
+		if _rng.randf() * total < score:
+			best_index = index
+			best_score = score
+
+	if best_index < 0:
+		best_index = _rng.randi_range(0, spawn_points.size() - 1)
+
+	_remember_chamber(spawn_chambers[best_index])
+	return spawn_points[best_index]
+
+
+func _score_spawn(index: int, away_from: Vector3, minimum_distance: float,
+		facing: Vector3) -> float:
+	var point: Vector3 = spawn_points[index]
+	var offset := point - away_from
+	offset.y = 0.0
+
+	var distance := offset.length()
+	if distance < minimum_distance:
+		return 0.0
+
+	# Peaks at the near end of the band and tails off, so the fight stays where
+	# the player is rather than trickling in from the far corners.
+	var score: float = 1.0 / (1.0 + maxf(0.0, distance - minimum_distance) / SPAWN_FALLOFF)
+
+	if facing != Vector3.ZERO and distance > 0.001:
+		var ahead := facing.normalized().dot(offset / distance)
+		# Smoothly favours behind over in front rather than switching at the
+		# exact 90 degree line, which would make the preference obvious.
+		score *= lerpf(BEHIND_WEIGHT, AHEAD_WEIGHT, inverse_lerp(-1.0, 1.0, ahead))
+
+	if spawn_chambers[index] in _recent_chambers:
+		score *= REPEAT_DAMPING
+
+	return score
+
+
+## Remember which chambers were used lately, so the next pick can avoid them.
+func _remember_chamber(chamber: int) -> void:
+	_recent_chambers.append(chamber)
+	while _recent_chambers.size() > RECENT_CHAMBER_MEMORY:
+		_recent_chambers.pop_front()
 
 
 func _build_layout() -> void:
@@ -292,17 +453,37 @@ func _build_layout() -> void:
 
 
 func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
-	var instance := _instantiate(CAVE_PATH % model)
+	var instance := _instantiate(CAVE_PATH % _mesh_for(model))
 	if instance == null:
 		return
 
+	# Square chambers get a free quarter turn. The footprint is unchanged, but
+	# the sculpted rock inside is not, and a dozen identical small rooms is the
+	# single thing that makes a modular kit read as a modular kit.
+	var placed_rotation := rotation_degrees
+	if model in SQUARE_ROOMS:
+		placed_rotation += 90.0 * float(_rng.randi_range(0, 3))
+
 	instance.position = _cell_to_world(cell)
-	instance.rotation.y = deg_to_rad(rotation_degrees)
+	instance.rotation.y = deg_to_rad(placed_rotation)
 	instance.name = "%s_%d_%d" % [model, cell.x, cell.y]
 	_geometry_root.add_child(instance)
 
 	_add_nav_surface(cell, _footprint_for(model, rotation_degrees))
 	_add_lighting(model, cell)
+
+
+## Pick which mesh actually gets placed for a logical piece.
+##
+## The kit ships a second sculpt of each room with the same footprint and the
+## same openings, so the two are interchangeable. Choosing between them costs
+## nothing and stops the same cave wall appearing in six chambers.
+func _mesh_for(model: String) -> String:
+	var options: Array = VARIANTS.get(model, [])
+	if options.is_empty():
+		return model
+
+	return options[_rng.randi_range(0, options.size() - 1)]
 
 
 ## Walkable footprint for a piece, turned to match its placement. Quarter turns
@@ -322,9 +503,24 @@ func _footprint_for(model: String, rotation_degrees: float) -> Vector2:
 ## is, whereas warm pools separated by cold runs give the eye depth and make
 ## each chamber feel like somewhere rather than more of the same.
 func _add_lighting(model: String, cell: Vector2i) -> void:
+	# Corridors are lit every few cells rather than every cell. With the map at
+	# its current size that is the difference between roughly ninety lights and
+	# nearly three hundred, and a run of evenly spaced lamps reads better than
+	# a continuous strip anyway — the dark stretches between them are what make
+	# a corridor feel long.
+	if model == CORRIDOR and posmod(cell.x + cell.y, CORRIDOR_LIGHT_SPACING) != 0:
+		return
+
 	var light := OmniLight3D.new()
 	light.position = _cell_to_world(cell) + Vector3.UP * 3.3
 	light.shadow_enabled = false
+
+	# A light the player cannot see is still a light the renderer pays for.
+	# The map is now far larger than anything visible at once, so lights fade
+	# out well beyond the fog rather than accumulating across the whole cave.
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = LIGHT_FADE_BEGIN
+	light.distance_fade_length = LIGHT_FADE_LENGTH
 
 	match model:
 		CENTRE_ROOM:
@@ -794,9 +990,16 @@ func _build_stalactites() -> void:
 ## bearing and never from inside the room the player is standing in.
 func _build_spawn_points() -> void:
 	spawn_points.clear()
+	spawn_chambers.clear()
 
-	for cell in SPAWN_CELLS:
-		spawn_points.append(_cell_to_world(cell) + Vector3.UP * 0.2)
+	for chamber in SPAWN_CELLS.size():
+		var origin := _cell_to_world(SPAWN_CELLS[chamber]) + Vector3.UP * 0.2
+
+		for offset in SPAWN_SPREAD:
+			spawn_points.append(origin + Vector3(offset.x, 0.0, offset.y))
+			# Which chamber each point belongs to, so the picker can avoid
+			# using the same one twice in a row.
+			spawn_chambers.append(chamber)
 
 
 func _cell_to_world(cell: Vector2i) -> Vector3:
