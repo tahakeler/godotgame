@@ -44,18 +44,25 @@ var kills := 0
 @onready var sounds: SoundBank = $SoundBank
 @onready var effects: EffectSpawner = $EffectSpawner
 @onready var pause_menu: PauseMenu = $PauseMenu
+@onready var progression: Progression = $Progression
+@onready var upgrade_menu: UpgradeMenu = $UpgradeMenu
 
 ## Null when autoloads are unavailable (headless --script runs); the exported
 ## defaults above stand in for the difficulty profile in that case.
 var _settings: GameSettings
+## Player and weapon values as they were before any upgrade touched them.
+var _baselines: Dictionary = {}
 
 
 func _ready() -> void:
 	spawner.zombie_died.connect(_on_zombie_died)
 	player.died.connect(_on_player_died)
 	pause_menu.resumed.connect(_on_resumed)
+	progression.levelled_up.connect(_on_levelled_up)
+	upgrade_menu.chosen.connect(_apply_upgrade)
 	_settings = GameSettings.instance(self)
 
+	_capture_baselines()
 	_wire_audio()
 	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
@@ -118,7 +125,7 @@ func _process(delta: float) -> void:
 		_toggle_pause()
 		return
 
-	if pause_menu.is_open():
+	if pause_menu.is_open() or upgrade_menu.is_open():
 		return
 
 	if Input.is_action_just_pressed("restart"):
@@ -151,6 +158,9 @@ func start_round() -> void:
 
 	_apply_mode()
 
+	_restore_baselines()
+	upgrade_menu.close()
+
 	state = RoundState.PLAYING
 	kills = 0
 	elapsed_time = 0.0
@@ -163,6 +173,7 @@ func start_round() -> void:
 	weapon.reset_state()
 	weapon.set_input_enabled(true)
 
+	progression.reset()
 	spawner.reset()
 	spawner.begin(arena, player)
 
@@ -190,6 +201,61 @@ func _apply_difficulty() -> void:
 	weapon.starting_reserve = profile.starting_reserve
 	spawner.interval_scale = profile.spawn_interval_scale
 	spawner.damage_scale = profile.damage_scale
+
+
+## Upgrades mutate the player and weapon directly, so a restart has to put those
+## values back. Without this the next round silently inherits every upgrade from
+## the last, and the difficulty curve quietly stops meaning anything.
+func _capture_baselines() -> void:
+	_baselines = {
+		"magazine_size": weapon.magazine_size,
+		"damage": weapon.damage,
+		"reload_duration": weapon.reload_duration,
+		"max_reserve": weapon.max_reserve,
+		"move_speed": player.move_speed,
+		"max_health": player.health.max_health,
+		"ammo_per_kill": ammo_per_kill,
+	}
+
+
+func _restore_baselines() -> void:
+	if _baselines.is_empty():
+		return
+
+	weapon.magazine_size = _baselines.magazine_size
+	weapon.damage = _baselines.damage
+	weapon.reload_duration = _baselines.reload_duration
+	weapon.max_reserve = _baselines.max_reserve
+	player.move_speed = _baselines.move_speed
+	player.health.max_health = _baselines.max_health
+	ammo_per_kill = _baselines.ammo_per_kill
+
+
+## Apply a chosen upgrade. Progression decides what was offered and picked;
+## the effects live here, because only Game knows about the player and weapon.
+func _apply_upgrade(upgrade_id: int) -> void:
+	match upgrade_id:
+		Progression.Upgrade.MAGAZINE:
+			weapon.magazine_size += 3
+			weapon.magazine_ammo += 3
+			weapon.ammo_changed.emit(weapon.magazine_ammo, weapon.reserve_ammo)
+		Progression.Upgrade.VITALITY:
+			player.health.max_health += 25.0
+			player.health.heal(25.0)
+		Progression.Upgrade.HOLLOW_POINTS:
+			weapon.damage += 8.0
+		Progression.Upgrade.FAST_HANDS:
+			weapon.reload_duration *= 0.8
+		Progression.Upgrade.ADRENALINE:
+			player.move_speed *= 1.12
+		Progression.Upgrade.SCAVENGER:
+			ammo_per_kill += 2
+		Progression.Upgrade.BANDOLIER:
+			weapon.max_reserve += 15
+			weapon.add_reserve_ammo(15)
+
+	# Handing control back is the same job as leaving the pause menu.
+	_on_resumed()
 
 
 ## Configure the round for the chosen mode. Difficulty has already set the
@@ -233,6 +299,7 @@ func _on_zombie_died(death_position: Vector3) -> void:
 
 	kills += 1
 	kills_changed.emit(kills)
+	progression.add_kill_experience()
 	sounds.play_at("zombie_death", death_position)
 	sounds.play("ammo_gained")
 
@@ -250,6 +317,17 @@ func _on_zombie_died(death_position: Vector3) -> void:
 
 	if time_remaining <= 0.0:
 		_end_round(RoundState.WON)
+
+
+## A level-up interrupts the round, so control is taken the same way the pause
+## menu takes it.
+func _on_levelled_up(level: int, choices: Array[Dictionary]) -> void:
+	if state != RoundState.PLAYING:
+		return
+
+	weapon.set_input_enabled(false)
+	player.set_look_enabled(false)
+	upgrade_menu.open(level, choices)
 
 
 func _on_player_died() -> void:

@@ -1,0 +1,80 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://src/ui/upgrade_menu.gd" id="1_upgrade"]
+[ext_resource type="Theme" path="res://src/ui/theme/game_theme.tres" id="2_theme"]
+
+[node name="UpgradeMenu" type="CanvasLayer"]
+layer = 3
+script = ExtResource("1_upgrade")
+
+[node name="Root" type="Control" parent="."]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("2_theme")
+
+[node name="Backdrop" type="ColorRect" parent="Root"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.01, 0.012, 0.02, 0.88)
+
+[node name="Eyebrow" type="Label" parent="Root"]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -400.0
+offset_top = 180.0
+offset_right = 400.0
+offset_bottom = 206.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+theme_override_font_sizes/font_size = 17
+text = "C H O O S E   A N   U P G R A D E"
+horizontal_alignment = 1
+
+[node name="LevelLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -400.0
+offset_top = 214.0
+offset_right = 400.0
+offset_bottom = 290.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.957, 0.949, 0.933, 1)
+theme_override_font_sizes/font_size = 60
+text = "LEVEL 2"
+horizontal_alignment = 1
+
+[node name="Cards" type="HBoxContainer" parent="Root"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -430.0
+offset_top = -95.0
+offset_right = 430.0
+offset_bottom = 95.0
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="Hint" type="Label" parent="Root"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = -150.0
+offset_right = 400.0
+offset_bottom = -124.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.5, 0.53, 0.6, 1)
+theme_override_font_sizes/font_size = 16
+text = "Click a card, or press 1 / 2 / 3"
+horizontal_alignment = 1
