@@ -27,6 +27,14 @@ signal population_changed(alive: int)
 ## Zombies never spawn closer to the player than this.
 @export var minimum_spawn_distance := 14.0
 
+@export_group("Endless")
+## Set by Game when the endless mode is chosen.
+@export var endless := false
+## Interval multiplier applied every 30s past the end of the normal ramp.
+@export var endless_interval_decay := 0.88
+@export var endless_interval_floor := 0.28
+@export var endless_seconds_per_extra_zombie := 22.0
+
 ## Difficulty multipliers, applied by Game from the player's chosen difficulty.
 ## Below 1.0 on the interval means zombies arrive faster.
 var interval_scale := 1.0
@@ -54,7 +62,7 @@ func _process(delta: float) -> void:
 		return
 
 	_spawn_remaining = _current_interval()
-	if _alive.size() < max_alive:
+	if _alive.size() < _current_max_alive():
 		_spawn_one()
 
 
@@ -95,11 +103,31 @@ func get_alive_count() -> int:
 
 
 ## Current seconds-between-spawns, interpolated across the ramp.
+##
+## In endless mode the ramp does not stop at its floor: the interval keeps
+## shrinking and the population cap keeps rising, so pressure always eventually
+## exceeds what the player can hold. A survival mode you cannot lose is a
+## screensaver.
 func _current_interval() -> float:
 	var ramp_progress := clampf(
 		(_elapsed - grace_period) / maxf(ramp_duration, 0.001), 0.0, 1.0
 	)
-	return lerpf(initial_interval, minimum_interval, ramp_progress) * interval_scale
+	var interval := lerpf(initial_interval, minimum_interval, ramp_progress) * interval_scale
+
+	if endless:
+		var overtime := maxf(0.0, _elapsed - grace_period - ramp_duration)
+		interval *= pow(endless_interval_decay, overtime / 30.0)
+
+	return maxf(interval, endless_interval_floor)
+
+
+## Population ceiling, which endless raises over time.
+func _current_max_alive() -> int:
+	if not endless:
+		return max_alive
+
+	var overtime := maxf(0.0, _elapsed - grace_period - ramp_duration)
+	return max_alive + int(overtime / endless_seconds_per_extra_zombie)
 
 
 func _spawn_one() -> void:

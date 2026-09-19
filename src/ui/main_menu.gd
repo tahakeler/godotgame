@@ -21,6 +21,8 @@ const GAME_SCENE := "res://src/core/game.tscn"
 @onready var _settings_button: Button = %SettingsButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _difficulty_hint: Label = %DifficultyHint
+@onready var _mode_button: Button = %ModeButton
+@onready var _mode_blurb: Label = %ModeBlurb
 @onready var _fade: ColorRect = %Fade
 
 var _settings: GameSettings
@@ -36,10 +38,12 @@ func _ready() -> void:
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_settings_panel.closed.connect(_on_settings_closed)
+	_mode_button.pressed.connect(_on_mode_pressed)
 
 	_settings_panel.visible = false
 	_play_button.grab_focus()
 	_refresh_difficulty_hint()
+	_refresh_mode()
 	_fade_in()
 
 
@@ -83,6 +87,27 @@ func _on_settings_closed() -> void:
 
 func _on_quit_pressed() -> void:
 	get_tree().quit()
+
+
+## Cycle the mode from the menu. Modes change how a round is won, so they get a
+## button on the front screen rather than being buried in settings next to the
+## mouse sensitivity.
+func _on_mode_pressed() -> void:
+	if _settings == null:
+		return
+
+	var count: int = GameSettings.MODE_NAMES.size()
+	_settings.mode = ((int(_settings.mode) + 1) % count) as GameSettings.Mode
+	_settings.save_settings()
+	_refresh_mode()
+
+
+func _refresh_mode() -> void:
+	if _settings == null:
+		return
+
+	_mode_button.text = "MODE:  %s" % _settings.get_mode_name().to_upper()
+	_mode_blurb.text = _settings.get_mode_blurb()
 
 
 func _refresh_difficulty_hint() -> void:

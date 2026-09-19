@@ -22,6 +22,35 @@ const SECTION := "gameplay"
 
 enum Difficulty { RECRUIT, SOLDIER, VETERAN }
 
+## How a round is won, or whether it can be.
+enum Mode {
+	## Kills shorten the extraction clock. Reaching zero wins.
+	EXTRACTION,
+	## A fixed clock that kills do not affect. Outlast it to win.
+	TIMED,
+	## No clock and no win. Zombies keep coming until they finish you.
+	ENDLESS,
+}
+
+const MODE_NAMES := {
+	Mode.EXTRACTION: "Extraction",
+	Mode.TIMED: "Last Stand",
+	Mode.ENDLESS: "Endless",
+}
+
+const MODE_BLURBS := {
+	Mode.EXTRACTION: "Every kill drags the rescue clock closer. Fight your way out.",
+	Mode.TIMED: "A fixed five minutes. Kills buy you nothing but breathing room.",
+	Mode.ENDLESS: "They never stop coming. Survive as long as you can.",
+}
+
+## Round length per mode, in seconds. Endless counts up and ignores this.
+const MODE_DURATIONS := {
+	Mode.EXTRACTION: 0.0,
+	Mode.TIMED: 300.0,
+	Mode.ENDLESS: 0.0,
+}
+
 const DIFFICULTY_NAMES := {
 	Difficulty.RECRUIT: "Recruit",
 	Difficulty.SOLDIER: "Soldier",
@@ -56,6 +85,7 @@ var invert_look_y := false
 var master_volume := 0.8
 var fullscreen := true
 var difficulty: Difficulty = Difficulty.SOLDIER
+var mode: Mode = Mode.EXTRACTION
 
 
 ## The live autoload instance, or null when running without autoloads.
@@ -75,6 +105,14 @@ func get_profile() -> Dictionary:
 
 func get_difficulty_name() -> String:
 	return DIFFICULTY_NAMES[difficulty]
+
+
+func get_mode_name() -> String:
+	return MODE_NAMES[mode]
+
+
+func get_mode_blurb() -> String:
+	return MODE_BLURBS[mode]
 
 
 func apply_audio() -> void:
@@ -110,6 +148,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "master_volume", master_volume)
 	config.set_value(SECTION, "fullscreen", fullscreen)
 	config.set_value(SECTION, "difficulty", int(difficulty))
+	config.set_value(SECTION, "mode", int(mode))
 	config.save(CONFIG_PATH)
 
 	changed.emit()
@@ -126,3 +165,4 @@ func load_settings() -> void:
 	master_volume = config.get_value(SECTION, "master_volume", master_volume)
 	fullscreen = config.get_value(SECTION, "fullscreen", fullscreen)
 	difficulty = config.get_value(SECTION, "difficulty", difficulty) as Difficulty
+	mode = config.get_value(SECTION, "mode", mode) as Mode
