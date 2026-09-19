@@ -72,15 +72,21 @@ extraction length, starting ammunition, spawn rate, and the damage you take.
 
 ```
 project.godot              Godot project configuration
+assets/
+  models/cave/             Kenney Modular Cave Kit (CC0)
+  models/weapons/          Kenney Blaster Kit (CC0)
+  audio/                   Kenney RPG Audio (CC0)
+  licenses/                Original licence files for each pack
 src/
-  arena/                   Procedurally generated arena and navmesh
+  arena/                   Cave layout assembly, collision, navmesh bake
+  audio/                   Sound bank and event routing
   core/                    Game loop, round state, settings autoload
   gameplay/
     health.gd              Shared health component (player and zombies)
     player/                First-person controller
     weapon/                Weapon, ammunition, reload
     zombie/                Zombie AI and spawner
-  ui/                      HUD, main menu, pause menu, settings
+  ui/                      HUD, main menu, pause menu, settings, theme
 tests/                     Automated checks and assignment test evidence
 tools/check.sh             Pre-merge verification gate
 design/gdd/                Game concept document
@@ -106,9 +112,18 @@ throw, so the check greps log text rather than trusting exit codes.
 
 ## Assets
 
-All geometry is built from Godot primitives, and all code, scenes, and
-materials are original to this project. No third-party assets are used, so no
-external licences apply. See [CREDITS.md](CREDITS.md).
+Art and audio come from **Kenney** ([kenney.nl](https://kenney.nl/assets)),
+released under **CC0 1.0** (public domain):
+
+- **Modular Cave Kit** — the cave complex and rock cover
+- **Blaster Kit** — the weapon viewmodel and floor props
+- **RPG Audio** — all sound effects
+
+CC0 requires no attribution, but Kenney is credited anyway. Each pack's
+original licence file is preserved under `assets/licenses/`.
+
+All code, scenes, lighting, the UI theme, the arena layout, and the zombie
+models are original to this project. Full details in [CREDITS.md](CREDITS.md).
 
 ## Licence
 
