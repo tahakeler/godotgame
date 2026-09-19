@@ -13,10 +13,10 @@ const SENSITIVITY_MAX := 0.0055
 
 @onready var _sensitivity_slider: HSlider = %SensitivitySlider
 @onready var _sensitivity_value: Label = %SensitivityValue
-@onready var _invert_check: CheckButton = %InvertCheck
+@onready var _invert_check: Button = %InvertCheck
 @onready var _volume_slider: HSlider = %VolumeSlider
 @onready var _volume_value: Label = %VolumeValue
-@onready var _fullscreen_check: CheckButton = %FullscreenCheck
+@onready var _fullscreen_check: Button = %FullscreenCheck
 @onready var _difficulty_options: OptionButton = %DifficultyOptions
 @onready var _difficulty_detail: Label = %DifficultyDetail
 @onready var _back_button: Button = %BackButton
@@ -61,9 +61,11 @@ func _load_from_settings() -> void:
 	_update_sensitivity_label()
 
 	_invert_check.button_pressed = _settings.invert_look_y
+	_invert_check.text = "ON" if _settings.invert_look_y else "OFF"
 	_volume_slider.value = _settings.master_volume * 100.0
 	_update_volume_label()
 	_fullscreen_check.button_pressed = _settings.fullscreen
+	_fullscreen_check.text = "ON" if _settings.fullscreen else "OFF"
 	_difficulty_options.select(_difficulty_options.get_item_index(_settings.difficulty))
 	_update_difficulty_detail()
 
@@ -78,6 +80,7 @@ func _on_sensitivity_changed(value: float) -> void:
 
 func _on_invert_toggled(pressed: bool) -> void:
 	_settings.invert_look_y = pressed
+	_invert_check.text = "ON" if pressed else "OFF"
 	_settings.save_settings()
 
 
@@ -90,6 +93,7 @@ func _on_volume_changed(value: float) -> void:
 
 func _on_fullscreen_toggled(pressed: bool) -> void:
 	_settings.fullscreen = pressed
+	_fullscreen_check.text = "ON" if pressed else "OFF"
 	_settings.apply_window()
 	_settings.save_settings()
 

@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://src/ui/pause_menu.gd" id="1_pause"]
 [ext_resource type="PackedScene" path="res://src/ui/settings_panel.tscn" id="2_settings"]
+[ext_resource type="Theme" path="res://src/ui/theme/game_theme.tres" id="3_theme"]
 
 [node name="PauseMenu" type="CanvasLayer"]
 layer = 2
@@ -12,12 +13,13 @@ unique_name_in_owner = true
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+theme = ExtResource("3_theme")
 
 [node name="Backdrop" type="ColorRect" parent="Root"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.02, 0.025, 0.04, 0.82)
+color = Color(0.008, 0.01, 0.016, 0.86)
 
 [node name="Buttons" type="Control" parent="Root"]
 unique_name_in_owner = true
@@ -35,8 +37,8 @@ offset_left = -300.0
 offset_top = -180.0
 offset_right = 300.0
 offset_bottom = -110.0
-theme_override_colors/font_color = Color(0.93, 0.93, 0.95, 1)
-theme_override_font_sizes/font_size = 52
+theme_override_colors/font_color = Color(0.957, 0.949, 0.933, 1)
+theme_override_font_sizes/font_size = 58
 text = "PAUSED"
 horizontal_alignment = 1
 
@@ -56,19 +58,19 @@ theme_override_constants/separation = 14
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 50)
 theme_override_font_sizes/font_size = 22
-text = "Resume"
+text = "RESUME"
 
 [node name="SettingsButton" type="Button" parent="Root/Buttons/List"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 theme_override_font_sizes/font_size = 19
-text = "Settings"
+text = "SETTINGS"
 
 [node name="MenuButton" type="Button" parent="Root/Buttons/List"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 44)
 theme_override_font_sizes/font_size = 19
-text = "Main Menu"
+text = "MAIN MENU"
 
 [node name="SettingsPanel" parent="Root" instance=ExtResource("2_settings")]
 unique_name_in_owner = true
