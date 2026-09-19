@@ -150,8 +150,13 @@ func apply_audio() -> void:
 
 
 func apply_window() -> void:
+	# Exclusive rather than plain fullscreen. On macOS the plain mode puts the
+	# window in its own Space, where the cursor capture a first-person camera
+	# depends on is unreliable — a trackpad could not turn the view at all.
+	# Exclusive fullscreen keeps the window on the current Space and keeps
+	# capture and focus behaving like every other platform.
 	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen
+		DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN if fullscreen
 		else DisplayServer.WINDOW_MODE_WINDOWED
 	)
 

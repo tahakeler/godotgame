@@ -131,14 +131,26 @@ func get_angle_to_source(world_position: Vector3) -> float:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and _look_enabled:
-		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
-			_apply_look(event.relative)
+		# Deliberately not gated on the mouse being captured. It used to be, and
+		# that turned any failure to capture into a camera that could not turn
+		# at all — which is what happened on a macOS trackpad in fullscreen.
+		# Capture stops the cursor escaping the window; it is not what makes
+		# looking work, and treating it as a precondition made a cosmetic
+		# problem into an unplayable one.
+		_apply_look(event.relative)
 
 	elif event is InputEventMouseButton and event.pressed:
 		# Clicking back into the window re-captures, so the player does not have
 		# to hunt for a key after alt-tabbing.
-		if Input.get_mouse_mode() == Input.MOUSE_MODE_VISIBLE and _look_enabled:
+		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED and _look_enabled:
 			capture_mouse()
+
+
+## macOS in particular can hand focus back without the capture surviving, and a
+## player who alt-tabbed out would return to a view that no longer turns.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN and _look_enabled:
+		capture_mouse()
 
 
 ## Stick look runs on the render frame rather than the physics tick, so turning
