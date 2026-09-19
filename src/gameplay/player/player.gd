@@ -19,6 +19,8 @@ signal look_sensitivity_changed(value: float)
 signal damage_taken(amount: float, direction_angle: float)
 signal died()
 signal footstep_taken()
+## Relative mouse movement, so the viewmodel can lag behind the look.
+signal look_moved(relative: Vector2)
 
 @export_group("Movement")
 @export var move_speed := 6.5
@@ -35,6 +37,13 @@ signal footstep_taken()
 @export var pitch_limit_degrees := 89.0
 @export var invert_look_y := false
 
+@export_group("Camera shake")
+@export var shake_decay := 2.4
+@export var shake_frequency := 26.0
+@export var shake_yaw := 0.035
+@export var shake_roll := 0.05
+@export var shake_offset := 0.06
+
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
 @onready var health: Health = $Health
@@ -43,6 +52,10 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 
 var _look_enabled := true
 var _spawn_transform: Transform3D
 var _distance_since_footstep := 0.0
+## Shake builds up from events and decays continuously. Squaring it on use
+## means small knocks stay subtle while a burst of hits reads as violent.
+var _trauma := 0.0
+var _shake_time := 0.0
 
 
 func _ready() -> void:
@@ -62,6 +75,34 @@ func take_damage(amount: float, from_position := Vector3.ZERO,
 
 	damage_taken.emit(applied, get_angle_to_source(from_position))
 	return applied
+
+
+## Add camera shake. 0.2 is a gunshot, 0.6 is being hit.
+func add_trauma(amount: float) -> void:
+	_trauma = clampf(_trauma + amount, 0.0, 1.0)
+
+
+## Shake is applied to the camera's yaw, roll and position — never its pitch,
+## which the weapon already drives for recoil. Two systems writing the same
+## axis fight each other and the result reads as stutter rather than impact.
+func _tick_shake(delta: float) -> void:
+	_trauma = maxf(0.0, _trauma - shake_decay * delta)
+
+	if is_zero_approx(_trauma):
+		camera.position = Vector3.ZERO
+		camera.rotation.z = 0.0
+		return
+
+	_shake_time += delta * shake_frequency
+	var strength := _trauma * _trauma
+
+	camera.rotation.y = sin(_shake_time * 1.7) * strength * shake_yaw
+	camera.rotation.z = sin(_shake_time * 2.3) * strength * shake_roll
+	camera.position = Vector3(
+		sin(_shake_time * 3.1) * strength * shake_offset,
+		cos(_shake_time * 2.7) * strength * shake_offset,
+		0.0
+	)
 
 
 ## Bearing of a world position relative to where the player is facing.
@@ -114,6 +155,7 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 	_tick_footsteps(delta)
+	_tick_shake(delta)
 
 
 ## Footsteps are driven by distance covered rather than a timer, so the rhythm

@@ -63,6 +63,42 @@ offset_right = 1.5
 offset_bottom = 1.5
 color = Color(1, 0.35, 0.3, 0.9)
 
+[node name="Hitmarker" type="Control" parent="Crosshair"]
+unique_name_in_owner = true
+mouse_filter = 2
+
+[node name="UpLeft" type="ColorRect" parent="Crosshair/Hitmarker"]
+offset_left = -16.0
+offset_top = -16.0
+offset_right = -7.0
+offset_bottom = -14.0
+rotation = -0.785398
+color = Color(1, 0.95, 0.85, 1)
+
+[node name="UpRight" type="ColorRect" parent="Crosshair/Hitmarker"]
+offset_left = 7.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = -14.0
+rotation = 0.785398
+color = Color(1, 0.95, 0.85, 1)
+
+[node name="DownLeft" type="ColorRect" parent="Crosshair/Hitmarker"]
+offset_left = -16.0
+offset_top = 14.0
+offset_right = -7.0
+offset_bottom = 16.0
+rotation = 0.785398
+color = Color(1, 0.95, 0.85, 1)
+
+[node name="DownRight" type="ColorRect" parent="Crosshair/Hitmarker"]
+offset_left = 7.0
+offset_top = 14.0
+offset_right = 16.0
+offset_bottom = 16.0
+rotation = -0.785398
+color = Color(1, 0.95, 0.85, 1)
+
 [node name="ExtractionLabel" type="Label" parent="."]
 unique_name_in_owner = true
 anchors_preset = 5

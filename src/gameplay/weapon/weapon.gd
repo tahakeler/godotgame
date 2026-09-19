@@ -19,6 +19,8 @@ signal reload_finished()
 signal fired(from: Vector3, to: Vector3)
 signal dry_fired()
 signal target_hit(target: Node, damage_dealt: float)
+## Where a bullet landed, the surface normal, and whether it was a zombie.
+signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 
 @export_group("Ammunition")
 @export var magazine_size := 8
@@ -38,6 +40,14 @@ signal target_hit(target: Node, damage_dealt: float)
 @export var recoil_recovery := 9.0
 @export var tracer_lifetime := 0.04
 
+@export_group("Viewmodel")
+@export var sway_amount := 0.0011
+@export var sway_limit := 0.05
+@export var sway_smoothing := 9.0
+@export var sway_recentre := 12.0
+@export var bob_frequency := 9.0
+@export var bob_amount := 0.012
+
 var magazine_ammo := 0
 var reserve_ammo := 0
 
@@ -50,6 +60,10 @@ var _was_mouse_captured := false
 ## Briefly blocks firing after the cursor is re-captured, so the click that
 ## brings the window back into focus does not also spend a round.
 var _focus_lock_remaining := 0.0
+var _look_delta := Vector2.ZERO
+var _sway_offset := Vector3.ZERO
+var _bob_time := 0.0
+var _rest_position := Vector3.ZERO
 
 @onready var _camera: Camera3D = _resolve_camera()
 @onready var _muzzle: Node3D = $Muzzle
@@ -57,6 +71,7 @@ var _focus_lock_remaining := 0.0
 
 
 func _ready() -> void:
+	_rest_position = position
 	magazine_ammo = magazine_size
 	reserve_ammo = starting_reserve
 	_muzzle_flash.visible = false
@@ -67,6 +82,7 @@ func _process(delta: float) -> void:
 	_cooldown_remaining = maxf(0.0, _cooldown_remaining - delta)
 	_tick_reload(delta)
 	_tick_recoil(delta)
+	_tick_viewmodel(delta)
 
 	if not _input_enabled:
 		return
@@ -185,6 +201,58 @@ func _tick_reload(delta: float) -> void:
 	reload_finished.emit()
 
 
+## Sway and bob the viewmodel.
+##
+## A weapon welded rigidly to the camera reads as a decal on the screen. Making
+## it lag behind the look and rise with the stride is what sells it as an object
+## being carried. Both are applied as an offset from the rest pose, so recoil
+## and shake stay independent of it.
+func _tick_viewmodel(delta: float) -> void:
+	var target_sway := Vector3(
+		clampf(-_look_delta.x * sway_amount, -sway_limit, sway_limit),
+		clampf(-_look_delta.y * sway_amount, -sway_limit, sway_limit),
+		0.0
+	)
+	_look_delta = _look_delta.lerp(Vector2.ZERO, clampf(sway_recentre * delta, 0.0, 1.0))
+
+	var speed := 0.0
+	var body := _owner_body()
+	if body != null and body.is_on_floor():
+		speed = Vector2(body.velocity.x, body.velocity.z).length()
+
+	if speed > 0.6:
+		_bob_time += delta * bob_frequency * clampf(speed / 6.5, 0.4, 1.6)
+	else:
+		# Settle the bob rather than freezing it mid-stride.
+		_bob_time = lerpf(_bob_time, 0.0, clampf(6.0 * delta, 0.0, 1.0))
+
+	var bob_strength: float = clampf(speed / 6.5, 0.0, 1.0) * bob_amount
+	var bob := Vector3(
+		sin(_bob_time) * bob_strength,
+		-absf(cos(_bob_time)) * bob_strength * 0.8,
+		0.0
+	)
+
+	_sway_offset = _sway_offset.lerp(
+		target_sway + bob, clampf(sway_smoothing * delta, 0.0, 1.0)
+	)
+	position = _rest_position + _sway_offset
+
+
+## Record look movement so the viewmodel can lag behind it.
+func report_look(relative: Vector2) -> void:
+	_look_delta += relative
+
+
+func _owner_body() -> CharacterBody3D:
+	var node := get_parent()
+	while node != null:
+		if node is CharacterBody3D:
+			return node
+		node = node.get_parent()
+	return null
+
+
 func _tick_recoil(delta: float) -> void:
 	if is_zero_approx(_recoil_offset):
 		return
@@ -229,10 +297,13 @@ func _trace_shot() -> void:
 	if not result.is_empty():
 		destination = result.position
 		var collider: Node = result.get("collider")
+		var is_flesh := collider != null and collider.has_method("take_damage")
 
-		if collider != null and collider.has_method("take_damage"):
+		if is_flesh:
 			collider.take_damage(damage, result.position, direction)
 			target_hit.emit(collider, damage)
+
+		impacted.emit(result.position, result.get("normal", Vector3.UP), is_flesh)
 
 	fired.emit(_muzzle.global_position, destination)
 	_spawn_tracer(_muzzle.global_position, destination)

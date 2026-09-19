@@ -25,6 +25,10 @@ enum RoundState { PLAYING, WON, LOST }
 @export_group("Rewards")
 @export var ammo_per_kill := 3
 
+@export_group("Feel")
+@export var fire_trauma := 0.22
+@export var hurt_trauma := 0.55
+
 var state: RoundState = RoundState.PLAYING
 var time_remaining := 0.0
 var kills := 0
@@ -35,6 +39,7 @@ var kills := 0
 @onready var weapon: Weapon = $Player/Head/Camera/Weapon
 @onready var hud: HUD = $HUD
 @onready var sounds: SoundBank = $SoundBank
+@onready var effects: EffectSpawner = $EffectSpawner
 @onready var pause_menu: PauseMenu = $PauseMenu
 
 ## Null when autoloads are unavailable (headless --script runs); the exported
@@ -49,6 +54,7 @@ func _ready() -> void:
 	_settings = GameSettings.instance(self)
 
 	_wire_audio()
+	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
 	start_round()
 
@@ -80,6 +86,28 @@ func _wire_audio() -> void:
 
 	round_won.connect(func(_kills: int, _time: float) -> void: sounds.play("round_won"))
 	round_lost.connect(func(_kills: int, _time: float) -> void: sounds.play("round_lost"))
+
+
+## Route gameplay signals to visual effects and camera feel, for the same reason
+## audio is routed here: the weapon should not know what a hit looks like, only
+## that it hit.
+func _wire_effects() -> void:
+	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
+		player.add_trauma(fire_trauma)
+	)
+	weapon.impacted.connect(func(position: Vector3, normal: Vector3, is_flesh: bool) -> void:
+		effects.spawn_impact(position, normal, is_flesh)
+	)
+	weapon.target_hit.connect(func(_target: Node, _damage: float) -> void:
+		hud.flash_hitmarker()
+	)
+	player.damage_taken.connect(func(_amount: float, _angle: float) -> void:
+		player.add_trauma(hurt_trauma)
+	)
+	spawner.zombie_died.connect(func(death_position: Vector3) -> void:
+		effects.spawn_death(death_position)
+	)
+	player.look_moved.connect(weapon.report_look)
 
 
 func _process(delta: float) -> void:
