@@ -10,6 +10,7 @@ extends CharacterBody3D
 
 signal died(zombie: Zombie, death_position: Vector3)
 signal hit_player(damage: float, from_position: Vector3)
+signal groaned(groan_position: Vector3)
 
 @export_group("Movement")
 @export var move_speed := 3.2
@@ -25,12 +26,14 @@ signal hit_player(damage: float, from_position: Vector3)
 
 @export_group("Feel")
 @export var hit_flash_duration := 0.09
+@export var groan_interval := Vector2(3.5, 9.0)
 
 var _target: Node3D
 var _attack_remaining := 0.0
 var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _flash_remaining := 0.0
+var _groan_remaining := 0.0
 
 @onready var health: Health = $Health
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
@@ -48,6 +51,7 @@ func _ready() -> void:
 	_agent.path_desired_distance = 0.6
 	_agent.target_desired_distance = attack_range * 0.7
 
+	_groan_remaining = randf_range(groan_interval.x, groan_interval.y)
 	_normal_material = _body_meshes[0].get_surface_override_material(0)
 	_flash_material = StandardMaterial3D.new()
 	_flash_material.albedo_color = Color(1.0, 0.85, 0.85)
@@ -59,6 +63,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_attack_remaining = maxf(0.0, _attack_remaining - delta)
 	_tick_flash(delta)
+	_tick_groan(delta)
 
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
@@ -131,6 +136,15 @@ func _try_attack() -> void:
 
 	if _target.has_method("take_damage"):
 		_target.take_damage(contact_damage, global_position, Vector3.ZERO)
+
+
+func _tick_groan(delta: float) -> void:
+	_groan_remaining -= delta
+	if _groan_remaining > 0.0:
+		return
+
+	_groan_remaining = randf_range(groan_interval.x, groan_interval.y)
+	groaned.emit(global_position)
 
 
 func _tick_flash(delta: float) -> void:

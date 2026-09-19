@@ -9,6 +9,7 @@ extends Node3D
 
 signal zombie_died(death_position: Vector3)
 signal zombie_hit_player(damage: float, from_position: Vector3)
+signal zombie_groaned(groan_position: Vector3)
 signal population_changed(alive: int)
 
 @export var zombie_scene: PackedScene
@@ -117,6 +118,9 @@ func _spawn_one() -> void:
 
 	zombie.died.connect(_on_zombie_died)
 	zombie.hit_player.connect(_on_zombie_hit_player)
+	zombie.groaned.connect(func(groan_position: Vector3) -> void:
+		zombie_groaned.emit(groan_position)
+	)
 
 	_alive.append(zombie)
 	population_changed.emit(_alive.size())

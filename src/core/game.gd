@@ -34,6 +34,7 @@ var kills := 0
 @onready var spawner: ZombieSpawner = $ZombieSpawner
 @onready var weapon: Weapon = $Player/Head/Camera/Weapon
 @onready var hud: HUD = $HUD
+@onready var sounds: SoundBank = $SoundBank
 @onready var pause_menu: PauseMenu = $PauseMenu
 
 ## Null when autoloads are unavailable (headless --script runs); the exported
@@ -47,8 +48,38 @@ func _ready() -> void:
 	pause_menu.resumed.connect(_on_resumed)
 	_settings = GameSettings.instance(self)
 
+	_wire_audio()
 	hud.bind(self, player, weapon, spawner)
 	start_round()
+
+
+## Route gameplay signals to sound events. Audio lives here rather than inside
+## the systems, so none of them hold a reference to a player or a stream.
+func _wire_audio() -> void:
+	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
+		sounds.play("fire")
+	)
+	weapon.dry_fired.connect(func() -> void: sounds.play("dry_fire"))
+	weapon.reload_started.connect(func(_duration: float) -> void:
+		sounds.play("reload_start")
+	)
+	weapon.reload_finished.connect(func() -> void: sounds.play("reload_end"))
+	weapon.target_hit.connect(func(target: Node, _damage: float) -> void:
+		if target is Node3D:
+			sounds.play_at("zombie_hit", target.global_position)
+	)
+
+	player.damage_taken.connect(func(_amount: float, _angle: float) -> void:
+		sounds.play("player_hurt")
+	)
+	player.footstep_taken.connect(func() -> void: sounds.play("footstep"))
+
+	spawner.zombie_groaned.connect(func(groan_position: Vector3) -> void:
+		sounds.play_at("zombie_groan", groan_position)
+	)
+
+	round_won.connect(func(_kills: int, _time: float) -> void: sounds.play("round_won"))
+	round_lost.connect(func(_kills: int, _time: float) -> void: sounds.play("round_lost"))
 
 
 func _process(delta: float) -> void:
@@ -134,12 +165,14 @@ func _on_resumed() -> void:
 	player.set_look_enabled(true)
 
 
-func _on_zombie_died(_death_position: Vector3) -> void:
+func _on_zombie_died(death_position: Vector3) -> void:
 	if state != RoundState.PLAYING:
 		return
 
 	kills += 1
 	kills_changed.emit(kills)
+	sounds.play_at("zombie_death", death_position)
+	sounds.play("ammo_gained")
 
 	# Kills are the only source of ammunition, and the only way to shorten the
 	# round. Both rewards come from the same action by design.

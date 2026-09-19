@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://src/core/game.gd" id="1_game"]
 [ext_resource type="PackedScene" path="res://src/arena/arena.tscn" id="2_arena"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://src/gameplay/zombie/zombie.tscn" id="5_zombie"]
 [ext_resource type="PackedScene" path="res://src/ui/hud.tscn" id="6_hud"]
 [ext_resource type="PackedScene" path="res://src/ui/pause_menu.tscn" id="7_pause"]
+[ext_resource type="Script" path="res://src/audio/sound_bank.gd" id="8_sounds"]
 
 [node name="Game" type="Node3D"]
 script = ExtResource("1_game")
@@ -21,5 +22,8 @@ script = ExtResource("4_spawner")
 zombie_scene = ExtResource("5_zombie")
 
 [node name="HUD" parent="." instance=ExtResource("6_hud")]
+
+[node name="SoundBank" type="Node" parent="."]
+script = ExtResource("8_sounds")
 
 [node name="PauseMenu" parent="." instance=ExtResource("7_pause")]

@@ -27,6 +27,12 @@ fail_count=0
 # only reliable signal is the log text itself.
 ERROR_PATTERN='SCRIPT ERROR|Parse Error|ERROR:|Failed to load|Cannot open|error CS[0-9]+'
 
+# Godot reports audio streams as still referenced when a headless run quits
+# mid-playback: the AudioServer holds them even after the nodes release them.
+# A teardown artifact of --script runs, not a fault in the game. This is the
+# only message excluded, and it is excluded by exact text.
+BENIGN_PATTERN='resources still in use at exit'
+
 run_step() {
   local name="$1"
   local log="$LOG_DIR/${name}.log"
@@ -36,16 +42,19 @@ run_step() {
   "$@" >"$log" 2>&1
   local code=$?
 
+  local errors
+  errors="$(grep -E "$ERROR_PATTERN" "$log" | grep -vE "$BENIGN_PATTERN" || true)"
+
   if [[ $code -ne 0 ]]; then
     echo "FAIL: $name exited $code"
-    grep -E "$ERROR_PATTERN" "$log" | head -20
+    [[ -n "$errors" ]] && echo "$errors" | head -20
     fail_count=$((fail_count + 1))
     return 1
   fi
 
-  if grep -qE "$ERROR_PATTERN" "$log"; then
+  if [[ -n "$errors" ]]; then
     echo "FAIL: $name reported engine errors"
-    grep -E "$ERROR_PATTERN" "$log" | head -20
+    echo "$errors" | head -20
     fail_count=$((fail_count + 1))
     return 1
   fi

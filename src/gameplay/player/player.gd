@@ -18,6 +18,7 @@ signal look_sensitivity_changed(value: float)
 ## 0 is dead ahead, positive is to the right, +/-PI is directly behind.
 signal damage_taken(amount: float, direction_angle: float)
 signal died()
+signal footstep_taken()
 
 @export_group("Movement")
 @export var move_speed := 6.5
@@ -26,6 +27,8 @@ signal died()
 @export var jump_velocity := 6.5
 ## Fraction of normal acceleration available while airborne.
 @export_range(0.0, 1.0) var air_control := 0.25
+## Distance travelled between footstep sounds.
+@export var footstep_distance := 2.1
 
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
@@ -39,6 +42,7 @@ signal died()
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _look_enabled := true
 var _spawn_transform: Transform3D
+var _distance_since_footstep := 0.0
 
 
 func _ready() -> void:
@@ -109,6 +113,23 @@ func _physics_process(delta: float) -> void:
 	velocity.z = horizontal.z
 
 	move_and_slide()
+	_tick_footsteps(delta)
+
+
+## Footsteps are driven by distance covered rather than a timer, so the rhythm
+## follows actual movement instead of running while the player is against a wall.
+func _tick_footsteps(delta: float) -> void:
+	if not is_on_floor():
+		return
+
+	var speed := Vector2(velocity.x, velocity.z).length()
+	if speed < 0.6:
+		return
+
+	_distance_since_footstep += speed * delta
+	if _distance_since_footstep >= footstep_distance:
+		_distance_since_footstep = 0.0
+		footstep_taken.emit()
 
 
 ## Point the camera using a relative mouse delta.
