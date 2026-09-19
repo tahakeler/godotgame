@@ -12,6 +12,7 @@ const LOW_HEALTH_FRACTION := 0.35
 const LOW_AMMO_ROUNDS := 2
 
 @export var damage_marker_lifetime := 1.1
+@export var hitmarker_duration := 0.22
 
 var _game: Game
 var _player: Player
@@ -30,13 +31,16 @@ var _weapon: Weapon
 @onready var _overlay: Control = %Overlay
 @onready var _overlay_title: Label = %OverlayTitle
 @onready var _overlay_detail: Label = %OverlayDetail
+@onready var _hitmarker: Control = %Hitmarker
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
+var _hitmarker_remaining := 0.0
 
 
 func _ready() -> void:
 	_overlay.visible = false
+	_hitmarker.modulate.a = 0.0
 	_damage_flash.color.a = 0.0
 	_damage_indicator.draw.connect(_draw_damage_markers)
 
@@ -44,6 +48,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_tick_damage_markers(delta)
 	_tick_flash(delta)
+	_tick_hitmarker(delta)
 
 
 ## Connect to a round. Called by Game once every system exists.
@@ -197,6 +202,22 @@ func _tick_damage_markers(delta: float) -> void:
 		func(marker: Dictionary) -> bool: return marker.remaining > 0.0
 	)
 	_damage_indicator.queue_redraw()
+
+
+## Confirm a hit landed. Without it the player is guessing whether a shot
+## connected, which in a game about counting bullets is the difference between
+## a considered decision and a superstition.
+func flash_hitmarker() -> void:
+	_hitmarker_remaining = hitmarker_duration
+	_hitmarker.modulate.a = 1.0
+
+
+func _tick_hitmarker(delta: float) -> void:
+	if _hitmarker_remaining <= 0.0:
+		return
+
+	_hitmarker_remaining = maxf(0.0, _hitmarker_remaining - delta)
+	_hitmarker.modulate.a = _hitmarker_remaining / hitmarker_duration
 
 
 func _tick_flash(delta: float) -> void:
