@@ -31,6 +31,7 @@ var _weapon: Weapon
 @onready var _overlay: Control = %Overlay
 @onready var _overlay_title: Label = %OverlayTitle
 @onready var _overlay_detail: Label = %OverlayDetail
+@onready var _record_label: Label = %RecordLabel
 @onready var _hitmarker: Control = %Hitmarker
 @onready var _level_label: Label = %LevelLabel
 @onready var _experience_bar: ProgressBar = %ExperienceBar
@@ -44,6 +45,7 @@ var _hurt_pulse := 0.0
 
 func _ready() -> void:
 	_overlay.visible = false
+	_record_label.visible = false
 	_hitmarker.modulate.a = 0.0
 	_damage_flash.color.a = 0.0
 	_damage_indicator.draw.connect(_draw_damage_markers)
@@ -196,7 +198,8 @@ func _on_damage_taken(_amount: float, direction_angle: float) -> void:
 	_damage_indicator.queue_redraw()
 
 
-func _on_round_won(kills: int, time_taken: float) -> void:
+func _on_round_won(kills: int, time_taken: float, is_record: bool) -> void:
+	_show_record_banner(is_record)
 	_show_overlay(
 		"SURVIVED" if _game != null and _game.mode == GameSettings.Mode.TIMED else "EXTRACTED",
 		Color(0.45, 0.85, 0.5),
@@ -206,7 +209,8 @@ func _on_round_won(kills: int, time_taken: float) -> void:
 	)
 
 
-func _on_round_lost(kills: int, time_survived: float) -> void:
+func _on_round_lost(kills: int, time_survived: float, is_record: bool) -> void:
+	_show_record_banner(is_record)
 	_show_overlay(
 		"YOU DIED",
 		Color(0.88, 0.26, 0.22),
@@ -214,6 +218,12 @@ func _on_round_lost(kills: int, time_survived: float) -> void:
 			kills, _format_duration(time_survived)
 		]
 	)
+
+
+## A run that beat the previous best should say so on the results screen. In
+## Endless especially it is the only feedback the mode can give.
+func _show_record_banner(is_record: bool) -> void:
+	_record_label.visible = is_record
 
 
 func _show_overlay(title: String, color: Color, detail: String) -> void:

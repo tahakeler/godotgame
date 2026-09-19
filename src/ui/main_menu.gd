@@ -23,6 +23,7 @@ const GAME_SCENE := "res://src/core/game.tscn"
 @onready var _difficulty_hint: Label = %DifficultyHint
 @onready var _mode_button: Button = %ModeButton
 @onready var _mode_blurb: Label = %ModeBlurb
+@onready var _record_label: Label = %RecordLabel
 @onready var _fade: ColorRect = %Fade
 
 var _settings: GameSettings
@@ -108,6 +109,9 @@ func _refresh_mode() -> void:
 
 	_mode_button.text = "MODE:  %s" % _settings.get_mode_name().to_upper()
 	_mode_blurb.text = _settings.get_mode_blurb()
+	_record_label.text = "BEST   %s" % Records.describe(
+		_settings.mode, Records.best(_settings.mode, _settings.difficulty)
+	)
 
 
 func _refresh_difficulty_hint() -> void:
