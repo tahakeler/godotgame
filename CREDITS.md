@@ -1,10 +1,10 @@
 # Credits and Asset Licences
 
-**LAST MAGAZINE** — first-person arena survival shooter built in Godot 4.6.
+**LAST MAGAZINE** — first-person arena survival shooter built in Godot 4.7.
 
 ## Engine
 
-- [Godot Engine](https://godotengine.org/) 4.6.3 (.NET build) — MIT Licence
+- [Godot Engine](https://godotengine.org/) 4.7.2 — MIT Licence
 
 ## Project Template
 

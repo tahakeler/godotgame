@@ -5,7 +5,7 @@
 
 set -uo pipefail
 
-GODOT="${GODOT_BIN:-/Applications/Godot_mono.app/Contents/MacOS/Godot}"
+GODOT="${GODOT_BIN:-/Applications/Godot47.app/Contents/MacOS/Godot}"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${TMPDIR:-/tmp}/lastmagazine-check"
 

@@ -62,11 +62,6 @@ data_LastMagazine*/
 *.tmp
 *.user
 *.userprefs
-
-# Godot C# project files are hand-maintained source, not generated output.
-# These negations must stay below the Unity rules above.
-!LastMagazine.csproj
-!LastMagazine.sln
 *.pidb
 *.booproj
 *.svd
