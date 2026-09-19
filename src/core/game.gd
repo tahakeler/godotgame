@@ -30,7 +30,10 @@ enum RoundState { PLAYING, WON, LOST }
 @export var hurt_trauma := 0.55
 
 var state: RoundState = RoundState.PLAYING
+var mode: GameSettings.Mode = GameSettings.Mode.EXTRACTION
+var round_duration := 120.0
 var time_remaining := 0.0
+var elapsed_time := 0.0
 var kills := 0
 
 @onready var arena: Arena = $Arena
@@ -125,8 +128,16 @@ func _process(delta: float) -> void:
 	if state != RoundState.PLAYING:
 		return
 
+	# Endless has no clock to run out, so its timer counts up as a score rather
+	# than down as a deadline. Everything else is a countdown to a win.
+	if mode == GameSettings.Mode.ENDLESS:
+		elapsed_time += delta
+		time_changed.emit(elapsed_time, 0.0)
+		return
+
 	time_remaining = maxf(0.0, time_remaining - delta)
-	time_changed.emit(time_remaining, extraction_duration)
+	elapsed_time += delta
+	time_changed.emit(time_remaining, round_duration)
 
 	if time_remaining <= 0.0:
 		_end_round(RoundState.WON)
@@ -138,9 +149,12 @@ func _process(delta: float) -> void:
 func start_round() -> void:
 	_apply_difficulty()
 
+	_apply_mode()
+
 	state = RoundState.PLAYING
 	kills = 0
-	time_remaining = extraction_duration
+	elapsed_time = 0.0
+	time_remaining = round_duration
 
 	if _settings != null:
 		_settings.apply_to_player(player)
@@ -153,7 +167,10 @@ func start_round() -> void:
 	spawner.begin(arena, player)
 
 	kills_changed.emit(kills)
-	time_changed.emit(time_remaining, extraction_duration)
+	time_changed.emit(
+		elapsed_time if mode == GameSettings.Mode.ENDLESS else time_remaining,
+		0.0 if mode == GameSettings.Mode.ENDLESS else round_duration
+	)
 	round_started.emit()
 
 
@@ -173,6 +190,23 @@ func _apply_difficulty() -> void:
 	weapon.starting_reserve = profile.starting_reserve
 	spawner.interval_scale = profile.spawn_interval_scale
 	spawner.damage_scale = profile.damage_scale
+
+
+## Configure the round for the chosen mode. Difficulty has already set the
+## Extraction duration, so only the other two override it.
+func _apply_mode() -> void:
+	mode = _settings.mode if _settings != null else GameSettings.Mode.EXTRACTION
+	round_duration = extraction_duration
+
+	match mode:
+		GameSettings.Mode.TIMED:
+			round_duration = GameSettings.MODE_DURATIONS[GameSettings.Mode.TIMED]
+		GameSettings.Mode.ENDLESS:
+			round_duration = 0.0
+
+	# Endless keeps escalating rather than settling at its floor, so the run
+	# always ends eventually — a survival mode you cannot lose is a screensaver.
+	spawner.endless = mode == GameSettings.Mode.ENDLESS
 
 
 func _toggle_pause() -> void:
@@ -205,8 +239,14 @@ func _on_zombie_died(death_position: Vector3) -> void:
 	# Kills are the only source of ammunition, and the only way to shorten the
 	# round. Both rewards come from the same action by design.
 	weapon.add_reserve_ammo(ammo_per_kill)
+
+	# Only Extraction trades kills for clock. In Last Stand the timer is the
+	# whole challenge, and in Endless there is no clock to shorten.
+	if mode != GameSettings.Mode.EXTRACTION:
+		return
+
 	time_remaining = maxf(0.0, time_remaining - seconds_per_kill)
-	time_changed.emit(time_remaining, extraction_duration)
+	time_changed.emit(time_remaining, round_duration)
 
 	if time_remaining <= 0.0:
 		_end_round(RoundState.WON)
@@ -224,9 +264,7 @@ func _end_round(result: RoundState) -> void:
 	weapon.set_input_enabled(false)
 	player.set_look_enabled(false)
 
-	var elapsed := extraction_duration - time_remaining
-
 	if result == RoundState.WON:
-		round_won.emit(kills, elapsed)
+		round_won.emit(kills, elapsed_time)
 	else:
-		round_lost.emit(kills, elapsed)
+		round_lost.emit(kills, elapsed_time)

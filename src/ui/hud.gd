@@ -86,15 +86,35 @@ func _on_round_started() -> void:
 	_damage_indicator.queue_redraw()
 
 
-func _on_time_changed(remaining: float, _total: float) -> void:
-	var minutes := int(remaining) / 60
-	var seconds := int(remaining) % 60
-	_extraction_label.text = "EXTRACTION  %02d:%02d" % [minutes, seconds]
+## Endless has no deadline, so its clock counts up and never turns amber —
+## there is nothing imminent to warn about.
+func _on_time_changed(value: float, total: float) -> void:
+	var counts_up := is_zero_approx(total)
+	_extraction_label.text = "%s  %s" % [
+		_timer_caption(), _format_duration(value)
+	]
 
-	# Turns amber inside the last 15 seconds so the win is visibly imminent.
+	if counts_up:
+		_extraction_label.modulate = Color(0.85, 0.9, 1.0)
+		return
+
+	# Turns amber inside the last 15 seconds so the finish is visibly imminent.
 	_extraction_label.modulate = (
-		Color(1.0, 0.78, 0.3) if remaining <= 15.0 else Color(0.85, 0.9, 1.0)
+		Color(1.0, 0.78, 0.3) if value <= 15.0 else Color(0.85, 0.9, 1.0)
 	)
+
+
+func _timer_caption() -> String:
+	if _game == null:
+		return "EXTRACTION"
+
+	match _game.mode:
+		GameSettings.Mode.TIMED:
+			return "HOLD OUT"
+		GameSettings.Mode.ENDLESS:
+			return "SURVIVED"
+		_:
+			return "EXTRACTION"
 
 
 func _on_kills_changed(kills: int) -> void:
@@ -166,7 +186,7 @@ func _on_damage_taken(_amount: float, direction_angle: float) -> void:
 
 func _on_round_won(kills: int, time_taken: float) -> void:
 	_show_overlay(
-		"EXTRACTED",
+		"SURVIVED" if _game != null and _game.mode == GameSettings.Mode.TIMED else "EXTRACTED",
 		Color(0.45, 0.85, 0.5),
 		"%d kills  ·  extracted in %s\n\nPress ENTER to play again" % [
 			kills, _format_duration(time_taken)
