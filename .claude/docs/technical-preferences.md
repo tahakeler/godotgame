@@ -5,10 +5,10 @@
 
 ## Engine & Language
 
-- **Engine**: Godot 4.6
-- **Language**: GDScript (gameplay/UI scripting), C# (performance-critical systems), C++ via GDExtension (native only)
-- **Rendering**: Godot 4.6 Forward+ renderer
-- **Physics**: Jolt Physics (default in 4.6)
+- **Engine**: Godot 4.7
+- **Language**: GDScript
+- **Rendering**: Forward+ renderer
+- **Physics**: Jolt Physics (Godot 4.7 default)
 
 ## Input & Platform
 
@@ -24,25 +24,13 @@
 
 ## Naming Conventions
 
-Use GDScript conventions for `.gd` files and C# conventions for `.cs` files. Mixed-language files do not exist — the boundary is per-file.
-
-**GDScript:**
 - **Classes**: PascalCase (e.g., `PlayerController`)
 - **Variables/Functions**: snake_case (e.g., `move_speed`)
 - **Signals/Events**: snake_case past tense (e.g., `health_changed`)
 - **Files**: snake_case matching class (e.g., `player_controller.gd`)
-- **Scenes**: PascalCase matching root node (e.g., `PlayerController.tscn`)
+- **Scenes**: snake_case matching script (e.g., `player.tscn` beside `player.gd`)
 - **Constants**: UPPER_SNAKE_CASE (e.g., `MAX_HEALTH`)
-
-**C#:**
-- **Classes**: PascalCase (`PlayerController`) — must also be `partial`
-- **Public properties/fields**: PascalCase (`MoveSpeed`, `JumpVelocity`)
-- **Private fields**: `_camelCase` (`_currentHealth`, `_isGrounded`)
-- **Methods**: PascalCase (`TakeDamage()`, `GetCurrentHealth()`)
-- **Signal delegates**: PascalCase + `EventHandler` suffix (`HealthChangedEventHandler`)
-- **Files**: PascalCase matching class (`PlayerController.cs`)
-- **Scenes**: PascalCase matching root node (`PlayerController.tscn`)
-- **Constants**: PascalCase (`MaxHealth`, `DefaultMoveSpeed`)
+- **Exported tuning values**: always `@export`, never hardcoded magic numbers
 
 ## Performance Budgets
 
@@ -79,12 +67,11 @@ Use GDScript conventions for `.gd` files and C# conventions for `.cs` files. Mix
 <!-- to know which specialist to spawn for engine-specific validation. -->
 
 - **Primary**: godot-specialist
-- **GDScript Specialist**: godot-gdscript-specialist (.gd files — gameplay/UI scripts)
-- **C# Specialist**: godot-csharp-specialist (.cs files — performance-critical systems)
+- **Language/Code Specialist**: godot-gdscript-specialist (all .gd files)
 - **Shader Specialist**: godot-shader-specialist (.gdshader files, VisualShader resources)
 - **UI Specialist**: godot-specialist (no dedicated UI specialist — primary covers all UI)
-- **Additional Specialists**: godot-gdextension-specialist (GDExtension / native C++ bindings only)
-- **Routing Notes**: Invoke primary for cross-language architecture decisions and which systems belong in which language. Invoke GDScript specialist for .gd files. Invoke C# specialist for .cs files and .csproj management. Prefer signals over direct cross-language method calls at the boundary.
+- **Additional Specialists**: none — this project is GDScript-only, no C# or GDExtension
+- **Routing Notes**: Invoke primary for architecture decisions and cross-cutting review. Invoke GDScript specialist for code quality, signal architecture, and static typing enforcement.
 
 ### File Extension Routing
 
@@ -94,11 +81,7 @@ Use GDScript conventions for `.gd` files and C# conventions for `.cs` files. Mix
 | File Extension / Type | Specialist to Spawn |
 |-----------------------|---------------------|
 | Game code (.gd files) | godot-gdscript-specialist |
-| Game code (.cs files) | godot-csharp-specialist |
-| Cross-language boundary decisions | godot-specialist |
 | Shader / material files (.gdshader, VisualShader) | godot-shader-specialist |
 | UI / screen files (Control nodes, CanvasLayer) | godot-specialist |
 | Scene / prefab / level files (.tscn, .tres) | godot-specialist |
-| Project config (.csproj, NuGet) | godot-csharp-specialist |
-| Native extension / plugin files (.gdextension, C++) | godot-gdextension-specialist |
 | General architecture review | godot-specialist |

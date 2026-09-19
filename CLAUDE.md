@@ -5,10 +5,10 @@ Each agent owns a specific domain, enforcing separation of concerns and quality.
 
 ## Technology Stack
 
-- **Engine**: Godot 4.6
-- **Language**: GDScript (gameplay/UI scripting), C# (performance-critical systems), C++ via GDExtension (native only)
+- **Engine**: Godot 4.7
+- **Language**: GDScript
 - **Version Control**: Git with trunk-based development
-- **Build System**: .NET SDK + Godot Export Templates
+- **Build System**: Godot Export Templates
 - **Asset Pipeline**: Godot Import System + custom resource pipeline
 
 > **Note**: Engine-specialist agents exist for Godot, Unity, and Unreal with

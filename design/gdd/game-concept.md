@@ -29,7 +29,7 @@ shortens the round, but ammunition only comes from kills.*
 | **Primary MDA Aesthetic** | Challenge |
 | **Secondary Aesthetic** | Sensation |
 | **Target Platform** | PC (primary), Console-capable input |
-| **Engine** | Godot 4.6 |
+| **Engine** | Godot 4.7 |
 | **Estimated Scope** | Small (1-2 weeks, solo) |
 | **Session Length** | 2-4 minutes per round |
 
@@ -224,9 +224,9 @@ we choose clarity.*
 
 ## Technical Considerations
 
-- **Engine**: Godot 4.6, GDScript primary
+- **Engine**: Godot 4.7, GDScript (no C# — the installed editor is the standard build)
 - **Rendering**: Forward+
-- **Physics**: Jolt (Godot 4.6 default) — `CharacterBody3D` for player and zombies
+- **Physics**: Jolt (Godot 4.7 default) — `CharacterBody3D` for player and zombies
 - **Assets**: Kenney (CC0) low-poly packs plus primitive geometry. All external
   assets credited in the project README.
 - **Navigation**: `NavigationAgent3D` on a baked `NavigationRegion3D`, or direct
@@ -323,7 +323,7 @@ optional polish.
 
 ## Next Steps
 
-1. Scaffold the Godot 4.6 project (`feat/project-scaffold`)
+1. Scaffold the Godot 4.7 project (`feat/project-scaffold`)
 2. Build the arena and navigation (`feat/arena`)
 3. Build the first-person player controller (`feat/player-controller`)
 4. Build the weapon, ammunition, and reload system (`feat/ammo-reload`)
