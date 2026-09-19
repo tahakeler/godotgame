@@ -9,8 +9,8 @@ extends Node3D
 ## from kills, neither hiding nor spraying is a viable strategy.
 
 signal round_started()
-signal round_won(kills: int, time_taken: float)
-signal round_lost(kills: int, time_survived: float)
+signal round_won(kills: int, time_taken: float, is_record: bool)
+signal round_lost(kills: int, time_survived: float, is_record: bool)
 signal time_changed(remaining: float, total: float)
 signal kills_changed(kills: int)
 
@@ -95,8 +95,12 @@ func _wire_audio() -> void:
 		sounds.play_at("zombie_groan", groan_position)
 	)
 
-	round_won.connect(func(_kills: int, _time: float) -> void: sounds.play("round_won"))
-	round_lost.connect(func(_kills: int, _time: float) -> void: sounds.play("round_lost"))
+	round_won.connect(
+		func(_kills: int, _time: float, _record: bool) -> void: sounds.play("round_won")
+	)
+	round_lost.connect(
+		func(_kills: int, _time: float, _record: bool) -> void: sounds.play("round_lost")
+	)
 
 
 ## Route gameplay signals to visual effects and camera feel, for the same reason
@@ -344,7 +348,14 @@ func _end_round(result: RoundState) -> void:
 	weapon.set_input_enabled(false)
 	player.set_look_enabled(false)
 
+	var difficulty: GameSettings.Difficulty = (
+		_settings.difficulty if _settings != null else GameSettings.Difficulty.SOLDIER
+	)
+	var is_record := Records.submit(
+		mode, difficulty, kills, elapsed_time, result == RoundState.WON
+	)
+
 	if result == RoundState.WON:
-		round_won.emit(kills, elapsed_time)
+		round_won.emit(kills, elapsed_time, is_record)
 	else:
-		round_lost.emit(kills, elapsed_time)
+		round_lost.emit(kills, elapsed_time, is_record)

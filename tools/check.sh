@@ -71,6 +71,8 @@ run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_
 run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
 run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
+run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
+run_step "no-phantom-fire" "$GODOT" --headless --script tests/manual/verify_no_phantom_fire.gd
 run_step "feature-tests" "$GODOT" --headless --script tests/feature_tests.gd
 run_step "boot" "$GODOT" --headless --quit-after 120
 
