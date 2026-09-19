@@ -126,10 +126,57 @@ const NAV_HEIGHT := 0.05
 const COVER := [
 	{"position": Vector3(-6.0, 0, -4.5), "rotation": 18, "scale": 0.62},
 	{"position": Vector3(6.5, 0, 4.0), "rotation": -110, "scale": 0.7},
-	{"position": Vector3(5.5, 0, -6.5), "rotation": 65, "scale": 0.55},
-	{"position": Vector3(-6.5, 0, 6.0), "rotation": -40, "scale": 0.66},
+	# Moved clear of the raised decks below, which would otherwise have rock
+	# growing up through the floorboards.
+	{"position": Vector3(7.8, 0, -1.0), "rotation": 65, "scale": 0.55},
+	{"position": Vector3(-7.4, 0, 0.8), "rotation": -40, "scale": 0.66},
 	{"position": Vector3(-1.5, 0, 7.8), "rotation": 140, "scale": 0.5},
 	{"position": Vector3(2.0, 0, -8.0), "rotation": -75, "scale": 0.58},
+]
+
+## Raised decks and the ramps up to them.
+##
+## Verticality does two things a flat arena cannot. It gives the player ground
+## worth holding that costs something to reach and leave, and it splits the
+## horde's approach into lanes instead of letting it arrive as one wall. The
+## ramp is deliberately wide and open: a chokepoint you can hold indefinitely
+## is exactly what the concept's anti-turtling rule rules out.
+##
+## `tiles` counts 4m kit blocks. `ramp_from` is the floor end of the ramp; the
+## deck edge nearest it is worked out from the deck rectangle, so the two
+## always meet however the deck is sized.
+const DECK_HEIGHT := 3.0
+const DECK_TILE := "template-floor-layer-raised"
+const RAMP_WIDTH := 3.6
+const RAMP_THICKNESS := 0.5
+const RAMP_COLOUR := Color(0.36, 0.25, 0.17)
+## How far the ramp's navmesh strip runs past the slab at each end.
+const RAMP_NAV_OVERLAP := 0.9
+## How far the flat landing reaches onto the deck, and out over the ramp.
+const LANDING_INNER := 2.2
+const LANDING_OUTER := 0.9
+## How far each end of a ramp link sits back from the join, onto ground the
+## baker definitely kept.
+const LINK_SETBACK := 1.8
+
+const PLATFORMS := [
+	{
+		"centre": Vector2(-4.5, 5.0),
+		"tiles": Vector2i(2, 1),
+		"ramp_from": Vector2(5.5, 5.0),
+	},
+	{
+		"centre": Vector2(4.5, -5.0),
+		"tiles": Vector2i(2, 1),
+		"ramp_from": Vector2(-5.5, -5.0),
+	},
+	# In the long east hall, so the hall is not simply a corridor with a wide
+	# middle.
+	{
+		"centre": Vector2(28.0, 0.0),
+		"tiles": Vector2i(1, 2),
+		"ramp_from": Vector2(19.0, 0.0),
+	},
 ]
 
 ## Flat weapon cases from the Kenney Blaster Kit (CC0), as floor dressing.
@@ -178,6 +225,7 @@ func _ready() -> void:
 
 	_build_layout()
 	_build_collision_shell()
+	_build_platforms()
 	_build_cover()
 	_build_props()
 	_build_spawn_points()
@@ -418,6 +466,260 @@ func _build_props() -> void:
 		instance.position = entry.position
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		_geometry_root.add_child(instance)
+
+
+## Build every raised deck and its ramp.
+##
+## Runs before the navmesh bake, because the deck and ramp contribute walkable
+## surfaces the bake has to see. A deck added afterwards is scenery the zombies
+## cannot follow you onto, which would make climbing it a free win.
+func _build_platforms() -> void:
+	for entry in PLATFORMS:
+		_build_platform(entry)
+
+
+func _build_platform(entry: Dictionary) -> void:
+	var centre: Vector2 = entry.centre
+	var tiles: Vector2i = entry.tiles
+	var deck_size := Vector2(float(tiles.x) * CELL, float(tiles.y) * CELL)
+
+	_build_deck_blocks(centre, tiles)
+	_add_deck_collision(centre, deck_size)
+	_add_nav_quad(
+		Vector3(centre.x, DECK_HEIGHT + NAV_HEIGHT, centre.y),
+		deck_size,
+		0.0,
+		"NavDeck_%d_%d" % [int(centre.x), int(centre.y)]
+	)
+
+	_build_ramp(centre, deck_size, entry.ramp_from)
+
+
+## The deck itself, tiled from the kit's raised floor block. The block is 4m
+## square and exactly 3m tall, so its top face is the walking surface and no
+## scaling is involved.
+func _build_deck_blocks(centre: Vector2, tiles: Vector2i) -> void:
+	for x in tiles.x:
+		for z in tiles.y:
+			var offset := Vector2(
+				(float(x) - float(tiles.x - 1) * 0.5) * CELL,
+				(float(z) - float(tiles.y - 1) * 0.5) * CELL
+			)
+			var block := _instantiate(CAVE_PATH % DECK_TILE)
+			if block == null:
+				return
+			block.position = Vector3(centre.x + offset.x, 0.0, centre.y + offset.y)
+			_geometry_root.add_child(block)
+
+
+## One box for the whole deck rather than one per block. The blocks are only
+## scenery — a stack of separate colliders meeting edge to edge gives a
+## character something to catch on as it walks across the seams.
+func _add_deck_collision(centre: Vector2, deck_size: Vector2) -> void:
+	var body := StaticBody3D.new()
+	body.name = "DeckBody_%d_%d" % [int(centre.x), int(centre.y)]
+	_geometry_root.add_child(body)
+
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(deck_size.x, DECK_HEIGHT, deck_size.y)
+	shape.shape = box
+	shape.position = Vector3(centre.x, DECK_HEIGHT * 0.5, centre.y)
+	body.add_child(shape)
+
+
+## A ramp from the floor up to the nearest edge of the deck.
+##
+## Its slope is whatever the run works out to, which is around 25 degrees for
+## the distances used here — well inside the navmesh baker's 45 degree limit,
+## so zombies path up it exactly like any other floor. That matters more than
+## it sounds: a deck they cannot reach is not a tactical position, it is a
+## place to stand and win.
+func _build_ramp(centre: Vector2, deck_size: Vector2, ramp_from: Vector2) -> void:
+	var to_floor := ramp_from - centre
+	var along_x: bool = absf(to_floor.x) > absf(to_floor.y)
+	var direction: float = signf(to_floor.x if along_x else to_floor.y)
+
+	# Start at the deck edge facing the floor end, not at the deck centre.
+	var half_depth: float = (deck_size.x if along_x else deck_size.y) * 0.5
+	var edge := centre
+	if along_x:
+		edge.x += half_depth * direction
+	else:
+		edge.y += half_depth * direction
+
+	var run: float = (
+		absf(ramp_from.x - edge.x) if along_x else absf(ramp_from.y - edge.y)
+	)
+	if run < 0.5:
+		return
+
+	var slope := atan2(DECK_HEIGHT, run)
+	var length := sqrt(run * run + DECK_HEIGHT * DECK_HEIGHT)
+	var midpoint := (edge + ramp_from) * 0.5
+	var origin := Vector3(midpoint.x, DECK_HEIGHT * 0.5, midpoint.y)
+
+	# Tilt about the axis across the ramp so it falls away from the deck.
+	#
+	# The sign matters and is easy to get backwards: with the wrong one the
+	# ramp still looks like a ramp, but its high end is out on the floor and it
+	# meets the deck at ground level. The deck then bakes as an island and
+	# nothing can walk up. Rotating by `slope * direction` puts the low end on
+	# whichever side the floor is.
+	var basis := (
+		Basis(Vector3.FORWARD, slope * direction) if along_x
+		else Basis(Vector3.RIGHT, slope * direction)
+	)
+
+	var size := (
+		Vector3(length, RAMP_THICKNESS, RAMP_WIDTH) if along_x
+		else Vector3(RAMP_WIDTH, RAMP_THICKNESS, length)
+	)
+
+	var transform := Transform3D(basis, origin)
+	_add_ramp_visual(transform, size, centre)
+	_add_ramp_collision(transform, size, centre)
+
+	# The walkable surface sits on top of the slab, not through its middle.
+	var surface := transform
+	surface.origin += transform.basis.y * (RAMP_THICKNESS * 0.5 + NAV_HEIGHT)
+
+	# The navmesh strip runs past both ends of the slab it sits on.
+	#
+	# The baker erodes every walkable surface inward by the agent radius, so a
+	# ramp that merely *touches* the deck at one end and the floor at the other
+	# loses half a metre off each after erosion and bakes as an island. It
+	# looks perfectly correct from above, and the deck becomes somewhere the
+	# player can stand and never be followed. Overlapping the ends means the
+	# surfaces are one region before erosion ever happens.
+	var overlap := Vector2(
+		size.x + RAMP_NAV_OVERLAP * 2.0, size.z
+	) if along_x else Vector2(size.x, size.z + RAMP_NAV_OVERLAP * 2.0)
+
+	_add_nav_surface_transformed(
+		surface, overlap, "NavRamp_%d_%d" % [int(centre.x), int(centre.y)]
+	)
+
+	_add_landing(edge, along_x, direction, centre)
+	_add_ramp_link(edge, ramp_from, along_x, direction, centre)
+
+
+## Join the floor to the deck with an explicit navigation link.
+##
+## The ramp is solid geometry the player walks up, but the *baked* surfaces at
+## its two ends refuse to merge into one region. The baker erodes every
+## walkable area inward by the agent radius, and it also discards floor beneath
+## anything with less than standing headroom above it — so the ramp carves a
+## strip of unwalkable floor out from under itself and then fails to reach
+## across it. Widening, lengthening and overlapping the strip all move the gap
+## around without closing it.
+##
+## A link states the connection outright instead of hoping the geometry
+## implies it, which is what links are for. Agents cross it in a straight line
+## and the ramp is directly underneath, so they are visibly walking up it.
+## Both ends are set back from the join onto ground that is definitely
+## walkable, clear of the strip the baker discarded.
+func _add_ramp_link(edge: Vector2, ramp_from: Vector2, along_x: bool,
+		direction: float, centre: Vector2) -> void:
+	var foot := ramp_from
+	var head := edge
+
+	if along_x:
+		foot.x += LINK_SETBACK * direction
+		head.x -= LINK_SETBACK * direction
+	else:
+		foot.y += LINK_SETBACK * direction
+		head.y -= LINK_SETBACK * direction
+
+	var link := NavigationLink3D.new()
+	link.name = "RampLink_%d_%d" % [int(centre.x), int(centre.y)]
+	link.start_position = Vector3(foot.x, NAV_HEIGHT, foot.y)
+	link.end_position = Vector3(head.x, DECK_HEIGHT + NAV_HEIGHT, head.y)
+	# Zombies have to be able to come back down as readily as they went up.
+	link.bidirectional = true
+
+	_geometry_root.add_child(link)
+
+
+## A flat strip at deck height spanning the join between deck and ramp.
+##
+## Overlapping the ends of the sloped strip was not enough on its own: the
+## slope and the deck are eroded inward by the agent radius from opposite
+## sides and still ended up a fraction of a metre apart, which is all it takes
+## to bake as two regions. This strip is exactly level with the deck, so the
+## two merge into a single surface before erosion is applied, and it reaches
+## far enough out over the top of the ramp to catch it as well.
+func _add_landing(edge: Vector2, along_x: bool, direction: float,
+		centre: Vector2) -> void:
+	var position := edge
+	var offset: float = (LANDING_OUTER - LANDING_INNER) * 0.5 * direction
+	var depth := LANDING_INNER + LANDING_OUTER
+
+	if along_x:
+		position.x += offset
+	else:
+		position.y += offset
+
+	var size := (
+		Vector2(depth, RAMP_WIDTH) if along_x else Vector2(RAMP_WIDTH, depth)
+	)
+
+	_add_nav_quad(
+		Vector3(position.x, DECK_HEIGHT + NAV_HEIGHT, position.y),
+		size,
+		0.0,
+		"NavLanding_%d_%d" % [int(centre.x), int(centre.y)]
+	)
+
+
+func _add_ramp_visual(transform: Transform3D, size: Vector3, centre: Vector2) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh_instance.mesh = box
+	mesh_instance.transform = transform
+	mesh_instance.name = "Ramp_%d_%d" % [int(centre.x), int(centre.y)]
+
+	var material := StandardMaterial3D.new()
+	material.albedo_color = RAMP_COLOUR
+	material.roughness = 0.9
+	mesh_instance.material_override = material
+
+	_geometry_root.add_child(mesh_instance)
+
+
+func _add_ramp_collision(transform: Transform3D, size: Vector3, centre: Vector2) -> void:
+	var body := StaticBody3D.new()
+	body.name = "RampBody_%d_%d" % [int(centre.x), int(centre.y)]
+	_geometry_root.add_child(body)
+
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	shape.transform = transform
+	body.add_child(shape)
+
+
+## A flat navmesh source at an arbitrary height and rotation.
+func _add_nav_quad(position: Vector3, size: Vector2, rotation: float,
+		node_name: String) -> void:
+	var transform := Transform3D(Basis(Vector3.UP, rotation), position)
+	_add_nav_surface_transformed(transform, size, node_name)
+
+
+func _add_nav_surface_transformed(transform: Transform3D, size: Vector2,
+		node_name: String) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = size
+	mesh_instance.mesh = plane
+	mesh_instance.transform = transform
+	mesh_instance.visible = false
+	mesh_instance.name = node_name
+
+	_geometry_root.add_child(mesh_instance)
+	mesh_instance.add_to_group(NAV_SOURCE_GROUP)
 
 
 func _build_ceiling() -> void:
