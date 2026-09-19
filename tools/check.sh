@@ -75,6 +75,7 @@ run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
 run_step "pause" "$GODOT" --headless --script tests/manual/verify_pause.gd
 run_step "look" "$GODOT" --headless --script tests/manual/verify_look.gd
+run_step "accessibility" "$GODOT" --headless --script tests/manual/verify_accessibility.gd
 run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
 run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
 run_step "no-phantom-fire" "$GODOT" --headless --script tests/manual/verify_no_phantom_fire.gd

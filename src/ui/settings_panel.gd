@@ -28,6 +28,12 @@ const PAD_SENSITIVITY_MAX := 4.6
 @onready var _difficulty_options: OptionButton = %DifficultyOptions
 @onready var _quality_options: OptionButton = %QualityOptions
 @onready var _difficulty_detail: Label = %DifficultyDetail
+@onready var _colour_mode_options: OptionButton = %ColourModeOptions
+@onready var _interface_scale_slider: HSlider = %InterfaceScaleSlider
+@onready var _interface_scale_value: Label = %InterfaceScaleValue
+@onready var _shake_slider: HSlider = %ShakeSlider
+@onready var _shake_value: Label = %ShakeValue
+@onready var _flash_check: Button = %FlashCheck
 @onready var _back_button: Button = %BackButton
 
 var _settings: GameSettings
@@ -37,6 +43,7 @@ func _ready() -> void:
 	_settings = GameSettings.instance(self)
 	_populate_difficulties()
 	_populate_qualities()
+	_populate_colour_modes()
 	_back_button.pressed.connect(func() -> void: closed.emit())
 
 	# No autoload means this scene was loaded by a headless check rather than
@@ -53,6 +60,10 @@ func _ready() -> void:
 	_fullscreen_check.toggled.connect(_on_fullscreen_toggled)
 	_difficulty_options.item_selected.connect(_on_difficulty_selected)
 	_quality_options.item_selected.connect(_on_quality_selected)
+	_colour_mode_options.item_selected.connect(_on_colour_mode_selected)
+	_interface_scale_slider.value_changed.connect(_on_interface_scale_changed)
+	_shake_slider.value_changed.connect(_on_shake_changed)
+	_flash_check.toggled.connect(_on_flash_toggled)
 
 
 func focus_first_control() -> void:
@@ -67,6 +78,41 @@ func _populate_qualities() -> void:
 
 func _on_quality_selected(index: int) -> void:
 	_settings.quality = _quality_options.get_item_id(index) as GameSettings.Quality
+	_settings.save_settings()
+
+
+func _populate_colour_modes() -> void:
+	_colour_mode_options.clear()
+	for value in GameSettings.COLOUR_MODE_NAMES:
+		_colour_mode_options.add_item(GameSettings.COLOUR_MODE_NAMES[value], value)
+
+
+## Colour choices apply immediately. A player picking a colour mode is trying
+## to find out whether they can read the HUD, and that question is unanswerable
+## if the change only takes effect on the next round.
+func _on_colour_mode_selected(index: int) -> void:
+	_settings.colour_mode = (
+		_colour_mode_options.get_item_id(index) as GameSettings.ColourMode
+	)
+	_settings.save_settings()
+
+
+func _on_interface_scale_changed(value: float) -> void:
+	_settings.interface_scale = value / 100.0
+	_interface_scale_value.text = "%d%%" % roundi(value)
+	_settings.apply_interface_scale()
+	_settings.save_settings()
+
+
+func _on_shake_changed(value: float) -> void:
+	_settings.shake_scale = value / 100.0
+	_shake_value.text = "%d%%" % roundi(value)
+	_settings.save_settings()
+
+
+func _on_flash_toggled(pressed: bool) -> void:
+	_settings.reduce_flashing = pressed
+	_flash_check.text = "ON" if pressed else "OFF"
 	_settings.save_settings()
 
 
@@ -95,6 +141,16 @@ func _load_from_settings() -> void:
 	_update_volume_label()
 	_fullscreen_check.button_pressed = _settings.fullscreen
 	_fullscreen_check.text = "ON" if _settings.fullscreen else "OFF"
+	_colour_mode_options.select(
+		_colour_mode_options.get_item_index(_settings.colour_mode)
+	)
+	_interface_scale_slider.value = _settings.interface_scale * 100.0
+	_interface_scale_value.text = "%d%%" % roundi(_interface_scale_slider.value)
+	_shake_slider.value = _settings.shake_scale * 100.0
+	_shake_value.text = "%d%%" % roundi(_shake_slider.value)
+	_flash_check.button_pressed = _settings.reduce_flashing
+	_flash_check.text = "ON" if _settings.reduce_flashing else "OFF"
+
 	_difficulty_options.select(_difficulty_options.get_item_index(_settings.difficulty))
 	_quality_options.select(_quality_options.get_item_index(_settings.quality))
 	_update_difficulty_detail()
