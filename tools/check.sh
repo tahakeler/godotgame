@@ -69,6 +69,7 @@ run_step "input-map" "$GODOT" --headless --script tests/manual/verify_input_map.
 run_step "arena" "$GODOT" --headless --script tests/manual/verify_arena.gd
 run_step "navmesh" "$GODOT" --headless --script tests/manual/verify_navmesh.gd
 run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_types.gd
+run_step "zombie-scale" "$GODOT" --headless --script tests/manual/verify_zombie_scale.gd
 run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
 run_step "pause" "$GODOT" --headless --script tests/manual/verify_pause.gd
@@ -76,6 +77,7 @@ run_step "look" "$GODOT" --headless --script tests/manual/verify_look.gd
 run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
 run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
 run_step "no-phantom-fire" "$GODOT" --headless --script tests/manual/verify_no_phantom_fire.gd
+run_step "ammo" "$GODOT" --headless --script tests/manual/verify_ammo.gd
 run_step "feature-tests" "$GODOT" --headless --script tests/feature_tests.gd
 run_step "boot" "$GODOT" --headless --quit-after 120
 

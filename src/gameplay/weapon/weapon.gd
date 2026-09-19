@@ -19,6 +19,8 @@ signal reload_finished()
 signal fired(from: Vector3, to: Vector3)
 signal dry_fired()
 signal target_hit(target: Node, damage_dealt: float)
+## Rounds scraped together after running completely dry.
+signal scrounged(amount: int)
 ## Where a bullet landed, the surface normal, and whether it was a zombie.
 signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 
@@ -34,6 +36,25 @@ signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 
 @export_group("Reload")
 @export var reload_duration := 1.6
+## Reload on its own the moment the magazine runs dry.
+##
+## The manual reload key still exists and is still the right habit — topping up
+## a half-empty magazine between fights is a decision worth making. This only
+## covers the case where there is no decision left to make: an empty magazine
+## with rounds in reserve has exactly one sensible next action, and making the
+## player press a key to confirm it is friction, not tension.
+@export var auto_reload := true
+
+@export_group("Last resort")
+## Seconds between scrounged rounds once the player is completely out.
+##
+## Without this the ammo economy has a dead end: reserve ammo comes from kills,
+## kills need ammo, and a player who spends their last round has no way back
+## into the game and has to watch a round they cannot influence. A slow trickle
+## keeps the scarcity — it is far too slow to fight from — while making sure
+## there is always a way out.
+@export var dry_resupply_interval := 7.0
+@export var dry_resupply_amount := 2
 
 @export_group("Feel")
 @export var recoil_pitch_degrees := 1.4
@@ -64,6 +85,8 @@ var _look_delta := Vector2.ZERO
 var _sway_offset := Vector3.ZERO
 var _bob_time := 0.0
 var _rest_position := Vector3.ZERO
+## Counts down only while the weapon is completely dry.
+var _dry_remaining := 0.0
 
 @onready var _camera: Camera3D = _resolve_camera()
 @onready var _muzzle: Node3D = $Muzzle
@@ -88,6 +111,10 @@ func _process(delta: float) -> void:
 		return
 
 	_tick_focus_lock(delta)
+	_tick_dry_resupply(delta)
+
+	if auto_reload and magazine_ammo <= 0 and not _is_reloading:
+		try_reload()
 
 	# Semi-automatic: one bullet per click. The concept's first pillar is
 	# "every bullet is a decision", which holding to spray would undermine.
@@ -109,6 +136,25 @@ func _tick_focus_lock(delta: float) -> void:
 
 	_was_mouse_captured = captured
 	_focus_lock_remaining = maxf(0.0, _focus_lock_remaining - delta)
+
+
+## Scrape together a couple of rounds when the player has nothing left at all.
+##
+## The timer only runs while completely dry and resets the moment anything is
+## picked up, so it can never top a player up during a fight they are winning.
+func _tick_dry_resupply(delta: float) -> void:
+	if not is_fully_dry():
+		_dry_remaining = dry_resupply_interval
+		return
+
+	_dry_remaining -= delta
+	if _dry_remaining > 0.0:
+		return
+
+	_dry_remaining = dry_resupply_interval
+	var added := add_reserve_ammo(dry_resupply_amount)
+	if added > 0:
+		scrounged.emit(added)
 
 
 ## Fire one round. Returns true only when a bullet actually left the weapon.
@@ -180,6 +226,7 @@ func reset_state() -> void:
 	magazine_ammo = magazine_size
 	reserve_ammo = starting_reserve
 	ammo_changed.emit(magazine_ammo, reserve_ammo)
+	_dry_remaining = dry_resupply_interval
 
 
 func _tick_reload(delta: float) -> void:

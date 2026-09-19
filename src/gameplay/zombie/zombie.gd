@@ -41,9 +41,12 @@ var kind: ZombieTypes.Kind = ZombieTypes.Kind.SHAMBLER
 var experience_value := 1
 var ammo_value := 3
 
-## Capsule dimensions at scale 1, captured before any kind resizes them.
-var base_radius := 0.38
-var base_height := 1.7
+## Capsule radius as a fraction of the body's height. A human figure is roughly
+## four and a half times as tall as it is wide through the shoulders.
+const BODY_RADIUS_RATIO := 0.22
+## Height the exported attack_range below was tuned against.
+const REFERENCE_HEIGHT := 2.0
+
 var base_attack_range := 1.9
 
 @onready var health: Health = $Health
@@ -102,17 +105,22 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	health.max_health = definition.health
 	health.current_health = definition.health
 
-	_visual.apply_kind(definition.scale, definition.tint)
+	var height: float = definition.height
+	_visual.apply_kind(height, definition.tint)
 
-	# A Brute is wider as well as taller, and a capsule that does not match
-	# lets it reach through a wall to hit you.
-	var body_scale: float = definition.scale
+	# The capsule is built from the same height the model was scaled to, so
+	# what you shoot at is what you hit. These used to come from separate
+	# numbers and ended up a factor of two apart: the hitbox sat around the
+	# zombie's legs while the player was aiming at its chest, and most shots
+	# that looked like hits passed straight through.
 	_collider.shape = _collider.shape.duplicate()
-	_collider.shape.radius = base_radius * body_scale
-	_collider.shape.height = base_height * body_scale
-	_collider.position.y = base_height * body_scale * 0.5
+	_collider.shape.height = height
+	_collider.shape.radius = height * BODY_RADIUS_RATIO
+	_collider.position.y = height * 0.5
 
-	attack_range = base_attack_range * body_scale
+	# A Brute is wider as well as taller, and reach has to grow with the body
+	# or it cannot land a blow its arms clearly reach.
+	attack_range = base_attack_range * (height / REFERENCE_HEIGHT)
 
 
 ## Assign the node this zombie hunts. Called by the spawner.
