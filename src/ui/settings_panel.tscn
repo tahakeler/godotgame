@@ -46,37 +46,43 @@ offset_right = 390.0
 offset_bottom = 348.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
-[node name="Layout" type="VBoxContainer" parent="Panel"]
+[node name="Scroll" type="ScrollContainer" parent="Panel"]
+horizontal_scroll_mode = 0
+follow_focus = true
+
+[node name="Layout" type="VBoxContainer" parent="Panel/Scroll"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
 theme_override_constants/separation = 6
 
-[node name="Heading" type="Label" parent="Panel/Layout"]
+[node name="Heading" type="Label" parent="Panel/Scroll/Layout"]
 theme_override_colors/font_color = Color(0.957, 0.949, 0.933, 1)
 theme_override_font_sizes/font_size = 38
 text = "SETTINGS"
 
-[node name="HeadingRule" type="ColorRect" parent="Panel/Layout"]
+[node name="HeadingRule" type="ColorRect" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(120, 2)
 color = Color(0.878, 0.631, 0.235, 0.75)
 
-[node name="GapA" type="Control" parent="Panel/Layout"]
+[node name="GapA" type="Control" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 20)
 
-[node name="ControlsHeader" type="Label" parent="Panel/Layout"]
+[node name="ControlsHeader" type="Label" parent="Panel/Scroll/Layout"]
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
 theme_override_font_sizes/font_size = 14
 text = "C O N T R O L S"
 
-[node name="SensitivityRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="SensitivityRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/SensitivityRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/SensitivityRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Mouse sensitivity"
 vertical_alignment = 1
 
-[node name="SensitivitySlider" type="HSlider" parent="Panel/Layout/SensitivityRow"]
+[node name="SensitivitySlider" type="HSlider" parent="Panel/Scroll/Layout/SensitivityRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 0)
 size_flags_horizontal = 3
@@ -86,7 +92,7 @@ max_value = 10.0
 step = 0.1
 value = 5.0
 
-[node name="SensitivityValue" type="Label" parent="Panel/Layout/SensitivityRow"]
+[node name="SensitivityValue" type="Label" parent="Panel/Scroll/Layout/SensitivityRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(52, 0)
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
@@ -94,17 +100,17 @@ text = "5.0"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="PadSensitivityRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="PadSensitivityRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/PadSensitivityRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/PadSensitivityRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Gamepad sensitivity"
 vertical_alignment = 1
 
-[node name="PadSensitivitySlider" type="HSlider" parent="Panel/Layout/PadSensitivityRow"]
+[node name="PadSensitivitySlider" type="HSlider" parent="Panel/Scroll/Layout/PadSensitivityRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 0)
 size_flags_horizontal = 3
@@ -114,7 +120,7 @@ max_value = 10.0
 step = 0.1
 value = 5.0
 
-[node name="PadSensitivityValue" type="Label" parent="Panel/Layout/PadSensitivityRow"]
+[node name="PadSensitivityValue" type="Label" parent="Panel/Scroll/Layout/PadSensitivityRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(52, 0)
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
@@ -122,42 +128,42 @@ text = "5.0"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="InvertRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="InvertRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/InvertRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/InvertRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Invert vertical look"
 vertical_alignment = 1
 
-[node name="InvertCheck" type="Button" parent="Panel/Layout/InvertRow"]
+[node name="InvertCheck" type="Button" parent="Panel/Scroll/Layout/InvertRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(130, 34)
 size_flags_vertical = 4
 toggle_mode = true
 text = "OFF"
 
-[node name="GapB" type="Control" parent="Panel/Layout"]
+[node name="GapB" type="Control" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 18)
 
-[node name="AudioHeader" type="Label" parent="Panel/Layout"]
+[node name="AudioHeader" type="Label" parent="Panel/Scroll/Layout"]
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
 theme_override_font_sizes/font_size = 14
 text = "A U D I O   &   D I S P L A Y"
 
-[node name="VolumeRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="VolumeRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/VolumeRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/VolumeRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Master volume"
 vertical_alignment = 1
 
-[node name="VolumeSlider" type="HSlider" parent="Panel/Layout/VolumeRow"]
+[node name="VolumeSlider" type="HSlider" parent="Panel/Scroll/Layout/VolumeRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(320, 0)
 size_flags_horizontal = 3
@@ -166,7 +172,7 @@ max_value = 100.0
 step = 1.0
 value = 80.0
 
-[node name="VolumeValue" type="Label" parent="Panel/Layout/VolumeRow"]
+[node name="VolumeValue" type="Label" parent="Panel/Scroll/Layout/VolumeRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(52, 0)
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
@@ -174,72 +180,168 @@ text = "80%"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="FullscreenRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="FullscreenRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/FullscreenRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/FullscreenRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Fullscreen"
 vertical_alignment = 1
 
-[node name="FullscreenCheck" type="Button" parent="Panel/Layout/FullscreenRow"]
+[node name="FullscreenCheck" type="Button" parent="Panel/Scroll/Layout/FullscreenRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(130, 34)
 size_flags_vertical = 4
 toggle_mode = true
 text = "OFF"
 
-[node name="QualityRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="QualityRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/QualityRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/QualityRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Graphics"
 vertical_alignment = 1
 
-[node name="QualityOptions" type="OptionButton" parent="Panel/Layout/QualityRow"]
+[node name="QualityOptions" type="OptionButton" parent="Panel/Scroll/Layout/QualityRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(240, 0)
 size_flags_vertical = 4
 
-[node name="GapC" type="Control" parent="Panel/Layout"]
+[node name="GapC" type="Control" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 18)
 
-[node name="GameplayHeader" type="Label" parent="Panel/Layout"]
+[node name="GameplayHeader" type="Label" parent="Panel/Scroll/Layout"]
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
 theme_override_font_sizes/font_size = 14
 text = "G A M E P L A Y"
 
-[node name="DifficultyRow" type="HBoxContainer" parent="Panel/Layout"]
+[node name="DifficultyRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
 custom_minimum_size = Vector2(0, 42)
 theme_override_constants/separation = 18
 
-[node name="Label" type="Label" parent="Panel/Layout/DifficultyRow"]
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/DifficultyRow"]
 custom_minimum_size = Vector2(230, 0)
 theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
 text = "Difficulty"
 vertical_alignment = 1
 
-[node name="DifficultyOptions" type="OptionButton" parent="Panel/Layout/DifficultyRow"]
+[node name="DifficultyOptions" type="OptionButton" parent="Panel/Scroll/Layout/DifficultyRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(240, 0)
 size_flags_vertical = 4
 
-[node name="DifficultyDetail" type="Label" parent="Panel/Layout"]
+[node name="DifficultyDetail" type="Label" parent="Panel/Scroll/Layout"]
 unique_name_in_owner = true
 theme_override_colors/font_color = Color(0.514, 0.541, 0.588, 1)
 theme_override_font_sizes/font_size = 14
 text = ""
 autowrap_mode = 3
 
-[node name="Spacer" type="Control" parent="Panel/Layout"]
+[node name="GapD" type="Control" parent="Panel/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 14)
+
+[node name="AccessHeader" type="Label" parent="Panel/Scroll/Layout"]
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+theme_override_font_sizes/font_size = 14
+text = "A C C E S S I B I L I T Y"
+
+[node name="ColourModeRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_constants/separation = 18
+
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/ColourModeRow"]
+custom_minimum_size = Vector2(230, 0)
+theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
+text = "Colour vision"
+vertical_alignment = 1
+
+[node name="ColourModeOptions" type="OptionButton" parent="Panel/Scroll/Layout/ColourModeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+size_flags_vertical = 4
+
+[node name="InterfaceScaleRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_constants/separation = 18
+
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/InterfaceScaleRow"]
+custom_minimum_size = Vector2(230, 0)
+theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
+text = "Interface size"
+vertical_alignment = 1
+
+[node name="InterfaceScaleSlider" type="HSlider" parent="Panel/Scroll/Layout/InterfaceScaleRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 80.0
+max_value = 150.0
+step = 5.0
+value = 100.0
+
+[node name="InterfaceScaleValue" type="Label" parent="Panel/Scroll/Layout/InterfaceScaleRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(52, 0)
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+text = "100%"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="ShakeRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_constants/separation = 18
+
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/ShakeRow"]
+custom_minimum_size = Vector2(230, 0)
+theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
+text = "Camera shake"
+vertical_alignment = 1
+
+[node name="ShakeSlider" type="HSlider" parent="Panel/Scroll/Layout/ShakeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 0.0
+max_value = 100.0
+step = 5.0
+value = 100.0
+
+[node name="ShakeValue" type="Label" parent="Panel/Scroll/Layout/ShakeRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(52, 0)
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+text = "100%"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="FlashRow" type="HBoxContainer" parent="Panel/Scroll/Layout"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_constants/separation = 18
+
+[node name="Label" type="Label" parent="Panel/Scroll/Layout/FlashRow"]
+custom_minimum_size = Vector2(230, 0)
+theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
+text = "Reduce flashing"
+vertical_alignment = 1
+
+[node name="FlashCheck" type="Button" parent="Panel/Scroll/Layout/FlashRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
+size_flags_vertical = 4
+toggle_mode = true
+text = "OFF"
+
+[node name="Spacer" type="Control" parent="Panel/Scroll/Layout"]
 size_flags_vertical = 3
 
-[node name="BackButton" type="Button" parent="Panel/Layout"]
+[node name="BackButton" type="Button" parent="Panel/Scroll/Layout"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 50)
 text = "BACK"

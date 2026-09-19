@@ -55,6 +55,9 @@ signal look_moved(relative: Vector2)
 @export var shake_yaw := 0.035
 @export var shake_roll := 0.05
 @export var shake_offset := 0.06
+## Fraction of the authored shake actually applied, from the accessibility
+## settings. Zero disables camera shake completely.
+var shake_scale := 1.0
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
@@ -90,8 +93,17 @@ func take_damage(amount: float, from_position := Vector3.ZERO,
 
 
 ## Add camera shake. 0.2 is a gunshot, 0.6 is being hit.
+##
+## Scaled by the player's accessibility setting at the point of entry rather
+## than inside _tick_shake, so a setting of zero adds nothing at all and the
+## shake system stays entirely idle instead of running against a zero
+## multiplier every frame.
 func add_trauma(amount: float) -> void:
-	_trauma = clampf(_trauma + amount, 0.0, 1.0)
+	var scaled := amount * shake_scale
+	if scaled <= 0.0:
+		return
+
+	_trauma = clampf(_trauma + scaled, 0.0, 1.0)
 
 
 ## Shake is applied to the camera's yaw, roll and position — never its pitch,

@@ -50,6 +50,49 @@ const MODE_BLURBS := {
 ## rather than assuming every machine can pay for them.
 enum Quality { LOW, MEDIUM, HIGH }
 
+## Colour vision modes.
+##
+## The default palette leans on green-for-healthy and red-for-hurt, which is
+## the single most common way a game becomes unreadable: red-green deficiency
+## is the most prevalent form, and those two are exactly the pair it collapses.
+## Each alternative keeps the same brightness ordering and swaps the hues for a
+## pair that stays distinct — plus the HUD never relies on colour alone, since
+## the bar length and the number carry the same information.
+enum ColourMode { STANDARD, DEUTERANOPIA, PROTANOPIA, TRITANOPIA }
+
+const COLOUR_MODE_NAMES := {
+	ColourMode.STANDARD: "Standard",
+	ColourMode.DEUTERANOPIA: "Deuteranopia",
+	ColourMode.PROTANOPIA: "Protanopia",
+	ColourMode.TRITANOPIA: "Tritanopia",
+}
+
+## "safe" is a healthy reading, "danger" is a critical one, "accent" carries
+## progression. Blue/amber survives red-green deficiency; tritanopia loses
+## blue/yellow instead, so it gets magenta and cyan.
+const COLOUR_PALETTES := {
+	ColourMode.STANDARD: {
+		"safe": Color(0.42, 0.72, 0.45),
+		"danger": Color(0.85, 0.24, 0.2),
+		"accent": Color(0.878, 0.631, 0.235),
+	},
+	ColourMode.DEUTERANOPIA: {
+		"safe": Color(0.35, 0.62, 0.92),
+		"danger": Color(0.95, 0.72, 0.15),
+		"accent": Color(0.92, 0.92, 0.95),
+	},
+	ColourMode.PROTANOPIA: {
+		"safe": Color(0.3, 0.68, 0.9),
+		"danger": Color(0.97, 0.78, 0.25),
+		"accent": Color(0.88, 0.88, 0.94),
+	},
+	ColourMode.TRITANOPIA: {
+		"safe": Color(0.25, 0.78, 0.76),
+		"danger": Color(0.9, 0.26, 0.55),
+		"accent": Color(0.95, 0.9, 0.92),
+	},
+}
+
 const QUALITY_NAMES := {
 	Quality.LOW: "Performance",
 	Quality.MEDIUM: "Balanced",
@@ -104,6 +147,45 @@ var difficulty: Difficulty = Difficulty.SOLDIER
 var mode: Mode = Mode.EXTRACTION
 var quality: Quality = Quality.HIGH
 
+var colour_mode: ColourMode = ColourMode.STANDARD
+## Interface scale as a fraction. Drives the window's content scale, so every
+## Control scales together rather than each screen needing its own handling.
+var interface_scale := 1.0
+## Camera shake as a fraction of its authored strength. Zero disables it
+## entirely, which some players need and everyone else can ignore.
+var shake_scale := 1.0
+## Damps full-screen flashes for players who find them uncomfortable, and for
+## anyone who should not be shown rapid flashing at all.
+var reduce_flashing := false
+
+
+## The colour set for the current mode.
+func palette() -> Dictionary:
+	return COLOUR_PALETTES[colour_mode]
+
+
+## Look up one palette colour, with a fallback for callers running without the
+## autoload (headless tests instance scenes directly).
+static func colour(from: Node, key: String, fallback: Color) -> Color:
+	var settings := instance(from)
+	if settings == null:
+		return fallback
+	return settings.palette().get(key, fallback)
+
+
+func get_colour_mode_name() -> String:
+	return COLOUR_MODE_NAMES[colour_mode]
+
+
+## Content scale applies to the whole window, so it has to be set on the window
+## rather than on any one screen.
+func apply_interface_scale() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		return
+
+	tree.root.content_scale_factor = interface_scale
+
 
 ## The live autoload instance, or null when running without autoloads.
 static func instance(from: Node) -> GameSettings:
@@ -114,6 +196,7 @@ func _ready() -> void:
 	load_settings()
 	apply_audio()
 	apply_window()
+	apply_interface_scale()
 
 
 func get_profile() -> Dictionary:
@@ -165,6 +248,7 @@ func apply_window() -> void:
 func apply_to_player(player: Player) -> void:
 	player.mouse_sensitivity = mouse_sensitivity
 	player.gamepad_sensitivity = gamepad_sensitivity
+	player.shake_scale = shake_scale
 	player.invert_look_y = invert_look_y
 
 
@@ -178,6 +262,10 @@ func save_settings() -> void:
 	config.set_value(SECTION, "difficulty", int(difficulty))
 	config.set_value(SECTION, "mode", int(mode))
 	config.set_value(SECTION, "quality", int(quality))
+	config.set_value(SECTION, "colour_mode", int(colour_mode))
+	config.set_value(SECTION, "interface_scale", interface_scale)
+	config.set_value(SECTION, "shake_scale", shake_scale)
+	config.set_value(SECTION, "reduce_flashing", reduce_flashing)
 	config.save(CONFIG_PATH)
 
 	changed.emit()
@@ -197,3 +285,7 @@ func load_settings() -> void:
 	difficulty = config.get_value(SECTION, "difficulty", difficulty) as Difficulty
 	mode = config.get_value(SECTION, "mode", mode) as Mode
 	quality = config.get_value(SECTION, "quality", quality) as Quality
+	colour_mode = config.get_value(SECTION, "colour_mode", colour_mode) as ColourMode
+	interface_scale = config.get_value(SECTION, "interface_scale", interface_scale)
+	shake_scale = config.get_value(SECTION, "shake_scale", shake_scale)
+	reduce_flashing = config.get_value(SECTION, "reduce_flashing", reduce_flashing)

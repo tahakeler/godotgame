@@ -16,6 +16,11 @@ const LOW_AMMO_ROUNDS := 2
 const PIP_LOADED := Color(0.929, 0.933, 0.949, 0.95)
 const PIP_SPENT := Color(0.929, 0.933, 0.949, 0.16)
 
+## Peak opacity of the full-screen damage wash, normally and when the player
+## has asked for reduced flashing.
+const FULL_FLASH_ALPHA := 0.32
+const REDUCED_FLASH_ALPHA := 0.1
+
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
 
@@ -150,12 +155,16 @@ func _on_health_changed(current: float, maximum: float) -> void:
 	_health_bar.value = current
 	_health_label.text = "%d" % roundi(current)
 
+	# Colour comes from the active palette rather than being hard-coded, so the
+	# colour-vision setting reaches the one readout where red-green is the
+	# difference between fine and nearly dead. The bar length and the number say
+	# the same thing, so colour is never carrying it alone.
 	var fraction := current / maxf(maximum, 1.0)
-	var bar_color := (
-		Color(0.85, 0.24, 0.2) if fraction <= LOW_HEALTH_FRACTION
-		else Color(0.42, 0.72, 0.45)
+	_health_bar.modulate = (
+		GameSettings.colour(self, "danger", Color(0.85, 0.24, 0.2))
+		if fraction <= LOW_HEALTH_FRACTION
+		else GameSettings.colour(self, "safe", Color(0.42, 0.72, 0.45))
 	)
-	_health_bar.modulate = bar_color
 
 
 func _on_ammo_changed(magazine: int, reserve: int) -> void:
@@ -321,7 +330,16 @@ func _tick_flash(delta: float) -> void:
 		return
 
 	_flash_remaining = maxf(0.0, _flash_remaining - delta)
-	_damage_flash.color.a = (_flash_remaining / 0.35) * 0.32
+
+	# Damped rather than removed when the player has asked for less flashing.
+	# Taking damage still has to register — the flash is how a hit from behind
+	# is noticed at all — so it becomes a dim wash instead of vanishing.
+	var settings := GameSettings.instance(self)
+	var peak: float = (
+		REDUCED_FLASH_ALPHA if settings != null and settings.reduce_flashing
+		else FULL_FLASH_ALPHA
+	)
+	_damage_flash.color.a = (_flash_remaining / 0.35) * peak
 
 
 ## Arc markers around the crosshair pointing at whatever just hit the player.
