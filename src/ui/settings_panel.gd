@@ -18,6 +18,7 @@ const SENSITIVITY_MAX := 0.0055
 @onready var _volume_value: Label = %VolumeValue
 @onready var _fullscreen_check: Button = %FullscreenCheck
 @onready var _difficulty_options: OptionButton = %DifficultyOptions
+@onready var _quality_options: OptionButton = %QualityOptions
 @onready var _difficulty_detail: Label = %DifficultyDetail
 @onready var _back_button: Button = %BackButton
 
@@ -27,6 +28,7 @@ var _settings: GameSettings
 func _ready() -> void:
 	_settings = GameSettings.instance(self)
 	_populate_difficulties()
+	_populate_qualities()
 	_back_button.pressed.connect(func() -> void: closed.emit())
 
 	# No autoload means this scene was loaded by a headless check rather than
@@ -41,10 +43,22 @@ func _ready() -> void:
 	_volume_slider.value_changed.connect(_on_volume_changed)
 	_fullscreen_check.toggled.connect(_on_fullscreen_toggled)
 	_difficulty_options.item_selected.connect(_on_difficulty_selected)
+	_quality_options.item_selected.connect(_on_quality_selected)
 
 
 func focus_first_control() -> void:
 	_sensitivity_slider.grab_focus()
+
+
+func _populate_qualities() -> void:
+	_quality_options.clear()
+	for value in GameSettings.QUALITY_NAMES:
+		_quality_options.add_item(GameSettings.QUALITY_NAMES[value], value)
+
+
+func _on_quality_selected(index: int) -> void:
+	_settings.quality = _quality_options.get_item_id(index) as GameSettings.Quality
+	_settings.save_settings()
 
 
 func _populate_difficulties() -> void:
@@ -67,6 +81,7 @@ func _load_from_settings() -> void:
 	_fullscreen_check.button_pressed = _settings.fullscreen
 	_fullscreen_check.text = "ON" if _settings.fullscreen else "OFF"
 	_difficulty_options.select(_difficulty_options.get_item_index(_settings.difficulty))
+	_quality_options.select(_quality_options.get_item_index(_settings.quality))
 	_update_difficulty_detail()
 
 

@@ -41,9 +41,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -390.0
-offset_top = -320.0
+offset_top = -348.0
 offset_right = 390.0
-offset_bottom = 320.0
+offset_bottom = 348.0
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="Layout" type="VBoxContainer" parent="Panel"]
@@ -162,6 +162,21 @@ custom_minimum_size = Vector2(130, 34)
 size_flags_vertical = 4
 toggle_mode = true
 text = "OFF"
+
+[node name="QualityRow" type="HBoxContainer" parent="Panel/Layout"]
+custom_minimum_size = Vector2(0, 42)
+theme_override_constants/separation = 18
+
+[node name="Label" type="Label" parent="Panel/Layout/QualityRow"]
+custom_minimum_size = Vector2(230, 0)
+theme_override_colors/font_color = Color(0.792, 0.808, 0.839, 1)
+text = "Graphics"
+vertical_alignment = 1
+
+[node name="QualityOptions" type="OptionButton" parent="Panel/Layout/QualityRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 0)
+size_flags_vertical = 4
 
 [node name="GapC" type="Control" parent="Panel/Layout"]
 custom_minimum_size = Vector2(0, 18)
