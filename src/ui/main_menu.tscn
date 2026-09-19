@@ -11,6 +11,7 @@ script = ExtResource("1_menu")
 
 [node name="Arena" parent="." instance=ExtResource("2_arena")]
 bake_navigation = false
+caches_enabled = false
 ceiling_enabled = false
 
 [node name="MenuCamera" type="Camera3D" parent="."]

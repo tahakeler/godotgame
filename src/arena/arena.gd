@@ -276,6 +276,24 @@ const PLATFORMS := [
 	},
 ]
 
+## Chambers holding a resupply cache, and where in the chamber it sits.
+##
+## Deliberately not in the central arena. Ammunition has to be somewhere the
+## player must travel to, or it is just a slower version of starting with more
+## — the point is that resupplying costs you the ground you were holding.
+##
+## Spread across four bearings so no single loop collects them all, and none of
+## them is in a dead-end alcove: a cache you can only reach down a corridor
+## with one exit is a trap rather than a decision.
+const CACHE_CELLS := [
+	Vector2i(0, 6),
+	Vector2i(12, 0),
+	Vector2i(-6, 0),
+	Vector2i(6, -5),
+	Vector2i(-6, -5),
+	Vector2i(0, -10),
+]
+
 ## Flat weapon cases from the Kenney Blaster Kit (CC0), as floor dressing.
 ## They are 0.23m tall, so they are scenery rather than cover.
 const PROPS := [
@@ -306,9 +324,15 @@ const PROPS := [
 @export var ceiling_colour := Color(0.3, 0.2, 0.19)
 @export var stalactite_count := 90
 
+@export_group("Caches")
+## The menu backdrop has no player to collect anything, so it skips them.
+@export var caches_enabled := true
+
 var spawn_points: Array[Vector3] = []
 ## Chamber index for each entry in spawn_points, parallel array.
 var spawn_chambers: Array[int] = []
+## Resupply points, for Game to connect to.
+var ammo_caches: Array[AmmoCache] = []
 
 var _rng := RandomNumberGenerator.new()
 var _geometry_root: Node3D
@@ -338,6 +362,8 @@ func _ready() -> void:
 	# the navmesh generator would happily carpet the top of it.
 	if ceiling_enabled:
 		_build_ceiling()
+
+	_build_caches()
 
 	if dust_enabled and quality >= GameSettings.Quality.MEDIUM:
 		_build_dust()
@@ -662,6 +688,26 @@ func _build_props() -> void:
 		instance.position = entry.position
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		_geometry_root.add_child(instance)
+
+
+## Place a resupply cache in each of the chambers that has one.
+##
+## Built after the navmesh bake: a cache is a trigger volume and a crate, and
+## neither should contribute walkable surface or be carved out of it.
+func _build_caches() -> void:
+	ammo_caches.clear()
+
+	if not caches_enabled:
+		return
+
+	for cell in CACHE_CELLS:
+		var cache := AmmoCache.new()
+		cache.name = "AmmoCache_%d_%d" % [cell.x, cell.y]
+		# Offset from the chamber centre so the crate is not standing exactly
+		# where zombies arrive.
+		cache.position = _cell_to_world(cell) + Vector3(2.2, 0.0, -2.2)
+		add_child(cache)
+		ammo_caches.append(cache)
 
 
 ## Build every raised deck and its ramp.
