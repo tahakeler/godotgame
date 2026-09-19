@@ -26,6 +26,11 @@ signal population_changed(alive: int)
 ## Zombies never spawn closer to the player than this.
 @export var minimum_spawn_distance := 14.0
 
+## Difficulty multipliers, applied by Game from the player's chosen difficulty.
+## Below 1.0 on the interval means zombies arrive faster.
+var interval_scale := 1.0
+var damage_scale := 1.0
+
 var _arena: Arena
 var _target: Node3D
 var _alive: Array[Zombie] = []
@@ -93,7 +98,7 @@ func _current_interval() -> float:
 	var ramp_progress := clampf(
 		(_elapsed - grace_period) / maxf(ramp_duration, 0.001), 0.0, 1.0
 	)
-	return lerpf(initial_interval, minimum_interval, ramp_progress)
+	return lerpf(initial_interval, minimum_interval, ramp_progress) * interval_scale
 
 
 func _spawn_one() -> void:
@@ -107,6 +112,7 @@ func _spawn_one() -> void:
 	var zombie: Zombie = zombie_scene.instantiate()
 	add_child(zombie)
 	zombie.global_position = spawn_position + Vector3.UP * 0.1
+	zombie.contact_damage *= damage_scale
 	zombie.set_target(_target)
 
 	zombie.died.connect(_on_zombie_died)

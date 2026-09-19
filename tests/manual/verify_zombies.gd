@@ -11,12 +11,14 @@ const GAME_SCENE := "res://src/core/game.tscn"
 const SPAWN_WAIT := 1.2
 const MOVE_WAIT := 2.4
 const MOVEMENT_THRESHOLD := 1.0
+const WATCHDOG_TIMEOUT := 25.0
 
 var _game: Game
 var _elapsed := 0.0
 var _spawn_positions: Dictionary = {}
 var _failures: Array[String] = []
 var _phase := 0
+var _watchdog := 0.0
 
 
 func _initialize() -> void:
@@ -26,10 +28,18 @@ func _initialize() -> void:
 
 
 func _process(delta: float) -> bool:
+	# Hard ceiling. Without it, a game scene that fails to initialise leaves
+	# this loop spinning forever and the run has to be killed by hand.
+	_watchdog += delta
+	if _watchdog > WATCHDOG_TIMEOUT:
+		printerr("FAIL: timed out after %.0fs — game scene never initialised" % WATCHDOG_TIMEOUT)
+		quit(1)
+		return true
+
 	# Pacing is compressed here rather than in _initialize(): @onready vars are
 	# still null until _ready() runs at the start of the first frame, so
 	# _game.spawner would not exist yet. Timing only — no behaviour changes.
-	if _phase == -1 or _game.spawner == null:
+	if _game == null or _game.spawner == null:
 		return false
 
 	if _elapsed == 0.0:

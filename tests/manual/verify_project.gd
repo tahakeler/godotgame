@@ -13,10 +13,13 @@ const REQUIRED_ACTIONS := [
 	"reload",
 	"restart",
 	"jump",
+	"pause",
 ]
 
 const REQUIRED_SCENES := [
 	"res://src/core/game.tscn",
+	"res://src/ui/main_menu.tscn",
+	"res://src/ui/pause_menu.tscn",
 ]
 
 func _initialize() -> void:
