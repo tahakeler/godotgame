@@ -17,6 +17,8 @@ const GAME_SCENE := "res://src/core/game.tscn"
 @onready var _camera: Camera3D = $MenuCamera
 @onready var _main_panel: Control = %MainPanel
 @onready var _settings_panel: SettingsPanel = %SettingsPanel
+@onready var _credits_panel: CreditsPanel = %CreditsPanel
+@onready var _credits_button: Button = %CreditsButton
 @onready var _play_button: Button = %PlayButton
 @onready var _settings_button: Button = %SettingsButton
 @onready var _quit_button: Button = %QuitButton
@@ -39,9 +41,12 @@ func _ready() -> void:
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_settings_panel.closed.connect(_on_settings_closed)
+	_credits_button.pressed.connect(_on_credits_pressed)
+	_credits_panel.closed.connect(_on_credits_closed)
 	_mode_button.pressed.connect(_on_mode_pressed)
 
 	_settings_panel.visible = false
+	_credits_panel.visible = false
 	_play_button.grab_focus()
 	_refresh_difficulty_hint()
 	_refresh_mode()
@@ -71,6 +76,21 @@ func _on_play_pressed() -> void:
 	tween.tween_callback(func() -> void:
 		get_tree().change_scene_to_file(GAME_SCENE)
 	)
+
+
+## Credits are reachable from the front screen rather than buried, because a
+## game that ships other people's work should say so where a player can find
+## it without going looking.
+func _on_credits_pressed() -> void:
+	_main_panel.visible = false
+	_credits_panel.visible = true
+	_credits_panel.focus_first_control()
+
+
+func _on_credits_closed() -> void:
+	_credits_panel.visible = false
+	_main_panel.visible = true
+	_credits_button.grab_focus()
 
 
 func _on_settings_pressed() -> void:

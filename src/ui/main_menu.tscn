@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/ui/main_menu.gd" id="1_menu"]
 [ext_resource type="PackedScene" path="res://src/arena/arena.tscn" id="2_arena"]
 [ext_resource type="PackedScene" path="res://src/ui/settings_panel.tscn" id="3_settings"]
+[ext_resource type="PackedScene" path="res://src/ui/credits_panel.tscn" id="5_credits"]
 [ext_resource type="Theme" path="res://src/ui/theme/game_theme.tres" id="4_theme"]
 
 [node name="MainMenu" type="Node3D"]
@@ -124,11 +125,19 @@ custom_minimum_size = Vector2(0, 50)
 text = "SETTINGS"
 alignment = 0
 
-[node name="QuitButton" type="Button" parent="UI/MainPanel/Buttons"]
-unique_name_in_owner = true
+[node name="BottomRow" type="HBoxContainer" parent="UI/MainPanel/Buttons"]
 custom_minimum_size = Vector2(0, 50)
+theme_override_constants/separation = 10
+
+[node name="CreditsButton" type="Button" parent="UI/MainPanel/Buttons/BottomRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
+text = "CREDITS"
+
+[node name="QuitButton" type="Button" parent="UI/MainPanel/Buttons/BottomRow"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
 text = "QUIT"
-alignment = 0
 
 [node name="ModeBlurb" type="Label" parent="UI/MainPanel"]
 unique_name_in_owner = true
@@ -207,6 +216,10 @@ text = "BUILD 1.0  ·  GODOT 4.7"
 horizontal_alignment = 2
 
 [node name="SettingsPanel" parent="UI" instance=ExtResource("3_settings")]
+unique_name_in_owner = true
+visible = false
+
+[node name="CreditsPanel" parent="UI" instance=ExtResource("5_credits")]
 unique_name_in_owner = true
 visible = false
 
