@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/core/game.gd" id="1_game"]
 [ext_resource type="PackedScene" path="res://src/arena/arena.tscn" id="2_arena"]
 [ext_resource type="PackedScene" path="res://src/gameplay/player/player.tscn" id="3_player"]
+[ext_resource type="Script" path="res://src/gameplay/zombie/zombie_spawner.gd" id="4_spawner"]
+[ext_resource type="PackedScene" path="res://src/gameplay/zombie/zombie.tscn" id="5_zombie"]
 
 [node name="Game" type="Node3D"]
 script = ExtResource("1_game")
@@ -11,3 +13,7 @@ script = ExtResource("1_game")
 
 [node name="Player" parent="." instance=ExtResource("3_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="ZombieSpawner" type="Node3D" parent="."]
+script = ExtResource("4_spawner")
+zombie_scene = ExtResource("5_zombie")

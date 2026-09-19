@@ -190,11 +190,15 @@ func _add_box(node_name: String, position: Vector3, size: Vector3, material: Mat
 
 func _bake() -> void:
 	var nav_mesh := NavigationMesh.new()
-	nav_mesh.agent_radius = 0.6
-	nav_mesh.agent_height = 1.9
-	nav_mesh.agent_max_climb = 0.4
-	nav_mesh.cell_size = 0.2
-	nav_mesh.cell_height = 0.2
+	# Agent dimensions are exact multiples of cell_size, otherwise the baker
+	# rounds them to voxel units and the mesh no longer matches these values.
+	nav_mesh.agent_radius = 0.5
+	nav_mesh.agent_height = 2.0
+	nav_mesh.agent_max_climb = 0.5
+	# Must match the navigation map cell size (project default 0.25), otherwise
+	# the mesh rasterises against a different grid than the one agents query.
+	nav_mesh.cell_size = 0.25
+	nav_mesh.cell_height = 0.25
 	nav_mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
 	nav_mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_ROOT_NODE_CHILDREN
 	navigation_mesh = nav_mesh

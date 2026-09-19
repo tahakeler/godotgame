@@ -144,3 +144,8 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 *.lnk
+
+# Duplicate files produced by file-sync conflicts ("weapon 2.gd"). A duplicate
+# .gd carrying the same class_name breaks the whole project at parse time.
+* 2.*
+* [0-9].gd
