@@ -23,6 +23,9 @@ const REDUCED_FLASH_ALPHA := 0.1
 
 const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
 
+## How long the noise ring stays on screen as it expands and fades.
+const NOISE_RING_DURATION := 0.55
+
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
 
@@ -57,11 +60,16 @@ var _weapon: Weapon
 @onready var _objective_block: Control = $ObjectiveBlock
 @onready var _vitals_block: Control = $VitalsBlock
 @onready var _ammo_block: Control = $AmmoBlock
+@onready var _noise_ring: Control = %NoiseRing
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
 var _hitmarker_remaining := 0.0
 var _hurt_pulse := 0.0
+## The last sound the player made: how loud, and how many heard it.
+var _noise_remaining := 0.0
+var _noise_loudness := 0.0
+var _noise_heard := 0
 
 
 func _ready() -> void:
@@ -70,6 +78,7 @@ func _ready() -> void:
 	_hitmarker.modulate.a = 0.0
 	_damage_flash.color.a = 0.0
 	_damage_indicator.draw.connect(_draw_damage_markers)
+	_noise_ring.draw.connect(_draw_noise_ring)
 
 	# The results buttons must keep working after the round ends. Nothing pauses
 	# the tree here, but the HUD outliving a round is the point of them.
@@ -82,6 +91,7 @@ func _process(delta: float) -> void:
 	_tick_flash(delta)
 	_tick_hitmarker(delta)
 	_tick_hurt_vignette(delta)
+	_tick_noise_ring(delta)
 
 
 ## Connect to a round. Called by Game once every system exists.
@@ -412,6 +422,49 @@ func _tick_hurt_vignette(delta: float) -> void:
 	_hurt_pulse += delta * lerpf(6.5, 2.6, fraction / LOW_HEALTH_FRACTION)
 	var severity := 1.0 - fraction / LOW_HEALTH_FRACTION
 	_hurt_vignette.modulate.a = (0.45 + sin(_hurt_pulse) * 0.25) * severity
+
+
+## Show the player what a sound just cost them.
+##
+## Without this the awareness system is invisible and therefore arbitrary: a
+## crowd arrives and the player has no way to connect it to the shot they fired
+## ten seconds ago, so it reads as the game cheating rather than as a rule they
+## can work with. A ring sized to the loudness, turning amber when something
+## actually heard it, teaches the whole system in about three shots.
+func report_noise(loudness: float, heard_by: int) -> void:
+	_noise_remaining = NOISE_RING_DURATION
+	_noise_loudness = loudness
+	_noise_heard = heard_by
+	_noise_ring.queue_redraw()
+
+
+func _tick_noise_ring(delta: float) -> void:
+	if _noise_remaining <= 0.0:
+		return
+
+	_noise_remaining = maxf(0.0, _noise_remaining - delta)
+	_noise_ring.queue_redraw()
+
+
+func _draw_noise_ring() -> void:
+	if _noise_remaining <= 0.0:
+		return
+
+	# Expands and fades over its life, so the eye reads it as a sound going out
+	# rather than as a static indicator switching on.
+	var progress := 1.0 - (_noise_remaining / NOISE_RING_DURATION)
+	var radius: float = lerpf(10.0, 26.0 + 46.0 * _noise_loudness, progress)
+
+	var colour: Color = (
+		GameSettings.colour(self, "danger", Color(0.95, 0.72, 0.25))
+		if _noise_heard > 0
+		else Color(0.886, 0.914, 0.965)
+	)
+	colour.a = (1.0 - progress) * (0.25 + 0.45 * _noise_loudness)
+
+	_noise_ring.draw_arc(
+		_noise_ring.size * 0.5, radius, 0.0, TAU, 48, colour, 1.5, true
+	)
 
 
 func _tick_flash(delta: float) -> void:

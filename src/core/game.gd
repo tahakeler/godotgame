@@ -18,6 +18,12 @@ enum RoundState { PLAYING, WON, LOST }
 
 const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
 
+## How far each action carries, as a fraction of a gunshot. Footsteps are
+## quiet but constant, which is what makes moving fast a real tell.
+const RELOAD_LOUDNESS := 0.3
+const FOOTSTEP_LOUDNESS := 0.22
+const CACHE_LOUDNESS := 0.45
+
 @export_group("Extraction")
 ## Baseline round length before any kills are counted.
 @export var extraction_duration := 120.0
@@ -135,6 +141,9 @@ func _wire_caches() -> void:
 			var added := weapon.add_reserve_ammo(rounds)
 			if added > 0:
 				sounds.play("ammo_gained")
+				# Rummaging through a crate is not silent, and a cache is
+				# exactly the place you least want a crowd arriving at.
+				_make_noise(cache.global_position, CACHE_LOUDNESS)
 		)
 
 
@@ -148,8 +157,28 @@ func _wire_caches() -> void:
 ## shot fired from cover gives away the cover, which is the intended lesson.
 func _wire_noise() -> void:
 	weapon.fired.connect(func(from: Vector3, _to: Vector3) -> void:
-		spawner.broadcast_noise(from, weapon.noise_loudness)
+		_make_noise(from, weapon.noise_loudness)
 	)
+
+	# A vocabulary rather than one event. Once quiet actions exist, how you
+	# move becomes a choice: crossing a chamber at a walk and emptying a
+	# magazine in it are different amounts of information given away, and the
+	# player can spend that deliberately.
+	weapon.reload_started.connect(func(_duration: float) -> void:
+		_make_noise(player.global_position, RELOAD_LOUDNESS)
+	)
+	player.footstep_taken.connect(func() -> void:
+		_make_noise(player.global_position, FOOTSTEP_LOUDNESS)
+	)
+
+
+## Emit a sound into the world and tell the HUD what it cost.
+func _make_noise(at: Vector3, loudness: float) -> void:
+	if loudness <= 0.0:
+		return
+
+	var heard := spawner.broadcast_noise(at, loudness)
+	hud.report_noise(loudness, heard)
 
 
 ## Count what the results screen reports.
