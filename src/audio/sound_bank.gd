@@ -17,6 +17,7 @@ const GENERATED := "res://assets/audio/generated/%s.wav"
 const GENERATED_EVENTS := {
 	"fire": ["gunshot"],
 	"brute_growl": ["brute_growl"],
+	"decoy_land": ["decoy_land"],
 }
 
 ## event name -> clip names. Multiple entries are chosen at random so repeated
@@ -40,6 +41,7 @@ const EVENTS := {
 const MIX := {
 	"fire": {"volume": -5.0, "pitch": Vector2(0.94, 1.06)},
 	"brute_growl": {"volume": -4.0, "pitch": Vector2(0.9, 1.05)},
+	"decoy_land": {"volume": -7.0, "pitch": Vector2(0.92, 1.12)},
 	"dry_fire": {"volume": -6.0, "pitch": Vector2(1.0, 1.08)},
 	"reload_start": {"volume": -8.0, "pitch": Vector2(0.9, 1.0)},
 	"reload_end": {"volume": -7.0, "pitch": Vector2(0.95, 1.05)},

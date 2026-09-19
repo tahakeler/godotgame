@@ -36,6 +36,7 @@ const AXIS_BINDINGS := {
 const BUTTON_BINDINGS := {
 	"jump": JOY_BUTTON_A,
 	"reload": JOY_BUTTON_X,
+	"throw_decoy": JOY_BUTTON_RIGHT_SHOULDER,
 	"restart": JOY_BUTTON_Y,
 	"pause": JOY_BUTTON_START,
 }
@@ -47,6 +48,7 @@ const NEW_ACTIONS := {
 	"look_right": KEY_RIGHT,
 	"look_up": KEY_UP,
 	"look_down": KEY_DOWN,
+	"throw_decoy": KEY_G,
 }
 
 const DEADZONE := 0.2

@@ -25,6 +25,7 @@ enum Upgrade {
 	SCAVENGER,
 	BANDOLIER,
 	SUBSONIC,
+	BAIT,
 }
 
 const UPGRADES := {
@@ -59,6 +60,10 @@ const UPGRADES := {
 	Upgrade.SUBSONIC: {
 		"name": "Subsonic Rounds",
 		"detail": "Gunfire carries 35% less far",
+	},
+	Upgrade.BAIT: {
+		"name": "Heavy Bait",
+		"detail": "Thrown rounds carry 40% further",
 	},
 }
 

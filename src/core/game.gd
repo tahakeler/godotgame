@@ -171,6 +171,16 @@ func _wire_noise() -> void:
 		_make_noise(player.global_position, FOOTSTEP_LOUDNESS)
 	)
 
+	# The throw is silent; only the landing speaks. That is the whole reason a
+	# decoy is worth a round — it moves the horde without moving you, and
+	# without telling them where you threw it from.
+	weapon.decoy_thrown.connect(func(decoy: Decoy) -> void:
+		decoy.landed.connect(func(at: Vector3, loudness: float) -> void:
+			sounds.play_at("decoy_land", at)
+			_make_noise(at, loudness)
+		)
+	)
+
 
 ## Emit a sound into the world and tell the HUD what it cost.
 func _make_noise(at: Vector3, loudness: float) -> void:
@@ -178,7 +188,7 @@ func _make_noise(at: Vector3, loudness: float) -> void:
 		return
 
 	var heard := spawner.broadcast_noise(at, loudness)
-	hud.report_noise(loudness, heard)
+	hud.report_noise(loudness, heard, at)
 
 
 ## Count what the results screen reports.
@@ -337,6 +347,7 @@ func _capture_baselines() -> void:
 		"max_health": player.health.max_health,
 		"ammo_bonus_per_kill": ammo_bonus_per_kill,
 		"noise_loudness": weapon.noise_loudness,
+		"decoy_loudness": weapon.decoy_loudness,
 	}
 
 
@@ -352,6 +363,7 @@ func _restore_baselines() -> void:
 	player.health.max_health = _baselines.max_health
 	ammo_bonus_per_kill = _baselines.ammo_bonus_per_kill
 	weapon.noise_loudness = _baselines.noise_loudness
+	weapon.decoy_loudness = _baselines.decoy_loudness
 
 
 ## Apply a chosen upgrade. Progression decides what was offered and picked;
@@ -381,6 +393,10 @@ func _apply_upgrade(upgrade_id: int) -> void:
 			# the only upgrade here that trades against the noise system
 			# rather than against a number on the weapon.
 			weapon.noise_loudness = maxf(0.25, weapon.noise_loudness - 0.35)
+		Progression.Upgrade.BAIT:
+			# Deepens the verb without removing its price. A decoy that cost
+			# nothing would stop being a trade, and the trade is the mechanic.
+			weapon.decoy_loudness = minf(2.0, weapon.decoy_loudness + 0.4)
 
 	# Handing control back is the same job as leaving the pause menu.
 	_on_resumed()
