@@ -47,8 +47,11 @@ func _process(delta: float) -> bool:
 	_elapsed += delta
 
 	# Turn the player so the shot frames the arena rather than a bare corner.
+	# Face the nearest zombie, so the shot actually shows the thing under test
+	# rather than whichever wall the player happened to spawn looking at.
 	if _root_node is Game and _root_node.player != null:
-		_root_node.player.rotation.y = PI * 0.25
+		_root_node.spawner.minimum_spawn_distance = 6.0
+		_face_nearest_zombie()
 
 	if _elapsed < _delay:
 		return false
@@ -64,6 +67,30 @@ func _process(delta: float) -> bool:
 	])
 	quit(0)
 	return true
+
+
+func _face_nearest_zombie() -> void:
+	var player: Node3D = _root_node.player
+	var nearest: Node3D = null
+	var nearest_distance := INF
+
+	for child in _root_node.spawner.get_children():
+		if not (child is Zombie) or child.is_queued_for_deletion():
+			continue
+
+		var distance: float = player.global_position.distance_to(child.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = child
+
+	if nearest == null:
+		return
+
+	# Zombies wander into side chambers, so the nearest one is often behind a
+	# wall. Place it in clear view instead — this is a screenshot tool, and a
+	# deterministic frame is worth more than an authentic one.
+	nearest.global_position = player.global_position + Vector3(0.0, 0.0, -4.5)
+	player.rotation.y = 0.0
 
 
 func _parse_arguments() -> void:

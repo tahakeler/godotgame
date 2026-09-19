@@ -46,6 +46,10 @@ var _cooldown_remaining := 0.0
 var _reload_remaining := 0.0
 var _recoil_offset := 0.0
 var _input_enabled := true
+var _was_mouse_captured := false
+## Briefly blocks firing after the cursor is re-captured, so the click that
+## brings the window back into focus does not also spend a round.
+var _focus_lock_remaining := 0.0
 
 @onready var _camera: Camera3D = _resolve_camera()
 @onready var _muzzle: Node3D = $Muzzle
@@ -67,12 +71,28 @@ func _process(delta: float) -> void:
 	if not _input_enabled:
 		return
 
+	_tick_focus_lock(delta)
+
 	# Semi-automatic: one bullet per click. The concept's first pillar is
 	# "every bullet is a decision", which holding to spray would undermine.
-	if Input.is_action_just_pressed("fire"):
+	if Input.is_action_just_pressed("fire") and _focus_lock_remaining <= 0.0:
 		try_fire()
 	elif Input.is_action_just_pressed("reload"):
 		try_reload()
+
+
+## The player re-captures the cursor by clicking, and that same click would
+## otherwise reach the weapon and spend a round. In a game built on ammunition
+## scarcity, losing a bullet to alt-tabbing back in is a real cost, so firing is
+## suppressed briefly after the cursor is captured.
+func _tick_focus_lock(delta: float) -> void:
+	var captured := Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
+
+	if captured and not _was_mouse_captured:
+		_focus_lock_remaining = 0.25
+
+	_was_mouse_captured = captured
+	_focus_lock_remaining = maxf(0.0, _focus_lock_remaining - delta)
 
 
 ## Fire one round. Returns true only when a bullet actually left the weapon.

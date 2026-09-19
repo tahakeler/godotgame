@@ -25,23 +25,17 @@ signal groaned(groan_position: Vector3)
 @export var attack_cooldown := 1.1
 
 @export_group("Feel")
-@export var hit_flash_duration := 0.09
 @export var groan_interval := Vector2(3.5, 9.0)
 
 var _target: Node3D
 var _attack_remaining := 0.0
 var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
-var _flash_remaining := 0.0
 var _groan_remaining := 0.0
 
 @onready var health: Health = $Health
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
-@onready var _visual: Node3D = $Visual
-@onready var _body_meshes: Array[MeshInstance3D] = [$Visual/Torso, $Visual/Head]
-
-var _normal_material: Material
-var _flash_material: StandardMaterial3D
+@onready var _visual: ZombieVisual = $Visual
 
 
 func _ready() -> void:
@@ -52,18 +46,12 @@ func _ready() -> void:
 	_agent.target_desired_distance = attack_range * 0.7
 
 	_groan_remaining = randf_range(groan_interval.x, groan_interval.y)
-	_normal_material = _body_meshes[0].get_surface_override_material(0)
-	_flash_material = StandardMaterial3D.new()
-	_flash_material.albedo_color = Color(1.0, 0.85, 0.85)
-	_flash_material.emission_enabled = true
-	_flash_material.emission = Color(1.0, 0.35, 0.3)
-	_flash_material.emission_energy_multiplier = 3.0
 
 
 func _physics_process(delta: float) -> void:
 	_attack_remaining = maxf(0.0, _attack_remaining - delta)
-	_tick_flash(delta)
 	_tick_groan(delta)
+	_visual.update_locomotion(Vector2(velocity.x, velocity.z).length())
 
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
@@ -147,20 +135,8 @@ func _tick_groan(delta: float) -> void:
 	groaned.emit(global_position)
 
 
-func _tick_flash(delta: float) -> void:
-	if _flash_remaining <= 0.0:
-		return
-
-	_flash_remaining -= delta
-	if _flash_remaining <= 0.0:
-		for mesh in _body_meshes:
-			mesh.set_surface_override_material(0, _normal_material)
-
-
 func _on_damaged(_amount: float, _current: float, _maximum: float) -> void:
-	_flash_remaining = hit_flash_duration
-	for mesh in _body_meshes:
-		mesh.set_surface_override_material(0, _flash_material)
+	_visual.flash()
 
 
 func _on_died() -> void:
