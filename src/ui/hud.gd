@@ -1,0 +1,235 @@
+class_name HUD
+extends CanvasLayer
+
+## Round interface: extraction clock, health, ammunition, kills, and the
+## end-of-round overlay.
+##
+## The HUD only listens. Gameplay code never reaches into it — every value
+## arrives through a signal, so the systems below can be tested without a
+## viewport.
+
+const LOW_HEALTH_FRACTION := 0.35
+const LOW_AMMO_ROUNDS := 2
+
+@export var damage_marker_lifetime := 1.1
+
+var _game: Game
+var _player: Player
+var _weapon: Weapon
+
+@onready var _extraction_label: Label = %ExtractionLabel
+@onready var _kills_label: Label = %KillsLabel
+@onready var _zombies_label: Label = %ZombiesLabel
+@onready var _health_bar: ProgressBar = %HealthBar
+@onready var _health_label: Label = %HealthLabel
+@onready var _magazine_label: Label = %MagazineLabel
+@onready var _reserve_label: Label = %ReserveLabel
+@onready var _weapon_status_label: Label = %WeaponStatusLabel
+@onready var _damage_indicator: Control = %DamageIndicator
+@onready var _damage_flash: ColorRect = %DamageFlash
+@onready var _overlay: Control = %Overlay
+@onready var _overlay_title: Label = %OverlayTitle
+@onready var _overlay_detail: Label = %OverlayDetail
+
+var _damage_markers: Array[Dictionary] = []
+var _flash_remaining := 0.0
+
+
+func _ready() -> void:
+	_overlay.visible = false
+	_damage_flash.color.a = 0.0
+	_damage_indicator.draw.connect(_draw_damage_markers)
+
+
+func _process(delta: float) -> void:
+	_tick_damage_markers(delta)
+	_tick_flash(delta)
+
+
+## Connect to a round. Called by Game once every system exists.
+func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) -> void:
+	_game = game
+	_player = player
+	_weapon = weapon
+
+	game.time_changed.connect(_on_time_changed)
+	game.kills_changed.connect(_on_kills_changed)
+	game.round_won.connect(_on_round_won)
+	game.round_lost.connect(_on_round_lost)
+	game.round_started.connect(_on_round_started)
+
+	player.health.changed.connect(_on_health_changed)
+	player.damage_taken.connect(_on_damage_taken)
+
+	weapon.ammo_changed.connect(_on_ammo_changed)
+	weapon.reload_started.connect(_on_reload_started)
+	weapon.reload_finished.connect(_on_weapon_status_cleared)
+	weapon.dry_fired.connect(_on_dry_fired)
+
+	spawner.population_changed.connect(_on_population_changed)
+
+	_on_health_changed(player.health.current_health, player.health.max_health)
+	_on_ammo_changed(weapon.magazine_ammo, weapon.reserve_ammo)
+
+
+func _on_round_started() -> void:
+	_overlay.visible = false
+	_damage_markers.clear()
+	_flash_remaining = 0.0
+	_damage_flash.color.a = 0.0
+	_weapon_status_label.text = ""
+	_damage_indicator.queue_redraw()
+
+
+func _on_time_changed(remaining: float, _total: float) -> void:
+	var minutes := int(remaining) / 60
+	var seconds := int(remaining) % 60
+	_extraction_label.text = "EXTRACTION  %02d:%02d" % [minutes, seconds]
+
+	# Turns amber inside the last 15 seconds so the win is visibly imminent.
+	_extraction_label.modulate = (
+		Color(1.0, 0.78, 0.3) if remaining <= 15.0 else Color(0.85, 0.9, 1.0)
+	)
+
+
+func _on_kills_changed(kills: int) -> void:
+	_kills_label.text = "KILLS  %d" % kills
+
+
+func _on_population_changed(alive: int) -> void:
+	_zombies_label.text = "HOSTILES  %d" % alive
+
+
+func _on_health_changed(current: float, maximum: float) -> void:
+	_health_bar.max_value = maximum
+	_health_bar.value = current
+	_health_label.text = "%d" % roundi(current)
+
+	var fraction := current / maxf(maximum, 1.0)
+	var bar_color := (
+		Color(0.85, 0.24, 0.2) if fraction <= LOW_HEALTH_FRACTION
+		else Color(0.42, 0.72, 0.45)
+	)
+	_health_bar.modulate = bar_color
+
+
+func _on_ammo_changed(magazine: int, reserve: int) -> void:
+	_magazine_label.text = str(magazine)
+	_reserve_label.text = "/ %d" % reserve
+
+	if magazine == 0:
+		_magazine_label.modulate = Color(0.9, 0.25, 0.2)
+	elif magazine <= LOW_AMMO_ROUNDS:
+		_magazine_label.modulate = Color(1.0, 0.72, 0.25)
+	else:
+		_magazine_label.modulate = Color(0.95, 0.95, 0.95)
+
+	# Clear a stale "MAGAZINE EMPTY" once rounds are actually available again.
+	if magazine > 0 and _weapon_status_label.text == "MAGAZINE EMPTY":
+		_weapon_status_label.text = ""
+
+
+func _on_reload_started(_duration: float) -> void:
+	_weapon_status_label.text = "RELOADING"
+	_weapon_status_label.modulate = Color(1.0, 0.82, 0.35)
+
+
+func _on_weapon_status_cleared() -> void:
+	_weapon_status_label.text = ""
+
+
+func _on_dry_fired() -> void:
+	if _weapon == null:
+		return
+
+	# Tell the player *why* nothing happened — and whether reloading would help.
+	if _weapon.is_fully_dry():
+		_weapon_status_label.text = "NO AMMUNITION"
+	else:
+		_weapon_status_label.text = "MAGAZINE EMPTY"
+	_weapon_status_label.modulate = Color(0.92, 0.28, 0.22)
+
+
+func _on_damage_taken(_amount: float, direction_angle: float) -> void:
+	_damage_markers.append({
+		"angle": direction_angle,
+		"remaining": damage_marker_lifetime,
+	})
+	_flash_remaining = 0.35
+	_damage_indicator.queue_redraw()
+
+
+func _on_round_won(kills: int, time_taken: float) -> void:
+	_show_overlay(
+		"EXTRACTED",
+		Color(0.45, 0.85, 0.5),
+		"%d kills  ·  extracted in %s\n\nPress ENTER to play again" % [
+			kills, _format_duration(time_taken)
+		]
+	)
+
+
+func _on_round_lost(kills: int, time_survived: float) -> void:
+	_show_overlay(
+		"YOU DIED",
+		Color(0.88, 0.26, 0.22),
+		"%d kills  ·  survived %s\n\nPress ENTER to try again" % [
+			kills, _format_duration(time_survived)
+		]
+	)
+
+
+func _show_overlay(title: String, color: Color, detail: String) -> void:
+	_overlay_title.text = title
+	_overlay_title.modulate = color
+	_overlay_detail.text = detail
+	_overlay.visible = true
+
+
+func _tick_damage_markers(delta: float) -> void:
+	if _damage_markers.is_empty():
+		return
+
+	for marker in _damage_markers:
+		marker.remaining -= delta
+
+	_damage_markers = _damage_markers.filter(
+		func(marker: Dictionary) -> bool: return marker.remaining > 0.0
+	)
+	_damage_indicator.queue_redraw()
+
+
+func _tick_flash(delta: float) -> void:
+	if _flash_remaining <= 0.0:
+		return
+
+	_flash_remaining = maxf(0.0, _flash_remaining - delta)
+	_damage_flash.color.a = (_flash_remaining / 0.35) * 0.32
+
+
+## Arc markers around the crosshair pointing at whatever just hit the player.
+## This is the concept's mitigation for first-person flanking being invisible.
+func _draw_damage_markers() -> void:
+	var center := _damage_indicator.size * 0.5
+	var radius := 110.0
+
+	for marker in _damage_markers:
+		var alpha: float = clampf(marker.remaining / damage_marker_lifetime, 0.0, 1.0)
+		var color := Color(0.95, 0.2, 0.15, alpha)
+
+		# Screen space puts 0 radians up, so rotate the bearing a quarter turn.
+		var facing: float = marker.angle - PI * 0.5
+		var points := PackedVector2Array()
+		var segments := 12
+		var spread := deg_to_rad(34.0)
+
+		for i in segments + 1:
+			var t := float(i) / float(segments)
+			var angle: float = facing - spread * 0.5 + spread * t
+			points.append(center + Vector2(cos(angle), sin(angle)) * radius)
+
+		_damage_indicator.draw_polyline(points, color, 5.0, true)
+
+
+func _format_duration(seconds: float) -> String:
+	return "%02d:%02d" % [int(seconds) / 60, int(seconds) % 60]
