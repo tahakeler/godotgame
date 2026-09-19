@@ -31,6 +31,11 @@ const DEFINITIONS := {
 		"tint": Color(1.0, 1.0, 1.0),
 		"experience": 1,
 		"ammo": 3,
+		## How far this kind hears a gunshot, in metres. A Brute hears furthest,
+		## so the thing you least want to attract is the thing a shot is most
+		## likely to bring — which is what makes firing a decision rather than
+		## a reflex.
+		"hearing": 26.0,
 		## Seconds into the round before this kind can appear.
 		"unlock": 0.0,
 		## Relative spawn frequency once unlocked.
@@ -47,6 +52,7 @@ const DEFINITIONS := {
 		"tint": Color(0.78, 1.0, 0.82),
 		"experience": 2,
 		"ammo": 3,
+		"hearing": 32.0,
 		"unlock": 25.0,
 		"weight": 6.0,
 	},
@@ -61,6 +67,7 @@ const DEFINITIONS := {
 		"tint": Color(0.95, 0.62, 0.58),
 		"experience": 5,
 		"ammo": 8,
+		"hearing": 42.0,
 		"unlock": 70.0,
 		"weight": 2.5,
 	},

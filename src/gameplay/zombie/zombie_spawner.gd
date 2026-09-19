@@ -84,6 +84,25 @@ func stop() -> void:
 	_active = false
 
 
+## Tell every living zombie that something was heard here.
+##
+## Broadcast to all of them and let each decide, rather than querying the ones
+## in range: the spawner would need a spatial structure to answer that, and the
+## population is capped low enough that a distance check per zombie is cheaper
+## than maintaining one. Each zombie knows its own hearing range anyway, which
+## differs by kind.
+func broadcast_noise(noise_position: Vector3, loudness := 1.0) -> int:
+	var heard := 0
+
+	for zombie in _alive:
+		if not is_instance_valid(zombie):
+			continue
+		if zombie.hear_noise(noise_position, loudness):
+			heard += 1
+
+	return heard
+
+
 ## Remove every living zombie. Used by restart.
 func clear_all() -> void:
 	for zombie in _alive:

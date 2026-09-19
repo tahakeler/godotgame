@@ -26,6 +26,18 @@ signal groaned(groan_position: Vector3)
 @export var attack_range := 1.9
 @export var attack_cooldown := 1.1
 
+@export_group("Hearing")
+## How far this zombie can hear a noise of loudness 1.0.
+##
+## Set per kind by configure(): a Brute hears furthest, which means the thing
+## you least want to attract is the thing a shot is most likely to bring.
+@export var hearing_range := 26.0
+## How long it keeps heading for a sound before giving up on it.
+@export var investigate_duration := 7.0
+## Inside this distance the player is the only thing that matters and noise is
+## ignored completely.
+@export var engaged_range := 7.0
+
 @export_group("Feel")
 @export var groan_interval := Vector2(3.5, 9.0)
 @export var corpse_collapse_time := 0.9
@@ -35,6 +47,9 @@ var _attack_remaining := 0.0
 var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _groan_remaining := 0.0
+## Where a heard noise came from, and how long this zombie still cares.
+var _investigate_point := Vector3.ZERO
+var _investigate_remaining := 0.0
 
 ## Set by configure(); read by the spawner when this zombie dies.
 var kind: ZombieTypes.Kind = ZombieTypes.Kind.SHAMBLER
@@ -46,6 +61,8 @@ var ammo_value := 3
 const BODY_RADIUS_RATIO := 0.22
 ## Height the exported attack_range below was tuned against.
 const REFERENCE_HEIGHT := 2.0
+## Close enough to a sound to count as having reached it.
+const ARRIVAL_DISTANCE := 2.0
 
 var base_attack_range := 1.9
 
@@ -84,6 +101,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
+	_tick_investigation(delta)
 	_tick_repath(delta)
 	_move_toward_target(delta)
 	_try_attack()
@@ -101,6 +119,7 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	contact_damage = definition.damage
 	experience_value = definition.experience
 	ammo_value = definition.ammo
+	hearing_range = definition.hearing
 
 	health.max_health = definition.health
 	health.current_health = definition.health
@@ -136,13 +155,66 @@ func take_damage(amount: float, _hit_position: Vector3 = Vector3.ZERO,
 	return health.take_damage(amount)
 
 
+## React to a noise somewhere in the cave.
+##
+## The zombie heads for where the sound came from rather than for the player,
+## which is the whole point: a gunshot should cost the shooter their position,
+## not just a bullet. It does not reveal the player, only the place.
+##
+## Two things are deliberately immune. A zombie already close enough to be a
+## threat ignores noise entirely — something mauling you does not wander off
+## because a gun went off nearby, and letting it would make firing a panic
+## button rather than a cost. And a noise further away than this zombie can
+## hear does nothing at all, which is what makes distance a real defence.
+## Returns true only when the noise actually diverted this zombie.
+func hear_noise(noise_position: Vector3, loudness: float) -> bool:
+	if health.is_dead:
+		return false
+
+	if global_position.distance_to(noise_position) > hearing_range * loudness:
+		return false
+
+	if _target != null and global_position.distance_to(_target.global_position) <= engaged_range:
+		return false
+
+	_investigate_point = noise_position
+	_investigate_remaining = investigate_duration
+	return true
+
+
+## True while this zombie is heading for a sound rather than for the player.
+func is_investigating() -> bool:
+	return _investigate_remaining > 0.0
+
+
+## Where this zombie is currently trying to get to.
+func _move_goal() -> Vector3:
+	return _investigate_point if is_investigating() else _target.global_position
+
+
+## Count down the investigation, and end it early on arrival or on getting
+## close enough to the player that the sound stops being the interesting thing.
+func _tick_investigation(delta: float) -> void:
+	if not is_investigating():
+		return
+
+	_investigate_remaining -= delta
+
+	if global_position.distance_to(_investigate_point) <= ARRIVAL_DISTANCE:
+		_investigate_remaining = 0.0
+		return
+
+	if _target != null and global_position.distance_to(_target.global_position) <= engaged_range:
+		_investigate_remaining = 0.0
+
+
 func _tick_repath(delta: float) -> void:
 	_repath_remaining -= delta
 	if _repath_remaining > 0.0:
 		return
 
 	_repath_remaining = repath_interval
-	_agent.target_position = _target.global_position
+	_agent.target_position = _move_goal()
 
 
 func _move_toward_target(delta: float) -> void:

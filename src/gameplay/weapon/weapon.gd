@@ -33,6 +33,9 @@ signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 @export var damage := 25.0
 @export var fire_cooldown := 0.18
 @export var shot_range := 80.0
+## How loud a shot is, as a multiplier on each zombie's hearing range. Lower
+## values are quieter; an upgrade can buy the player some of it back.
+@export var noise_loudness := 1.0
 
 @export_group("Reload")
 @export var reload_duration := 1.6
