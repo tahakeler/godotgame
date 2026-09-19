@@ -78,10 +78,10 @@ func _ready() -> void:
 	reset()
 
 
-## Award experience for a kill. Levels resolve one at a time; a single kill
-## cannot skip a level and lose the player an upgrade they earned.
-func add_kill_experience() -> void:
-	experience += experience_per_kill
+## Award experience for a kill. The amount travels with the kind that died,
+## so a Brute moves the bar further than a Shambler.
+func add_kill_experience(amount: int = experience_per_kill) -> void:
+	experience += maxi(amount, 1)
 
 	if experience < requirement:
 		experience_changed.emit(experience, requirement, level)

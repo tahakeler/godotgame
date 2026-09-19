@@ -31,6 +31,8 @@ var _animation_player: AnimationPlayer
 var _skin_material: StandardMaterial3D
 var _flash_material: StandardMaterial3D
 var _current_animation := ""
+var _model: Node3D
+var _kind_scale := 1.0
 var _flash_remaining := 0.0
 
 
@@ -48,6 +50,21 @@ func _process(delta: float) -> void:
 	_flash_remaining -= delta
 	if _flash_remaining <= 0.0 and _mesh != null:
 		_mesh.material_override = _skin_material
+
+
+## Resize and tint the body for a kind.
+##
+## Tint multiplies the skin rather than replacing it, so a Brute still reads as
+## the same creature rather than a recoloured prop — the silhouette does the
+## identifying and the colour only confirms it.
+func apply_kind(scale_factor: float, tint: Color) -> void:
+	_kind_scale = scale_factor
+
+	if _model != null:
+		_model.scale = Vector3.ONE * model_scale * scale_factor
+
+	if _skin_material != null:
+		_skin_material.albedo_color = tint
 
 
 ## Switch animation based on how fast the zombie is actually moving.
@@ -81,9 +98,10 @@ func _build_model() -> void:
 		return
 
 	var model: Node3D = scene.instantiate()
-	model.scale = Vector3.ONE * model_scale
+	model.scale = Vector3.ONE * model_scale * _kind_scale
 	add_child(model)
 
+	_model = model
 	_mesh = _find_mesh(model)
 
 	# The AnimationPlayer must sit beside "Root" inside the model, because the

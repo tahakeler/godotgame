@@ -19,6 +19,8 @@ const AUTOLOAD_NAME := "Settings"
 var _scene_path := "res://src/core/game.tscn"
 var _output_path := "res://screenshot.png"
 var _delay := 7.5
+## Line up one of each zombie kind instead of aiming at the nearest one.
+var pose_variety := false
 
 var _root_node: Node
 var _elapsed := 0.0
@@ -99,6 +101,8 @@ func _parse_arguments() -> void:
 			_scene_path = argument.trim_prefix("--scene=")
 		elif argument.begins_with("--out="):
 			_output_path = argument.trim_prefix("--out=")
+		elif argument == "--pose-variety":
+			pose_variety = true
 		elif argument.begins_with("--delay="):
 			_delay = float(argument.trim_prefix("--delay="))
 
@@ -108,3 +112,25 @@ func _install_autoload() -> void:
 	var node: Node = script.new()
 	node.name = AUTOLOAD_NAME
 	root.add_child(node)
+
+
+## Line up one of each zombie kind in front of the camera, so a screenshot can
+## confirm the three read as different creatures rather than one recolour.
+func _pose_variety() -> void:
+	var player: Node3D = _root_node.player
+	var zombies: Array[Zombie] = []
+
+	for child in _root_node.spawner.get_children():
+		if child is Zombie and not child.is_queued_for_deletion():
+			zombies.append(child)
+
+	var kinds := [
+		ZombieTypes.Kind.SHAMBLER, ZombieTypes.Kind.RUNNER, ZombieTypes.Kind.BRUTE
+	]
+
+	for index in mini(kinds.size(), zombies.size()):
+		var zombie := zombies[index]
+		zombie.configure(kinds[index])
+		zombie.global_position = player.global_position + Vector3(
+			float(index - 1) * 2.6, 0.0, -7.0
+		)

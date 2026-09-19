@@ -23,7 +23,8 @@ enum RoundState { PLAYING, WON, LOST }
 @export var seconds_per_kill := 2.0
 
 @export_group("Rewards")
-@export var ammo_per_kill := 3
+## Added on top of whatever the kind itself is worth.
+@export var ammo_bonus_per_kill := 0
 
 @export_group("Feel")
 @export var fire_trauma := 0.22
@@ -114,8 +115,9 @@ func _wire_effects() -> void:
 	player.damage_taken.connect(func(_amount: float, _angle: float) -> void:
 		player.add_trauma(hurt_trauma)
 	)
-	spawner.zombie_died.connect(func(death_position: Vector3) -> void:
-		effects.spawn_death(death_position)
+	spawner.zombie_died.connect(
+		func(death_position: Vector3, _experience: int, _ammo: int) -> void:
+			effects.spawn_death(death_position)
 	)
 	player.look_moved.connect(weapon.report_look)
 
@@ -214,7 +216,7 @@ func _capture_baselines() -> void:
 		"max_reserve": weapon.max_reserve,
 		"move_speed": player.move_speed,
 		"max_health": player.health.max_health,
-		"ammo_per_kill": ammo_per_kill,
+		"ammo_bonus_per_kill": ammo_bonus_per_kill,
 	}
 
 
@@ -228,7 +230,7 @@ func _restore_baselines() -> void:
 	weapon.max_reserve = _baselines.max_reserve
 	player.move_speed = _baselines.move_speed
 	player.health.max_health = _baselines.max_health
-	ammo_per_kill = _baselines.ammo_per_kill
+	ammo_bonus_per_kill = _baselines.ammo_bonus_per_kill
 
 
 ## Apply a chosen upgrade. Progression decides what was offered and picked;
@@ -249,7 +251,7 @@ func _apply_upgrade(upgrade_id: int) -> void:
 		Progression.Upgrade.ADRENALINE:
 			player.move_speed *= 1.12
 		Progression.Upgrade.SCAVENGER:
-			ammo_per_kill += 2
+			ammo_bonus_per_kill += 2
 		Progression.Upgrade.BANDOLIER:
 			weapon.max_reserve += 15
 			weapon.add_reserve_ammo(15)
@@ -293,19 +295,19 @@ func _on_resumed() -> void:
 	player.set_look_enabled(true)
 
 
-func _on_zombie_died(death_position: Vector3) -> void:
+func _on_zombie_died(death_position: Vector3, experience: int, ammo: int) -> void:
 	if state != RoundState.PLAYING:
 		return
 
 	kills += 1
 	kills_changed.emit(kills)
-	progression.add_kill_experience()
+	progression.add_kill_experience(experience)
 	sounds.play_at("zombie_death", death_position)
 	sounds.play("ammo_gained")
 
 	# Kills are the only source of ammunition, and the only way to shorten the
 	# round. Both rewards come from the same action by design.
-	weapon.add_reserve_ammo(ammo_per_kill)
+	weapon.add_reserve_ammo(ammo + ammo_bonus_per_kill)
 
 	# Only Extraction trades kills for clock. In Last Stand the timer is the
 	# whole challenge, and in Endless there is no clock to shorten.
