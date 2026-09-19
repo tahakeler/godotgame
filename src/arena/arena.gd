@@ -128,6 +128,10 @@ const PROPS := [
 ## navigate, so it can skip the bake.
 @export var bake_navigation := true
 
+@export_group("Atmosphere")
+@export var dust_enabled := true
+@export var dust_amount := 160
+
 @export_group("Ceiling")
 ## A roof closes the cave in. Without it the player sees over the walls into
 ## empty space, which reads as an unfinished level rather than a cave.
@@ -159,6 +163,9 @@ func _ready() -> void:
 	# the navmesh generator would happily carpet the top of it.
 	if ceiling_enabled:
 		_build_ceiling()
+
+	if dust_enabled:
+		_build_dust()
 
 
 ## Half-extent of the central room.
@@ -226,28 +233,74 @@ func _add_lighting(model: String, cell: Vector2i) -> void:
 	match model:
 		CENTRE_ROOM:
 			light.light_color = Color(1.0, 0.79, 0.52)
-			light.light_energy = 7.0
-			light.omni_range = 22.0
+			light.light_energy = 5.6
+			light.omni_range = 20.0
 			# Only the arena casts shadows; the cost is worth it where the
 			# player actually fights, and invisible everywhere else.
 			light.shadow_enabled = true
 			light.position.y = 4.0
 		OUTER_ROOM:
 			light.light_color = Color(1.0, 0.7, 0.42)
-			light.light_energy = 5.0
-			light.omni_range = 15.0
+			light.light_energy = 3.6
+			light.omni_range = 13.0
 		WIDE_ROOM:
 			light.light_color = Color(1.0, 0.66, 0.36)
-			light.light_energy = 5.5
-			light.omni_range = 18.0
+			light.light_energy = 4.0
+			light.omni_range = 16.0
 		_:
 			light.light_color = Color(0.42, 0.62, 1.0)
-			light.light_energy = 2.0
-			light.omni_range = 8.0
+			light.light_energy = 1.5
+			light.omni_range = 7.0
 			light.position.y = 3.0
 
 	_geometry_root.add_child(light)
 	_add_lamp_glow(light)
+
+	var flicker := LightFlicker.new()
+	light.add_child(flicker)
+	# Random phase, or the whole cave pulses in unison and announces itself.
+	flicker.setup(light, _rng.randf_range(0.0, TAU))
+
+
+## Dust hanging in the air of the central arena.
+##
+## Cheap, and it does a lot: motes drifting through the light give the space
+## depth and make the beams read as volume rather than as a flat gradient on
+## the floor. Confined to the arena, where the player spends their time.
+func _build_dust() -> void:
+	var particles := GPUParticles3D.new()
+	particles.amount = dust_amount
+	particles.lifetime = 9.0
+	particles.preprocess = 9.0
+	particles.visibility_aabb = AABB(Vector3(-11, 0, -11), Vector3(22, 6, 22))
+
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(10.0, 2.4, 10.0)
+	process.direction = Vector3(0.2, 1.0, 0.1)
+	process.spread = 80.0
+	process.initial_velocity_min = 0.05
+	process.initial_velocity_max = 0.22
+	process.gravity = Vector3(0.0, -0.04, 0.0)
+	process.scale_min = 0.4
+	process.scale_max = 1.0
+	particles.process_material = process
+
+	var mesh := QuadMesh.new()
+	mesh.size = Vector2(0.035, 0.035)
+
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = Color(1.0, 0.86, 0.68, 0.32)
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mesh.material = material
+	particles.draw_pass_1 = mesh
+
+	particles.position = Vector3(0.0, 2.0, 0.0)
+	particles.name = "Dust"
+	particles.emitting = true
+	add_child(particles)
 
 
 ## A small emissive block at each light, so the glow has a visible source

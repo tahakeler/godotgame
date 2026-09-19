@@ -34,10 +34,12 @@ var _weapon: Weapon
 @onready var _hitmarker: Control = %Hitmarker
 @onready var _level_label: Label = %LevelLabel
 @onready var _experience_bar: ProgressBar = %ExperienceBar
+@onready var _hurt_vignette: TextureRect = %HurtVignette
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
 var _hitmarker_remaining := 0.0
+var _hurt_pulse := 0.0
 
 
 func _ready() -> void:
@@ -51,6 +53,7 @@ func _process(delta: float) -> void:
 	_tick_damage_markers(delta)
 	_tick_flash(delta)
 	_tick_hitmarker(delta)
+	_tick_hurt_vignette(delta)
 
 
 ## Connect to a round. Called by Game once every system exists.
@@ -247,6 +250,25 @@ func _tick_hitmarker(delta: float) -> void:
 
 	_hitmarker_remaining = maxf(0.0, _hitmarker_remaining - delta)
 	_hitmarker.modulate.a = _hitmarker_remaining / hitmarker_duration
+
+
+## Pulse a red vignette while health is low.
+##
+## A number in the corner is something the player has to remember to read. A
+## pulse at the edge of vision is something they feel, which is what you want
+## when the information is "you are about to die".
+func _tick_hurt_vignette(delta: float) -> void:
+	if _player == null:
+		return
+
+	var fraction := _player.health.get_fraction()
+	if fraction > LOW_HEALTH_FRACTION or _player.health.is_dead:
+		_hurt_vignette.modulate.a = move_toward(_hurt_vignette.modulate.a, 0.0, delta * 2.0)
+		return
+
+	_hurt_pulse += delta * lerpf(6.5, 2.6, fraction / LOW_HEALTH_FRACTION)
+	var severity := 1.0 - fraction / LOW_HEALTH_FRACTION
+	_hurt_vignette.modulate.a = (0.45 + sin(_hurt_pulse) * 0.25) * severity
 
 
 func _tick_flash(delta: float) -> void:
