@@ -139,8 +139,12 @@ func _spawn_one() -> void:
 	if zombie_scene == null or _arena == null or _target == null:
 		return
 
+	# Hand the arena which way the player is looking, so arrivals can be
+	# weighted behind them instead of appearing out of nothing in plain view.
 	var spawn_position := _arena.pick_spawn_point(
-		_target.global_position, minimum_spawn_distance
+		_target.global_position,
+		minimum_spawn_distance,
+		-_target.global_transform.basis.z
 	)
 
 	var zombie: Zombie = zombie_scene.instantiate()
