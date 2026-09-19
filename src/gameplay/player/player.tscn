@@ -1,6 +1,7 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://src/gameplay/player/player.gd" id="1_player"]
+[ext_resource type="PackedScene" path="res://src/gameplay/weapon/weapon.tscn" id="2_weapon"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.4
@@ -34,3 +35,5 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 [node name="Camera" type="Camera3D" parent="Head"]
 current = true
 fov = 78.0
+
+[node name="Weapon" parent="Head/Camera" instance=ExtResource("2_weapon")]
