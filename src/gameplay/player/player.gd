@@ -37,6 +37,18 @@ signal look_moved(relative: Vector2)
 @export var pitch_limit_degrees := 89.0
 @export var invert_look_y := false
 
+@export_group("Gamepad")
+## Turn rate in radians per second at full stick deflection.
+@export var gamepad_sensitivity := 2.7
+@export_range(0.0, 0.9) var gamepad_deadzone := 0.18
+## Exponent applied to stick deflection before it becomes a turn rate.
+##
+## A stick mapped straight to turn rate is either too slow to spin round when
+## something bites you from behind or too twitchy to hold an aim. Curving it
+## gives fine control near the centre and full speed at the edge, which is why
+## every shooter that plays well on a pad does this.
+@export var gamepad_response_curve := 2.4
+
 @export_group("Camera shake")
 @export var shake_decay := 2.4
 @export var shake_frequency := 26.0
@@ -129,6 +141,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			capture_mouse()
 
 
+## Stick look runs on the render frame rather than the physics tick, so turning
+## stays smooth on a display faster than the physics rate. Rotation is safe to
+## change here — unlike velocity, nothing integrates it.
+func _process(delta: float) -> void:
+	_tick_gamepad_look(delta)
+
+
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
@@ -176,14 +195,59 @@ func _tick_footsteps(delta: float) -> void:
 
 ## Point the camera using a relative mouse delta.
 func _apply_look(relative: Vector2) -> void:
-	rotate_y(-relative.x * mouse_sensitivity)
+	_apply_look_radians(
+		-relative.x * mouse_sensitivity, -relative.y * mouse_sensitivity
+	)
+	look_moved.emit(relative)
 
-	var pitch_delta := -relative.y * mouse_sensitivity
+
+## Turn the player by an angular delta, in radians.
+##
+## Both input paths end here: the mouse converts pixels into radians with its
+## sensitivity, the stick produces a turn rate directly. Sharing one function
+## means the pitch clamp and the invert setting cannot drift apart between the
+## two devices.
+func _apply_look_radians(yaw: float, pitch: float) -> void:
+	rotate_y(yaw)
+
 	if invert_look_y:
-		pitch_delta = -pitch_delta
+		pitch = -pitch
 
 	var limit := deg_to_rad(pitch_limit_degrees)
-	head.rotation.x = clampf(head.rotation.x + pitch_delta, -limit, limit)
+	head.rotation.x = clampf(head.rotation.x + pitch, -limit, limit)
+
+
+## Turn using the right stick.
+##
+## Run per frame rather than per input event: a held stick reports a position,
+## not a stream of deltas, so there is no event to drive it. That position is a
+## rate, which is what makes the delta scaling below necessary — without it the
+## turn speed would depend on the frame rate.
+func _tick_gamepad_look(delta: float) -> void:
+	if not _look_enabled:
+		return
+
+	var stick := Input.get_vector(
+		"look_left", "look_right", "look_up", "look_down", gamepad_deadzone
+	)
+
+	var deflection := stick.length()
+	if is_zero_approx(deflection):
+		return
+
+	# Curve the magnitude, not each axis. Curving the axes separately bends a
+	# diagonal push toward the nearest cardinal, and the aim feels like it
+	# snaps to eight directions.
+	var rate: float = pow(minf(deflection, 1.0), gamepad_response_curve)
+	var step := stick.normalized() * rate * gamepad_sensitivity * delta
+
+	_apply_look_radians(-step.x, -step.y)
+
+	# The viewmodel sways from a pixel delta, because the mouse is what
+	# normally feeds it. Converting back means an equivalent turn produces an
+	# equivalent sway whichever device caused it.
+	if mouse_sensitivity > 0.0:
+		look_moved.emit(step / mouse_sensitivity)
 
 
 func capture_mouse() -> void:

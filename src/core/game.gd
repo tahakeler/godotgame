@@ -63,6 +63,13 @@ func _ready() -> void:
 	upgrade_menu.chosen.connect(_apply_upgrade)
 	_settings = GameSettings.instance(self)
 
+	# Look preferences are otherwise only read when a round starts, so a player
+	# adjusting sensitivity from the pause menu would change nothing until they
+	# restarted — and the whole reason to open that slider mid-round is that the
+	# current setting feels wrong right now.
+	if _settings != null:
+		_settings.changed.connect(func() -> void: _settings.apply_to_player(player))
+
 	_capture_baselines()
 	_wire_audio()
 	_wire_effects()
@@ -132,11 +139,18 @@ func _wire_effects() -> void:
 	player.look_moved.connect(weapon.report_look)
 
 
-func _process(delta: float) -> void:
-	if Input.is_action_just_pressed("pause"):
+## Opening the pause menu is taken as an input event rather than polled in
+## _process, because this node stops processing the instant the tree pauses.
+## Polling meant the control that opened the menu could not close it again —
+## the only way out was clicking Resume, with a mouse. Closing is handled by
+## PauseMenu itself, which is the node still awake at that point.
+func _unhandled_input(event: InputEvent) -> void:
+	if state == RoundState.PLAYING and event.is_action_pressed("pause"):
 		_toggle_pause()
-		return
+		get_viewport().set_input_as_handled()
 
+
+func _process(delta: float) -> void:
 	if pause_menu.is_open() or upgrade_menu.is_open():
 		return
 

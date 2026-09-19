@@ -33,6 +33,24 @@ func _ready() -> void:
 	_settings_panel.closed.connect(_on_settings_closed)
 
 
+## Closing is handled here rather than in Game, which is paused and therefore
+## receives no input at all while this menu is up. The pause control has to
+## close what it opened, and on a gamepad there is no cursor to reach Resume
+## with in the first place.
+func _unhandled_input(event: InputEvent) -> void:
+	if not _is_open or not event.is_action_pressed("pause"):
+		return
+
+	# Step back out of settings rather than out of the game: a player deep in a
+	# submenu means to leave the submenu.
+	if _settings_panel.visible:
+		_on_settings_closed()
+	else:
+		close()
+
+	get_viewport().set_input_as_handled()
+
+
 func is_open() -> bool:
 	return _is_open
 
