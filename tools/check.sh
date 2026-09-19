@@ -57,6 +57,7 @@ run_step() {
 run_step "import" "$GODOT" --headless --import
 run_step "static-checks" "$GODOT" --headless --script tests/manual/verify_project.gd
 run_step "arena" "$GODOT" --headless --script tests/manual/verify_arena.gd
+run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "feature-tests" "$GODOT" --headless --script tests/feature_tests.gd
 run_step "boot" "$GODOT" --headless --quit-after 120
 
