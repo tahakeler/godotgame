@@ -1,4 +1,5 @@
-# Credits and Asset Licences
+| _None_ | — | — | Geometry is all Godot primitives |
+| _None_ | — | — | All geometry is Godot primitives; no third-party assets are used |# Credits and Asset Licences
 
 **LAST MAGAZINE** — first-person arena survival shooter built in Godot 4.7.
 
@@ -19,17 +20,18 @@ licence, as required by the assignment brief.
 
 | Asset | Source | Licence | Used for |
 |-------|--------|---------|----------|
-| _(none yet)_ | — | — | — |
+| _None_ | — | — | Geometry is all Godot primitives |
 
-> Assets are added to this table as they are introduced. Anything sourced from
-> [Kenney](https://kenney.nl/assets) is CC0 1.0 Universal (public domain) and
-> requires no attribution, but is credited here regardless.
+> This project ships no external assets. Everything visible is built from
+> Godot primitive meshes with materials defined in the project, so no
+> third-party licence obligations apply. If Kenney (CC0 1.0) or similar assets
+> are added later, they belong in the table above.
 
 ## Self-Created Content
 
-- All GDScript and C# source code in `src/`
+- All GDScript source code in `src/`
 - All scene files (`.tscn`) and materials
-- Primitive geometry (arena, player, zombie placeholder meshes)
+- Primitive geometry (arena, player, weapon, zombie meshes)
 - Project icon (`icon.svg`)
 
 ## AI Contribution
