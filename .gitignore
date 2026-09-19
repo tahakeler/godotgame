@@ -42,6 +42,8 @@ dist/
 .godot/
 *.translation
 export_presets.cfg
+.mono/
+data_LastMagazine*/
 # Uncomment if using Godot:
 # *.import
 
@@ -60,6 +62,11 @@ export_presets.cfg
 *.tmp
 *.user
 *.userprefs
+
+# Godot C# project files are hand-maintained source, not generated output.
+# These negations must stay below the Unity rules above.
+!LastMagazine.csproj
+!LastMagazine.sln
 *.pidb
 *.booproj
 *.svd
