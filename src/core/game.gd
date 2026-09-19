@@ -80,6 +80,7 @@ func _ready() -> void:
 	_wire_audio()
 	_wire_statistics()
 	_wire_noise()
+	_wire_caches()
 	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
 	start_round()
@@ -123,6 +124,18 @@ func _wire_audio() -> void:
 	round_lost.connect(
 		func(_kills: int, _time: float, _record: bool) -> void: sounds.play("round_lost")
 	)
+
+
+## Caches hand their rounds to the weapon through Game, for the same reason
+## audio and effects route through here: a crate in the arena should not know
+## what a magazine is.
+func _wire_caches() -> void:
+	for cache in arena.ammo_caches:
+		cache.collected.connect(func(rounds: int) -> void:
+			var added := weapon.add_reserve_ammo(rounds)
+			if added > 0:
+				sounds.play("ammo_gained")
+		)
 
 
 ## A gunshot is heard by anything nearby, and what it draws is a crowd to the
@@ -248,6 +261,11 @@ func start_round() -> void:
 	weapon.set_input_enabled(true)
 
 	progression.reset()
+
+	# A new round must not begin with the caches the last one drained.
+	for cache in arena.ammo_caches:
+		cache.reset()
+
 	spawner.reset()
 	spawner.begin(arena, player)
 

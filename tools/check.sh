@@ -73,6 +73,7 @@ run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_
 run_step "zombie-scale" "$GODOT" --headless --script tests/manual/verify_zombie_scale.gd
 run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "noise" "$GODOT" --headless --script tests/manual/verify_noise.gd
+run_step "caches" "$GODOT" --headless --script tests/manual/verify_caches.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
 run_step "pause" "$GODOT" --headless --script tests/manual/verify_pause.gd
 run_step "look" "$GODOT" --headless --script tests/manual/verify_look.gd
