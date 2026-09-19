@@ -28,6 +28,7 @@ signal groaned(groan_position: Vector3)
 
 @export_group("Feel")
 @export var groan_interval := Vector2(3.5, 9.0)
+@export var corpse_collapse_time := 0.9
 
 var _target: Node3D
 var _attack_remaining := 0.0
@@ -186,6 +187,10 @@ func _on_damaged(_amount: float, _current: float, _maximum: float) -> void:
 
 func _on_died() -> void:
 	died.emit(self, global_position)
+
+	# Hand the body off before the node goes, so the kill leaves something
+	# behind without keeping a dead zombie in the alive list.
+	_visual.detach_as_corpse(corpse_collapse_time)
 
 	# Stop participating in the fight immediately; the node is freed by the
 	# spawner after the death signal is handled.

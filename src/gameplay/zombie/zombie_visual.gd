@@ -67,6 +67,42 @@ func apply_kind(scale_factor: float, tint: Color) -> void:
 		_skin_material.albedo_color = tint
 
 
+## Cut the body loose as a corpse that collapses and fades.
+##
+## The zombie node itself is freed immediately, so the spawner, the tests and
+## the population count all keep treating death as instant. Only the body
+## outlives it, reparented and inert — which avoids the alternative of keeping
+## a dead zombie in the alive list and teaching every caller to skip it.
+##
+## Without this a zombie simply stops existing mid-stride, which is the single
+## most obvious unfinished thing left in a fight.
+func detach_as_corpse(collapse_time: float) -> Node3D:
+	var world := get_parent().get_parent()
+	if world == null or _model == null:
+		return null
+
+	var transform := global_transform
+
+	get_parent().remove_child(self)
+	world.add_child(self)
+	global_transform = transform
+
+	set_process(false)
+	if _animation_player != null:
+		_animation_player.pause()
+
+	var tween := create_tween()
+	tween.set_parallel(true)
+	# Fall forward rather than straight down; a body that sinks through the
+	# floor reads as a bug, one that topples reads as a kill.
+	tween.tween_property(self, "rotation:x", -PI * 0.42, collapse_time * 0.55)
+	tween.tween_property(self, "position:y", position.y - 0.45, collapse_time)
+	tween.chain().tween_property(self, "scale", Vector3.ZERO, collapse_time * 0.3)
+	tween.chain().tween_callback(queue_free)
+
+	return self
+
+
 ## Switch animation based on how fast the zombie is actually moving.
 func update_locomotion(horizontal_speed: float) -> void:
 	play_animation("run" if horizontal_speed > run_speed_threshold else "idle")
