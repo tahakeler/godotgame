@@ -77,9 +77,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
 			_apply_look(event.relative)
 
-	elif event.is_action_pressed("ui_release_mouse"):
-		release_mouse()
-
 	elif event is InputEventMouseButton and event.pressed:
 		# Clicking back into the window re-captures, so the player does not have
 		# to hunt for a key after alt-tabbing.

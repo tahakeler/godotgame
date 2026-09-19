@@ -34,17 +34,31 @@ var kills := 0
 @onready var spawner: ZombieSpawner = $ZombieSpawner
 @onready var weapon: Weapon = $Player/Head/Camera/Weapon
 @onready var hud: HUD = $HUD
+@onready var pause_menu: PauseMenu = $PauseMenu
+
+## Null when autoloads are unavailable (headless --script runs); the exported
+## defaults above stand in for the difficulty profile in that case.
+var _settings: GameSettings
 
 
 func _ready() -> void:
 	spawner.zombie_died.connect(_on_zombie_died)
 	player.died.connect(_on_player_died)
+	pause_menu.resumed.connect(_on_resumed)
+	_settings = GameSettings.instance(self)
 
 	hud.bind(self, player, weapon, spawner)
 	start_round()
 
 
 func _process(delta: float) -> void:
+	if Input.is_action_just_pressed("pause"):
+		_toggle_pause()
+		return
+
+	if pause_menu.is_open():
+		return
+
 	if Input.is_action_just_pressed("restart"):
 		start_round()
 		return
@@ -63,10 +77,14 @@ func _process(delta: float) -> void:
 ## the restart control — nothing is reloaded, so there is no scene transition
 ## and no chance of a stale node surviving into the new round.
 func start_round() -> void:
+	_apply_difficulty()
+
 	state = RoundState.PLAYING
 	kills = 0
 	time_remaining = extraction_duration
 
+	if _settings != null:
+		_settings.apply_to_player(player)
 	player.reset_to_spawn()
 	player.set_look_enabled(true)
 	weapon.reset_state()
@@ -82,6 +100,38 @@ func start_round() -> void:
 
 func is_round_over() -> bool:
 	return state != RoundState.PLAYING
+
+
+## Pull the chosen difficulty's numbers in before anything is reset, so a change
+## made in the pause menu takes effect on the very next round.
+func _apply_difficulty() -> void:
+	if _settings == null:
+		return
+
+	var profile: Dictionary = _settings.get_profile()
+
+	extraction_duration = profile.extraction_duration
+	weapon.starting_reserve = profile.starting_reserve
+	spawner.interval_scale = profile.spawn_interval_scale
+	spawner.damage_scale = profile.damage_scale
+
+
+func _toggle_pause() -> void:
+	if pause_menu.is_open():
+		pause_menu.close()
+	else:
+		pause_menu.open()
+		weapon.set_input_enabled(false)
+		player.set_look_enabled(false)
+
+
+func _on_resumed() -> void:
+	# The round may have ended while paused; do not hand control back if so.
+	if state != RoundState.PLAYING:
+		return
+
+	weapon.set_input_enabled(true)
+	player.set_look_enabled(true)
 
 
 func _on_zombie_died(_death_position: Vector3) -> void:
