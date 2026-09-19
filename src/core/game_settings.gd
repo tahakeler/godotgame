@@ -44,6 +44,18 @@ const MODE_BLURBS := {
 	Mode.ENDLESS: "They never stop coming. Survive as long as you can.",
 }
 
+## Graphics presets. Measured with tools/benchmark.gd at 1920x1080 with 25
+## zombies: SSAO costs ~2.3ms a frame and the arena's shadow ~1.4ms, together
+## about a third of the frame budget. Both are worth offering as a choice
+## rather than assuming every machine can pay for them.
+enum Quality { LOW, MEDIUM, HIGH }
+
+const QUALITY_NAMES := {
+	Quality.LOW: "Performance",
+	Quality.MEDIUM: "Balanced",
+	Quality.HIGH: "Quality",
+}
+
 ## Round length per mode, in seconds. Endless counts up and ignores this.
 const MODE_DURATIONS := {
 	Mode.EXTRACTION: 0.0,
@@ -86,6 +98,7 @@ var master_volume := 0.8
 var fullscreen := true
 var difficulty: Difficulty = Difficulty.SOLDIER
 var mode: Mode = Mode.EXTRACTION
+var quality: Quality = Quality.HIGH
 
 
 ## The live autoload instance, or null when running without autoloads.
@@ -109,6 +122,10 @@ func get_difficulty_name() -> String:
 
 func get_mode_name() -> String:
 	return MODE_NAMES[mode]
+
+
+func get_quality_name() -> String:
+	return QUALITY_NAMES[quality]
 
 
 func get_mode_blurb() -> String:
@@ -149,6 +166,7 @@ func save_settings() -> void:
 	config.set_value(SECTION, "fullscreen", fullscreen)
 	config.set_value(SECTION, "difficulty", int(difficulty))
 	config.set_value(SECTION, "mode", int(mode))
+	config.set_value(SECTION, "quality", int(quality))
 	config.save(CONFIG_PATH)
 
 	changed.emit()
@@ -166,3 +184,4 @@ func load_settings() -> void:
 	fullscreen = config.get_value(SECTION, "fullscreen", fullscreen)
 	difficulty = config.get_value(SECTION, "difficulty", difficulty) as Difficulty
 	mode = config.get_value(SECTION, "mode", mode) as Mode
+	quality = config.get_value(SECTION, "quality", quality) as Quality

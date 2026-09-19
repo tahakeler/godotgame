@@ -14,8 +14,10 @@ extends NavigationRegion3D
 ## Layout: an irregular network of seven chambers around a central arena, with
 ## two uneven loops and a pair of dead-end alcoves.
 ##
-## Collision is generated from the imported meshes. Navigation is not: see
-## _add_nav_surface for why the cave's own floors cannot be used.
+## Neither collision nor navigation comes from the cave meshes. Collision is a
+## box shell built from the walkable cells (see _build_collision_shell) and
+## navigation is baked from flat footprints (see _add_nav_surface). Both exist
+## because the sculpted rock is the wrong shape to derive either from.
 
 const CAVE_PATH := "res://assets/models/cave/%s.glb"
 const PROP_PATH := "res://assets/models/weapons/%s.glb"
@@ -97,6 +99,21 @@ const SPAWN_CELLS := [
 	Vector2i(-6, 6), Vector2i(6, -5),
 ]
 
+## Half-extent of each piece in grid cells. Every piece spans an odd number of
+## cells, so it sits centred on its own cell.
+const CELL_EXTENTS := {
+	CENTRE_ROOM: Vector2i(2, 2),
+	OUTER_ROOM: Vector2i(1, 1),
+	WIDE_ROOM: Vector2i(2, 1),
+	CORRIDOR: Vector2i(0, 0),
+	DEAD_END: Vector2i(0, 0),
+}
+
+## Collision shell dimensions.
+const WALL_HEIGHT := 5.0
+const WALL_THICKNESS := 0.8
+const FLOOR_THICKNESS := 2.0
+
 ## Nodes in this group are the *only* geometry the navmesh is baked from.
 const NAV_SOURCE_GROUP := "navmesh_source"
 
@@ -129,6 +146,8 @@ const PROPS := [
 @export var bake_navigation := true
 
 @export_group("Atmosphere")
+## Set from the graphics preset before the arena builds itself.
+@export var quality: GameSettings.Quality = GameSettings.Quality.HIGH
 @export var dust_enabled := true
 @export var dust_amount := 160
 
@@ -146,12 +165,14 @@ var _geometry_root: Node3D
 
 func _ready() -> void:
 	_rng.seed = generation_seed
+	_apply_quality()
 
 	_geometry_root = Node3D.new()
 	_geometry_root.name = "Geometry"
 	add_child(_geometry_root)
 
 	_build_layout()
+	_build_collision_shell()
 	_build_cover()
 	_build_props()
 	_build_spawn_points()
@@ -164,8 +185,31 @@ func _ready() -> void:
 	if ceiling_enabled:
 		_build_ceiling()
 
-	if dust_enabled:
+	if dust_enabled and quality >= GameSettings.Quality.MEDIUM:
 		_build_dust()
+
+
+## Turn the post-processing that the benchmark showed to be expensive on or off.
+## The geometry and lighting layout stay identical across presets — only the
+## effects that cost frames change, so Performance looks flatter but never
+## different enough to play differently.
+func _apply_quality() -> void:
+	var settings := GameSettings.instance(self)
+	if settings != null:
+		quality = settings.quality
+
+	var world_environment: WorldEnvironment = get_node_or_null("WorldEnvironment")
+	if world_environment == null or world_environment.environment == null:
+		return
+
+	var environment: Environment = world_environment.environment
+	environment.ssao_enabled = quality >= GameSettings.Quality.HIGH
+	environment.glow_enabled = quality >= GameSettings.Quality.MEDIUM
+
+	if quality == GameSettings.Quality.LOW:
+		# Fog is cheap, but without SSAO or glow the scene needs a little more
+		# of it to keep depth readable.
+		environment.fog_density = 0.03
 
 
 ## Half-extent of the central room.
@@ -203,7 +247,6 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 	instance.rotation.y = deg_to_rad(rotation_degrees)
 	instance.name = "%s_%d_%d" % [model, cell.x, cell.y]
 	_geometry_root.add_child(instance)
-	_add_collision(instance)
 
 	_add_nav_surface(cell, _footprint_for(model, rotation_degrees))
 	_add_lighting(model, cell)
@@ -237,7 +280,7 @@ func _add_lighting(model: String, cell: Vector2i) -> void:
 			light.omni_range = 20.0
 			# Only the arena casts shadows; the cost is worth it where the
 			# player actually fights, and invisible everywhere else.
-			light.shadow_enabled = true
+			light.shadow_enabled = quality >= GameSettings.Quality.MEDIUM
 			light.position.y = 4.0
 		OUTER_ROOM:
 			light.light_color = Color(1.0, 0.7, 0.42)
@@ -358,7 +401,7 @@ func _build_cover() -> void:
 		instance.scale = Vector3.ONE * entry.scale
 		instance.name = "Cover"
 		_geometry_root.add_child(instance)
-		_add_collision(instance)
+		_add_cover_collider(instance, entry.scale)
 
 
 func _build_props() -> void:
@@ -370,7 +413,6 @@ func _build_props() -> void:
 		instance.position = entry.position
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		_geometry_root.add_child(instance)
-		_add_collision(instance)
 
 
 func _build_ceiling() -> void:
@@ -418,12 +460,115 @@ func _instantiate(path: String) -> Node3D:
 	return scene.instantiate()
 
 
-## The kit ships no collision shapes, so build static trimesh bodies from the
-## imported meshes. Trimesh is correct here because every piece is static level
-## geometry that never moves.
-func _add_collision(node: Node) -> void:
-	for mesh_instance in _find_mesh_instances(node):
-		mesh_instance.create_trimesh_collision()
+## Build collision as a box shell around the walkable cells, rather than from
+## the cave meshes.
+##
+## Colliding against the render geometry was costing ~0.6ms of physics per
+## zombie: concave trimesh built from sculpted rock is the most expensive shape
+## a capsule can sweep against, and thirty zombies put physics over the entire
+## frame budget. Shipping games keep collision separate from what is drawn, and
+## boxes are roughly an order of magnitude cheaper to query.
+##
+## A wall goes on any cell edge whose neighbour is not walkable, which places
+## openings exactly where two pieces meet without needing to know anything
+## about doorways.
+func _build_collision_shell() -> void:
+	var occupied := _occupied_cells()
+
+	var shell := StaticBody3D.new()
+	shell.name = "CollisionShell"
+	add_child(shell)
+
+	_add_floor_collider(shell, occupied)
+
+	const NEIGHBOURS := [
+		Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)
+	]
+
+	for cell in occupied:
+		for offset in NEIGHBOURS:
+			if occupied.has(cell + offset):
+				continue
+			_add_wall_collider(shell, cell, offset)
+
+
+## Every grid cell any piece covers.
+func _occupied_cells() -> Dictionary:
+	var occupied: Dictionary = {}
+
+	for entry in LAYOUT:
+		var extent: Vector2i = CELL_EXTENTS.get(entry.model, Vector2i.ZERO)
+
+		# A quarter turn swaps the footprint's axes.
+		if is_equal_approx(fposmod(float(entry.rotation), 180.0), 90.0):
+			extent = Vector2i(extent.y, extent.x)
+
+		for x in range(entry.cell.x - extent.x, entry.cell.x + extent.x + 1):
+			for y in range(entry.cell.y - extent.y, entry.cell.y + extent.y + 1):
+				occupied[Vector2i(x, y)] = true
+
+	return occupied
+
+
+func _add_wall_collider(shell: StaticBody3D, cell: Vector2i, offset: Vector2i) -> void:
+	var along_x := offset.x != 0
+
+	var collider := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = (
+		Vector3(WALL_THICKNESS, WALL_HEIGHT, CELL) if along_x
+		else Vector3(CELL, WALL_HEIGHT, WALL_THICKNESS)
+	)
+	collider.shape = box
+	collider.position = _cell_to_world(cell) + Vector3(
+		float(offset.x) * CELL * 0.5,
+		WALL_HEIGHT * 0.5,
+		float(offset.y) * CELL * 0.5
+	)
+
+	shell.add_child(collider)
+
+
+## One slab under everything. The walls contain the player, so the floor does
+## not need to follow the walkable shape.
+func _add_floor_collider(shell: StaticBody3D, occupied: Dictionary) -> void:
+	var minimum := Vector2i(9999, 9999)
+	var maximum := Vector2i(-9999, -9999)
+
+	for cell in occupied:
+		minimum = Vector2i(mini(minimum.x, cell.x), mini(minimum.y, cell.y))
+		maximum = Vector2i(maxi(maximum.x, cell.x), maxi(maximum.y, cell.y))
+
+	var span := Vector3(
+		float(maximum.x - minimum.x + 2) * CELL,
+		FLOOR_THICKNESS,
+		float(maximum.y - minimum.y + 2) * CELL
+	)
+	var centre := (_cell_to_world(minimum) + _cell_to_world(maximum)) * 0.5
+
+	var collider := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = span
+	collider.shape = box
+	collider.position = centre - Vector3(0.0, FLOOR_THICKNESS * 0.5, 0.0)
+
+	shell.add_child(collider)
+
+
+## Cover rocks get a cylinder rather than their mesh, for the same reason the
+## walls get boxes: the shape only has to stop a capsule, not match the art.
+func _add_cover_collider(instance: Node3D, scale_factor: float) -> void:
+	var body := StaticBody3D.new()
+
+	var collider := CollisionShape3D.new()
+	var cylinder := CylinderShape3D.new()
+	cylinder.radius = 1.15 * scale_factor
+	cylinder.height = 4.4 * scale_factor
+	collider.shape = cylinder
+	collider.position = Vector3(0.0, cylinder.height * 0.5, 0.0)
+
+	body.add_child(collider)
+	instance.add_child(body)
 
 
 func _find_mesh_instances(node: Node) -> Array[MeshInstance3D]:

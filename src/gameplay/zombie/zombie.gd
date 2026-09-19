@@ -18,9 +18,6 @@ signal groaned(groan_position: Vector3)
 ## How often the navigation target is refreshed. Every frame is wasteful and
 ## produces no visible improvement at this speed.
 @export var repath_interval := 0.15
-## Height the zombie can lift over when blocked by a low lip.
-@export var step_height := 0.5
-@export var step_probe_distance := 0.6
 ## Steepest surface a zombie will walk up rather than treat as a wall.
 @export var floor_climb_angle_degrees := 80.0
 
@@ -37,7 +34,6 @@ var _attack_remaining := 0.0
 var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _groan_remaining := 0.0
-var _last_move_direction := Vector3.ZERO
 
 @onready var health: Health = $Health
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
@@ -78,28 +74,6 @@ func _physics_process(delta: float) -> void:
 	_try_attack()
 
 	move_and_slide()
-	_step_over_obstruction()
-
-
-## Lift the zombie over low obstructions it is grinding against.
-##
-## The cave's doorways have raised rock thresholds, and CharacterBody3D has no
-## step handling of its own: a zombie walks into the lip and stops there
-## forever, with a perfectly valid path telling it to keep going. Rather than
-## make them hop — which reads as comedy — this lifts the body only when the
-## space above the lip is actually clear.
-func _step_over_obstruction() -> void:
-	if not is_on_wall() or not is_on_floor():
-		return
-	if _last_move_direction.is_zero_approx():
-		return
-
-	var parameters := PhysicsTestMotionParameters3D.new()
-	parameters.from = global_transform.translated(Vector3.UP * step_height)
-	parameters.motion = _last_move_direction * step_probe_distance
-
-	if not PhysicsServer3D.body_test_motion(get_rid(), parameters):
-		global_position.y += step_height
 
 
 ## Assign the node this zombie hunts. Called by the spawner.
@@ -137,7 +111,6 @@ func _move_toward_target(delta: float) -> void:
 	var direction := to_next.normalized()
 	velocity.x = direction.x * move_speed
 	velocity.z = direction.z * move_speed
-	_last_move_direction = direction
 
 	# Face travel direction. Interpolated so zombies do not snap around when
 	# the path bends around a crate.
