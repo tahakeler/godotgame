@@ -1,24 +1,33 @@
 extends SceneTree
 
-## Integration check for the zombie loop: they spawn, they actually navigate
-## toward the player, and killing one awards reserve ammunition.
+## Integration check for the zombie loop.
 ##
-## Navigation is the part worth testing. A zombie that spawns but never moves
-## produces no error — it just stands at the arena edge, and the game looks
-## finished until you play it.
+## The meaningful question is not "did a zombie move" — a zombie nudged by
+## gravity moves. It is whether zombies spawned in the outer chambers actually
+## path through the corridors and close on the player. A navmesh that bakes but
+## does not connect the ring leaves them milling about in their spawn room
+## forever, and reports no error anywhere.
 
 const GAME_SCENE := "res://src/core/game.tscn"
-const SPAWN_WAIT := 1.2
-const MOVE_WAIT := 2.4
-const MOVEMENT_THRESHOLD := 1.0
-const WATCHDOG_TIMEOUT := 25.0
+
+## Let zombies spawn and settle before the first distance sample.
+const SETTLE_SECONDS := 1.5
+## How long they then get to close the gap.
+const PURSUIT_SECONDS := 7.0
+## Distance a zombie must close to count as genuinely pursuing.
+const REQUIRED_APPROACH := 4.0
+## Fraction of tracked zombies that must be pursuing.
+const REQUIRED_PURSUIT_RATIO := 0.6
+
+const WATCHDOG_TIMEOUT := 45.0
 
 var _game: Game
 var _elapsed := 0.0
-var _spawn_positions: Dictionary = {}
-var _failures: Array[String] = []
-var _phase := 0
 var _watchdog := 0.0
+var _phase := 0
+var _configured := false
+var _start_distances: Dictionary = {}
+var _failures: Array[String] = []
 
 
 func _initialize() -> void:
@@ -33,30 +42,30 @@ func _process(delta: float) -> bool:
 	_watchdog += delta
 	if _watchdog > WATCHDOG_TIMEOUT:
 		printerr("FAIL: timed out after %.0fs — game scene never initialised" % WATCHDOG_TIMEOUT)
+		_teardown()
 		quit(1)
 		return true
 
-	# Pacing is compressed here rather than in _initialize(): @onready vars are
-	# still null until _ready() runs at the start of the first frame, so
-	# _game.spawner would not exist yet. Timing only — no behaviour changes.
+	# @onready vars are null until _ready() runs at the start of the first frame.
 	if _game == null or _game.spawner == null:
 		return false
 
-	if _elapsed == 0.0:
-		var spawner: ZombieSpawner = _game.spawner
-		spawner.grace_period = 0.0
-		spawner.initial_interval = 0.05
-		spawner.minimum_spawn_distance = 0.0
+	if not _configured:
+		_configured = true
+		# Compress pacing only. Spawn distance keeps its real value, so zombies
+		# still start in the outer chambers rather than beside the player.
+		_game.spawner.grace_period = 0.0
+		_game.spawner.initial_interval = 0.35
 
 	_elapsed += delta
 
-	if _phase == 0 and _elapsed >= SPAWN_WAIT:
+	if _phase == 0 and _elapsed >= SETTLE_SECONDS:
 		_phase = 1
-		_capture_spawn_positions()
+		_record_start_distances()
 
-	elif _phase == 1 and _elapsed >= MOVE_WAIT:
+	elif _phase == 1 and _elapsed >= SETTLE_SECONDS + PURSUIT_SECONDS:
 		_phase = 2
-		_check_movement()
+		_check_pursuit()
 		_check_kill_awards_ammo()
 		_report()
 		return true
@@ -64,42 +73,57 @@ func _process(delta: float) -> bool:
 	return false
 
 
-func _capture_spawn_positions() -> void:
-	var zombies := _living_zombies()
+func _record_start_distances() -> void:
+	var player_position: Vector3 = _game.player.global_position
 
-	if zombies.is_empty():
-		_failures.append("no zombies spawned after %.1fs" % SPAWN_WAIT)
+	for zombie in _living_zombies():
+		_start_distances[zombie.get_instance_id()] = \
+			player_position.distance_to(zombie.global_position)
+
+	if _start_distances.is_empty():
+		_failures.append("no zombies spawned after %.1fs" % SETTLE_SECONDS)
+
+
+func _check_pursuit() -> void:
+	if _start_distances.is_empty():
 		return
 
-	for zombie in zombies:
-		_spawn_positions[zombie.get_instance_id()] = zombie.global_position
-
-
-func _check_movement() -> void:
-	if _spawn_positions.is_empty():
-		return
-
-	var moved := 0
+	var player_position: Vector3 = _game.player.global_position
 	var tracked := 0
+	var pursuing := 0
+	var best_approach := 0.0
 
 	for zombie in _living_zombies():
 		var id := zombie.get_instance_id()
-		if not _spawn_positions.has(id):
+		if not _start_distances.has(id):
 			continue
 
 		tracked += 1
-		if zombie.global_position.distance_to(_spawn_positions[id]) >= MOVEMENT_THRESHOLD:
-			moved += 1
+		var distance_now: float = player_position.distance_to(zombie.global_position)
+		var approach: float = _start_distances[id] - distance_now
+		best_approach = maxf(best_approach, approach)
+
+		# A zombie already in contact cannot close any further, so it counts.
+		if approach >= REQUIRED_APPROACH or distance_now <= zombie.attack_range:
+			pursuing += 1
 
 	if tracked == 0:
-		_failures.append("no tracked zombies survived to the movement check")
-	elif moved == 0:
+		_failures.append("no tracked zombies survived to the pursuit check")
+		return
+
+	var ratio := float(pursuing) / float(tracked)
+
+	if ratio < REQUIRED_PURSUIT_RATIO:
 		_failures.append(
-			"%d zombies tracked, none moved %.1fm — navigation is not working"
-			% [tracked, MOVEMENT_THRESHOLD]
+			"only %d of %d zombies closed %.0fm on the player (%.0f%%, need %.0f%%); "
+			% [pursuing, tracked, REQUIRED_APPROACH, ratio * 100.0,
+				REQUIRED_PURSUIT_RATIO * 100.0]
+			+ "best approach %.1fm — the navmesh may not connect the ring" % best_approach
 		)
 	else:
-		print("PASS: %d/%d tracked zombies navigated toward the player" % [moved, tracked])
+		print("PASS: %d/%d zombies pursued from the outer chambers (best %.1fm closed)" % [
+			pursuing, tracked, best_approach
+		])
 
 
 func _check_kill_awards_ammo() -> void:
@@ -133,9 +157,11 @@ func _check_kill_awards_ammo() -> void:
 
 func _living_zombies() -> Array[Zombie]:
 	var result: Array[Zombie] = []
+
 	for child in _game.spawner.get_children():
 		if child is Zombie and is_instance_valid(child) and not child.is_queued_for_deletion():
 			result.append(child)
+
 	return result
 
 
