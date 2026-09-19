@@ -11,6 +11,22 @@ extends CharacterBody3D
 signal died(zombie: Zombie, death_position: Vector3)
 signal hit_player(damage: float, from_position: Vector3)
 signal groaned(groan_position: Vector3)
+## Raised by a zombie that is actively hunting, carrying what it believes. The
+## spawner passes it to anything close enough to hear, which is what turns one
+## noticed gunshot into a chamber emptying toward you.
+signal raised_alarm(zombie: Zombie, believed_position: Vector3)
+
+## What a zombie knows about the player right now.
+enum Awareness {
+	## No idea. Wandering.
+	UNAWARE,
+	## Believes the player is somewhere, from a sound, an alert, or from having
+	## lost sight of them. The belief is frequently wrong by the time it gets
+	## there, which is the point.
+	INVESTIGATING,
+	## Can see the player. Tracks them live.
+	HUNTING,
+}
 
 @export_group("Movement")
 @export var move_speed := 3.2
@@ -27,16 +43,34 @@ signal groaned(groan_position: Vector3)
 @export var attack_cooldown := 1.1
 
 @export_group("Hearing")
-## How far this zombie can hear a noise of loudness 1.0.
+## How far this zombie can hear a noise of loudness 1.0, measured along the
+## navmesh rather than through rock.
 ##
 ## Set per kind by configure(): a Brute hears furthest, which means the thing
 ## you least want to attract is the thing a shot is most likely to bring.
 @export var hearing_range := 26.0
-## How long it keeps heading for a sound before giving up on it.
-@export var investigate_duration := 7.0
-## Inside this distance the player is the only thing that matters and noise is
-## ignored completely.
-@export var engaged_range := 7.0
+## How long it keeps walking toward a belief before giving up on it.
+@export var investigate_duration := 9.0
+## How long it casts about after arriving and finding nothing.
+@export var search_duration := 4.0
+## How far from the arrival point it searches.
+@export var search_radius := 5.0
+
+@export_group("Sight")
+## How far it can see. Generous, because a zombie that cannot see across a
+## chamber makes the whole cave feel empty.
+@export var sight_range := 20.0
+## Total field of view. Behind it counts as unseen, so getting round one works.
+@export var sight_cone_degrees := 140.0
+## Seconds between line-of-sight checks. A raycast per zombie per frame is real
+## cost for information that cannot change meaningfully at walking pace.
+@export var sight_interval := 0.2
+## How long it keeps hunting after losing sight.
+##
+## Not instant on purpose. A zombie that forgot you the moment you stepped
+## behind a rock would be trivial to shake and would read as stupid rather
+## than as something you outmanoeuvred.
+@export var lose_sight_duration := 3.5
 
 @export_group("Feel")
 @export var groan_interval := Vector2(3.5, 9.0)
@@ -47,9 +81,21 @@ var _attack_remaining := 0.0
 var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _groan_remaining := 0.0
-## Where a heard noise came from, and how long this zombie still cares.
-var _investigate_point := Vector3.ZERO
+
+## What this zombie currently believes about the player.
+##
+## Replacing live omniscience with a belief is the whole point of this system.
+## While it was reading the player's real position every frame, noise could
+## only ever distract — it could not inform, because there was nothing left to
+## learn. A belief can be stale, wrong, or planted, and all three are things
+## the player can now work with.
+var awareness: Awareness = Awareness.UNAWARE
+var last_known_position := Vector3.ZERO
+
 var _investigate_remaining := 0.0
+var _search_remaining := 0.0
+var _sight_remaining := 0.0
+var _lost_sight_remaining := 0.0
 
 ## Set by configure(); read by the spawner when this zombie dies.
 var kind: ZombieTypes.Kind = ZombieTypes.Kind.SHAMBLER
@@ -101,7 +147,8 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
-	_tick_investigation(delta)
+	_tick_senses(delta)
+	_tick_awareness(delta)
 	_tick_repath(delta)
 	_move_toward_target(delta)
 	_try_attack()
@@ -142,11 +189,22 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	attack_range = base_attack_range * (height / REFERENCE_HEIGHT)
 
 
-## Assign the node this zombie hunts. Called by the spawner.
+## Assign the node this zombie hunts, and give it a reason to be here.
+##
+## A newly spawned zombie starts out already believing the player is where they
+## were at that moment. That is both the fiction — it is arriving because it
+## heard the fight — and the safeguard that keeps the horde relentless: without
+## it, spawns would wander off into empty chambers and the pressure the whole
+## game is built on would quietly drain away.
 func set_target(target: Node3D) -> void:
 	_target = target
-	if is_inside_tree() and target != null:
-		_agent.target_position = target.global_position
+	if target == null:
+		return
+
+	_believe(target.global_position)
+
+	if is_inside_tree():
+		_agent.target_position = last_known_position
 
 
 ## Damage entry point used by the weapon's raycast.
@@ -157,55 +215,188 @@ func take_damage(amount: float, _hit_position: Vector3 = Vector3.ZERO,
 
 ## React to a noise somewhere in the cave.
 ##
-## The zombie heads for where the sound came from rather than for the player,
-## which is the whole point: a gunshot should cost the shooter their position,
-## not just a bullet. It does not reveal the player, only the place.
+## A sound reveals a *place*, never a person. The zombie goes to look, which is
+## what makes firing cost the shooter their position rather than only a bullet.
 ##
-## Two things are deliberately immune. A zombie already close enough to be a
-## threat ignores noise entirely — something mauling you does not wander off
-## because a gun went off nearby, and letting it would make firing a panic
-## button rather than a cost. And a noise further away than this zombie can
-## hear does nothing at all, which is what makes distance a real defence.
-## Returns true only when the noise actually diverted this zombie.
+## Two deliberate deafnesses. A zombie that can already see the player ignores
+## noise entirely — something with eyes on you does not wander off because a
+## gun went off nearby, and letting it would make firing an escape rather than
+## a cost. And a sound beyond this zombie's hearing does nothing at all, which
+## is what makes distance a defence worth having.
+##
+## Returns true only when the noise actually told this zombie something.
 func hear_noise(noise_position: Vector3, loudness: float) -> bool:
-	if health.is_dead:
+	if health.is_dead or awareness == Awareness.HUNTING:
 		return false
 
-	if global_position.distance_to(noise_position) > hearing_range * loudness:
+	if not _can_hear(noise_position, loudness):
 		return false
 
-	if _target != null and global_position.distance_to(_target.global_position) <= engaged_range:
-		return false
-
-	_investigate_point = noise_position
-	_investigate_remaining = investigate_duration
+	_believe(noise_position)
 	return true
 
 
-## True while this zombie is heading for a sound rather than for the player.
+## Whether a sound at this position and loudness reaches this zombie.
+##
+## Measured along the navmesh rather than straight through rock. In a cave of
+## chambers joined by corridors that is the difference between a system the
+## player can learn and one that feels arbitrary: a wall should muffle, a
+## corridor should carry, and a shot two rooms away should not be as loud as
+## one in the open.
+##
+## Path distance is never shorter than straight-line distance, so the cheap
+## check below is a perfect conservative filter — anything it rejects would
+## have been rejected by the expensive one too. Only sounds that could plausibly
+## reach pay for a path query.
+func _can_hear(noise_position: Vector3, loudness: float) -> bool:
+	var reach := hearing_range * loudness
+	if global_position.distance_to(noise_position) > reach:
+		return false
+
+	var map: RID = get_world_3d().navigation_map
+	var path := NavigationServer3D.map_get_path(
+		map, global_position, noise_position, true
+	)
+
+	# No route at all means no way for the sound to travel either.
+	if path.size() < 2:
+		return false
+
+	var travelled := 0.0
+	for index in range(1, path.size()):
+		travelled += path[index - 1].distance_to(path[index])
+		if travelled > reach:
+			return false
+
+	return true
+
+
+## Adopt a belief about where the player is, and go and look.
+func _believe(where: Vector3) -> void:
+	last_known_position = where
+	_investigate_remaining = investigate_duration
+	_search_remaining = 0.0
+	awareness = Awareness.INVESTIGATING
+
+
+## Told by another zombie. Alerts spread through a crowd, which is what turns
+## one noticed gunshot into a chamber emptying toward you rather than a single
+## zombie taking an interest.
+func receive_alert(where: Vector3) -> void:
+	if health.is_dead or awareness == Awareness.HUNTING:
+		return
+
+	_believe(where)
+
+
 func is_investigating() -> bool:
-	return _investigate_remaining > 0.0
+	return awareness == Awareness.INVESTIGATING
+
+
+func is_hunting() -> bool:
+	return awareness == Awareness.HUNTING
 
 
 ## Where this zombie is currently trying to get to.
+##
+## Hunting tracks the player live; everything else walks to a belief, which may
+## be wrong and usually is by the time it arrives.
 func _move_goal() -> Vector3:
-	return _investigate_point if is_investigating() else _target.global_position
+	if awareness == Awareness.HUNTING and _target != null:
+		return _target.global_position
+
+	return last_known_position
 
 
-## Count down the investigation, and end it early on arrival or on getting
-## close enough to the player that the sound stops being the interesting thing.
-func _tick_investigation(delta: float) -> void:
-	if not is_investigating():
+## Look for the player, and remember having seen them.
+##
+## Sight is checked on a slow cadence rather than every frame. A raycast per
+## zombie per frame is real cost for information that cannot meaningfully
+## change in a tenth of a second at walking pace.
+func _tick_senses(delta: float) -> void:
+	_sight_remaining -= delta
+	if _sight_remaining > 0.0:
+		return
+
+	_sight_remaining = sight_interval
+
+	if _can_see_target():
+		awareness = Awareness.HUNTING
+		last_known_position = _target.global_position
+		_lost_sight_remaining = lose_sight_duration
+		return
+
+	# Sight is not lost the instant the line breaks. A zombie that forgot you
+	# the moment you stepped behind a rock would be trivial to shake off, and
+	# would read as stupid rather than as something you outmanoeuvred.
+	if awareness == Awareness.HUNTING:
+		_lost_sight_remaining -= sight_interval
+		if _lost_sight_remaining <= 0.0:
+			_believe(last_known_position)
+
+
+func _can_see_target() -> bool:
+	if _target == null:
+		return false
+
+	var to_target := _target.global_position - global_position
+	var distance := to_target.length()
+
+	if distance > sight_range:
+		return false
+
+	# Behind counts as unseen, so breaking line of sight by getting behind one
+	# actually works.
+	var facing := -global_transform.basis.z
+	if distance > 0.01 and facing.dot(to_target / distance) < cos(deg_to_rad(sight_cone_degrees * 0.5)):
+		return false
+
+	# Eye height on both ends, or the ray leaves from the floor and clips the
+	# lip of every doorway.
+	var eye_height: float = _collider.shape.height * 0.85
+	var from := global_position + Vector3.UP * eye_height
+	var to := _target.global_position + Vector3.UP * 1.5
+
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	# World geometry only: other zombies must not block the view, or a crowd
+	# would blind itself.
+	query.collision_mask = 1
+	query.exclude = [get_rid()]
+
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+## Run down the belief: walk to it, search around it, then give up on it.
+func _tick_awareness(delta: float) -> void:
+	if awareness != Awareness.INVESTIGATING:
+		return
+
+	if _search_remaining > 0.0:
+		_search_remaining -= delta
+		if _search_remaining <= 0.0:
+			awareness = Awareness.UNAWARE
 		return
 
 	_investigate_remaining -= delta
 
-	if global_position.distance_to(_investigate_point) <= ARRIVAL_DISTANCE:
-		_investigate_remaining = 0.0
+	# Arrived, and nothing here. Cast about nearby before losing interest — a
+	# zombie that snaps from "hunting" to "idle" on the spot reads as a switch
+	# being flipped.
+	if global_position.distance_to(last_known_position) <= ARRIVAL_DISTANCE:
+		_begin_search()
 		return
 
-	if _target != null and global_position.distance_to(_target.global_position) <= engaged_range:
-		_investigate_remaining = 0.0
+	if _investigate_remaining <= 0.0:
+		_begin_search()
+
+
+func _begin_search() -> void:
+	_search_remaining = search_duration
+	last_known_position = global_position + Vector3(
+		randf_range(-search_radius, search_radius),
+		0.0,
+		randf_range(-search_radius, search_radius)
+	)
 
 
 func _tick_repath(delta: float) -> void:
@@ -260,9 +451,19 @@ func _tick_groan(delta: float) -> void:
 	_groan_remaining = randf_range(groan_interval.x, groan_interval.y)
 	groaned.emit(global_position)
 
+	# A zombie that has eyes on the player does not groan quietly to itself.
+	# This is the third channel information travels down, after sight and
+	# sound, and it is the one that makes a crowd behave like a crowd.
+	if awareness == Awareness.HUNTING:
+		raised_alarm.emit(self, last_known_position)
 
+
+## Being shot tells a zombie a great deal, even if it never saw who did it.
 func _on_damaged(_amount: float, _current: float, _maximum: float) -> void:
 	_visual.flash()
+
+	if awareness != Awareness.HUNTING and _target != null:
+		_believe(_target.global_position)
 
 
 func _on_died() -> void:

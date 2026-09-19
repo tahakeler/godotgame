@@ -26,6 +26,8 @@ signal population_changed(alive: int)
 @export var max_alive := 20
 ## Zombies never spawn closer to the player than this.
 @export var minimum_spawn_distance := 14.0
+## How far a hunting zombie's alarm passes to the ones around it.
+@export var alert_radius := 14.0
 
 @export_group("Endless")
 ## Set by Game when the endless mode is chosen.
@@ -82,6 +84,21 @@ func begin(arena: Arena, target: Node3D) -> void:
 
 func stop() -> void:
 	_active = false
+
+
+## Pass one zombie's belief to the ones near it.
+##
+## Straight-line range on purpose, unlike hearing. This is a crowd noticing
+## which way the one next to it is going, not a sound carrying down a corridor,
+## and it should not reach through a wall into the next chamber.
+func _on_alarm_raised(raiser: Zombie, believed_position: Vector3) -> void:
+	for zombie in _alive:
+		if not is_instance_valid(zombie) or zombie == raiser:
+			continue
+		if zombie.global_position.distance_to(raiser.global_position) > alert_radius:
+			continue
+
+		zombie.receive_alert(believed_position)
 
 
 ## Tell every living zombie that something was heard here.
@@ -176,6 +193,7 @@ func _spawn_one() -> void:
 	zombie.contact_damage *= damage_scale
 	zombie.set_target(_target)
 
+	zombie.raised_alarm.connect(_on_alarm_raised)
 	zombie.died.connect(_on_zombie_died)
 	zombie.hit_player.connect(_on_zombie_hit_player)
 	zombie.groaned.connect(func(groan_position: Vector3) -> void:
