@@ -21,6 +21,8 @@ signal dry_fired()
 signal target_hit(target: Node, damage_dealt: float)
 ## Rounds scraped together after running completely dry.
 signal scrounged(amount: int)
+## A decoy has left the hand. Game wires its landing to the noise system.
+signal decoy_thrown(decoy: Decoy)
 ## Where a bullet landed, the surface normal, and whether it was a zombie.
 signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 
@@ -59,6 +61,16 @@ signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 @export var dry_resupply_interval := 7.0
 @export var dry_resupply_amount := 2
 
+@export_group("Decoy")
+@export var throw_speed := 14.0
+@export var throw_gravity := 18.0
+## How much the throw is lobbed above the crosshair.
+@export var throw_lift := 0.25
+@export var throw_cooldown := 0.45
+## Landing volume relative to a gunshot. Just under, so firing stays the
+## loudest thing the player can do.
+@export var decoy_loudness := 0.85
+
 @export_group("Feel")
 @export var recoil_pitch_degrees := 1.4
 @export var recoil_recovery := 9.0
@@ -90,6 +102,7 @@ var _bob_time := 0.0
 var _rest_position := Vector3.ZERO
 ## Counts down only while the weapon is completely dry.
 var _dry_remaining := 0.0
+var _throw_cooldown_remaining := 0.0
 
 @onready var _camera: Camera3D = _resolve_camera()
 @onready var _muzzle: Node3D = $Muzzle
@@ -114,6 +127,7 @@ func _process(delta: float) -> void:
 		return
 
 	_tick_focus_lock(delta)
+	_tick_throw_cooldown(delta)
 	_tick_dry_resupply(delta)
 
 	if auto_reload and magazine_ammo <= 0 and not _is_reloading:
@@ -121,7 +135,12 @@ func _process(delta: float) -> void:
 
 	# Semi-automatic: one bullet per click. The concept's first pillar is
 	# "every bullet is a decision", which holding to spray would undermine.
-	if Input.is_action_just_pressed("fire") and _focus_lock_remaining <= 0.0:
+	# Hold to aim, release to throw. A preview the player cannot study before
+	# committing is not a decision, and the whole value of a decoy is choosing
+	# where it goes.
+	if Input.is_action_just_released("throw_decoy"):
+		try_throw_decoy()
+	elif Input.is_action_just_pressed("fire") and _focus_lock_remaining <= 0.0:
 		try_fire()
 	elif Input.is_action_just_pressed("reload"):
 		try_reload()
@@ -158,6 +177,114 @@ func _tick_dry_resupply(delta: float) -> void:
 	var added := add_reserve_ammo(dry_resupply_amount)
 	if added > 0:
 		scrounged.emit(added)
+
+
+## Throw a round to be heard instead of fired.
+##
+## Costs one from reserve rather than from the magazine: the magazine is what
+## stands between you and the thing in front of you, and making a decoy eat it
+## would turn every throw into a panic. Reserve is the resource you are
+## deciding how to spend, which is where this decision belongs.
+##
+## Returns the decoy so the caller can wire up its landing, or null when there
+## was nothing to throw.
+func try_throw_decoy() -> Decoy:
+	if reserve_ammo <= 0 or _throw_cooldown_remaining > 0.0:
+		return null
+
+	reserve_ammo -= 1
+	_throw_cooldown_remaining = throw_cooldown
+	ammo_changed.emit(magazine_ammo, reserve_ammo)
+
+	var decoy := Decoy.new()
+	decoy.gravity = throw_gravity
+	decoy.loudness = decoy_loudness
+
+	_world_parent().add_child(decoy)
+	decoy.launch(_throw_origin(), _throw_velocity())
+
+	decoy_thrown.emit(decoy)
+	return decoy
+
+
+## Where a thrown decoy is parented.
+##
+## Never the weapon itself — a decoy attached to the weapon would fly along
+## with the camera instead of being thrown. The running scene is the natural
+## home, but it is null when a weapon is built directly rather than as part of
+## a round, so fall back to whatever this weapon hangs from.
+func _world_parent() -> Node:
+	var scene := get_tree().current_scene
+	if scene != null:
+		return scene
+
+	var parent := get_parent()
+	return parent if parent != null else self
+
+
+## Where the arc will land, for the trajectory preview.
+##
+## Steps the same parabola the decoy flies and stops at the first thing it
+## hits, so what the preview draws is what the throw does. A preview computed
+## any other way is a promise the throw does not keep, and the player aimed at
+## that spot.
+func predict_throw(points: int = 24, step := 0.06) -> PackedVector3Array:
+	var arc := PackedVector3Array()
+	if _camera == null:
+		return arc
+
+	var position := _throw_origin()
+	var velocity := _throw_velocity()
+	arc.append(position)
+
+	var space := get_world_3d().direct_space_state
+
+	for index in points:
+		velocity.y -= throw_gravity * step
+		var next := position + velocity * step
+
+		var query := PhysicsRayQueryParameters3D.create(position, next)
+		query.collision_mask = 1
+		var hit := space.intersect_ray(query)
+
+		if not hit.is_empty():
+			arc.append(hit.position)
+			break
+
+		position = next
+		arc.append(position)
+
+	return arc
+
+
+func _throw_origin() -> Vector3:
+	if _camera == null:
+		return global_position
+	# From slightly below the eye, so the arc is visible rather than starting
+	# behind the crosshair.
+	return _camera.global_position + _camera.global_basis.y * -0.15
+
+
+func _throw_velocity() -> Vector3:
+	if _camera == null:
+		return Vector3.FORWARD * throw_speed
+	# Lobbed a little above where you are looking, because a flat throw at a
+	# far wall lands short of where the crosshair implies.
+	var direction := (-_camera.global_basis.z + _camera.global_basis.y * throw_lift).normalized()
+	return direction * throw_speed
+
+
+## True while the player is holding the throw and has something to throw.
+func is_aiming_throw() -> bool:
+	return (
+		_input_enabled
+		and reserve_ammo > 0
+		and Input.is_action_pressed("throw_decoy")
+	)
+
+
+func _tick_throw_cooldown(delta: float) -> void:
+	_throw_cooldown_remaining = maxf(0.0, _throw_cooldown_remaining - delta)
 
 
 ## Fire one round. Returns true only when a bullet actually left the weapon.

@@ -61,6 +61,7 @@ var _weapon: Weapon
 @onready var _vitals_block: Control = $VitalsBlock
 @onready var _ammo_block: Control = $AmmoBlock
 @onready var _noise_ring: Control = %NoiseRing
+@onready var _throw_arc: Control = %ThrowArc
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -70,6 +71,8 @@ var _hurt_pulse := 0.0
 var _noise_remaining := 0.0
 var _noise_loudness := 0.0
 var _noise_heard := 0
+## Where the sound came from in the world, or INF when it has no place.
+var _noise_world := Vector3.INF
 
 
 func _ready() -> void:
@@ -79,6 +82,7 @@ func _ready() -> void:
 	_damage_flash.color.a = 0.0
 	_damage_indicator.draw.connect(_draw_damage_markers)
 	_noise_ring.draw.connect(_draw_noise_ring)
+	_throw_arc.draw.connect(_draw_throw_arc)
 
 	# The results buttons must keep working after the round ends. Nothing pauses
 	# the tree here, but the HUD outliving a round is the point of them.
@@ -92,6 +96,13 @@ func _process(delta: float) -> void:
 	_tick_hitmarker(delta)
 	_tick_hurt_vignette(delta)
 	_tick_noise_ring(delta)
+
+	# The arc follows the camera, so it has to be redrawn every frame it is up
+	# rather than only when something changes.
+	if _weapon != null and _weapon.is_aiming_throw():
+		_throw_arc.queue_redraw()
+	elif _throw_arc.visible:
+		_throw_arc.queue_redraw()
 
 
 ## Connect to a round. Called by Game once every system exists.
@@ -431,11 +442,77 @@ func _tick_hurt_vignette(delta: float) -> void:
 ## ten seconds ago, so it reads as the game cheating rather than as a rule they
 ## can work with. A ring sized to the loudness, turning amber when something
 ## actually heard it, teaches the whole system in about three shots.
-func report_noise(loudness: float, heard_by: int) -> void:
+## The ring is drawn where the sound actually came from, not at the crosshair.
+##
+## For a gunshot those are the same place and it reads as "you gave yourself
+## away". For a thrown decoy they are emphatically not, and the ring appearing
+## over *there* while the crowd turns toward it is what teaches the entire
+## mechanic in a single throw. Anchoring it to the crosshair would say the
+## opposite of what happened.
+func report_noise(loudness: float, heard_by: int, at := Vector3.INF) -> void:
 	_noise_remaining = NOISE_RING_DURATION
 	_noise_loudness = loudness
 	_noise_heard = heard_by
+	_noise_world = at
 	_noise_ring.queue_redraw()
+
+
+## Where on screen a world position falls, or the centre when it cannot be
+## shown — behind the camera, off screen, or with no camera to ask.
+func _noise_screen_position() -> Vector2:
+	var centre := _noise_ring.size * 0.5
+
+	if _player == null or _noise_world == Vector3.INF:
+		return centre
+
+	var camera := _player.camera
+	if camera == null or camera.is_position_behind(_noise_world):
+		return centre
+
+	return camera.unproject_position(_noise_world)
+
+
+## Draw where a thrown round would land.
+##
+## Projected from the same parabola the decoy actually flies, so the arc is a
+## promise the throw keeps. A preview computed any other way would be worse
+## than none: the player aims at the dot, and if the round lands somewhere else
+## they have spent ammunition on a lie.
+func _draw_throw_arc() -> void:
+	if _weapon == null or _player == null or not _weapon.is_aiming_throw():
+		return
+
+	var camera := _player.camera
+	if camera == null:
+		return
+
+	var arc := _weapon.predict_throw()
+	if arc.size() < 2:
+		return
+
+	var colour := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+
+	for index in arc.size():
+		if camera.is_position_behind(arc[index]):
+			continue
+
+		var screen := camera.unproject_position(arc[index])
+		var along := float(index) / float(arc.size() - 1)
+
+		# Dots rather than a line, thinning along the flight. A solid line
+		# reads as a laser sight — something the weapon projects — when this is
+		# the player's own estimate of a throw.
+		colour.a = 0.75 - 0.35 * along
+		_throw_arc.draw_circle(screen, lerpf(3.0, 1.5, along), colour)
+
+	# The landing point is the only part that matters, so it gets a mark of
+	# its own rather than being the last dot of a fading trail.
+	var landing := arc[arc.size() - 1]
+	if not camera.is_position_behind(landing):
+		colour.a = 0.9
+		_throw_arc.draw_arc(
+			camera.unproject_position(landing), 9.0, 0.0, TAU, 20, colour, 1.5, true
+		)
 
 
 func _tick_noise_ring(delta: float) -> void:
@@ -463,7 +540,7 @@ func _draw_noise_ring() -> void:
 	colour.a = (1.0 - progress) * (0.25 + 0.45 * _noise_loudness)
 
 	_noise_ring.draw_arc(
-		_noise_ring.size * 0.5, radius, 0.0, TAU, 48, colour, 1.5, true
+		_noise_screen_position(), radius, 0.0, TAU, 48, colour, 1.5, true
 	)
 
 

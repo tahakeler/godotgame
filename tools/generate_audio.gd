@@ -23,6 +23,7 @@ func _initialize() -> void:
 
 	_write("gunshot", _build_gunshot())
 	_write("brute_growl", _build_brute_growl())
+	_write("decoy_land", _build_decoy_land())
 
 	quit(0)
 
@@ -63,7 +64,39 @@ func _build_gunshot() -> PackedFloat32Array:
 	return samples
 
 
-## A Brute needs to be audible before it is visible, and lower than the crowd.
+## A thrown round hitting rock: a short metallic ring with almost no body.
+##
+## It has to be identifiable as "that was me, over there" from across a
+## chamber, and distinct from a gunshot — the whole mechanic depends on the
+## player telling the two apart by ear.
+func _build_decoy_land() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1717
+
+	var duration := 0.45
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+
+		# A brief scrape of noise for the impact itself.
+		var tick: float = rng.randf_range(-1.0, 1.0) * exp(-t * 180.0)
+
+		# Two inharmonic partials ringing on. Inharmonic is what makes it read
+		# as metal rather than as a musical note.
+		var ring: float = (
+			sin(TAU * 2350.0 * t) * 0.6
+			+ sin(TAU * 3720.0 * t) * 0.4
+		) * exp(-t * 11.0)
+
+		samples[index] = clampf(tick * 0.7 + ring * 0.5, -1.0, 1.0)
+
+	return samples
+
+
+## A Brute needs to be audible before it is visible), and lower than the crowd.
 func _build_brute_growl() -> PackedFloat32Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 909
