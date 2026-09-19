@@ -155,7 +155,12 @@ const PROPS := [
 ## A roof closes the cave in. Without it the player sees over the walls into
 ## empty space, which reads as an unfinished level rather than a cave.
 @export var ceiling_enabled := true
-@export var ceiling_height := 4.15
+## Sits clear of the 5m walls. It used to be below them, so the wall tops cut
+## through the roof and the cave leaked into empty space along every edge.
+@export var ceiling_height := 5.6
+@export var ceiling_thickness := 0.6
+@export var ceiling_colour := Color(0.3, 0.2, 0.19)
+@export var stalactite_count := 90
 
 var spawn_points: Array[Vector3] = []
 
@@ -419,24 +424,68 @@ func _build_ceiling() -> void:
 	# Reaches past the furthest chamber so no edge is ever visible from inside.
 	var extent := 160.0
 
+	# A box rather than a plane. A plane's normals point one way, and a flipped
+	# plane lit from underneath renders as a black void that reads as open sky
+	# — which is exactly what the roof used to look like. A box has correct
+	# outward normals on every face, so its underside is lit like any other
+	# surface and there is nothing to get backwards.
 	var mesh_instance := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(extent, extent)
-	# Flipped to face down into the cave.
-	plane.orientation = PlaneMesh.FACE_Y
-	mesh_instance.mesh = plane
-	mesh_instance.position = Vector3(0.0, ceiling_height, 0.0)
-	mesh_instance.rotation_degrees = Vector3(180.0, 0.0, 0.0)
+	var box := BoxMesh.new()
+	box.size = Vector3(extent, ceiling_thickness, extent)
+	mesh_instance.mesh = box
+	mesh_instance.position = Vector3(
+		0.0, ceiling_height + ceiling_thickness * 0.5, 0.0
+	)
 
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.42, 0.28, 0.25)
+	material.albedo_color = ceiling_colour
 	material.roughness = 1.0
-	# Double-sided so the roof cannot vanish if the plane ends up facing up.
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh_instance.material_override = material
 	mesh_instance.name = "Ceiling"
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	add_child(mesh_instance)
+	_build_stalactites()
+
+
+## Rock hanging from the roof.
+##
+## A flat ceiling reads as a lid on a box however well it is lit. Breaking the
+## silhouette is what makes the space read as a cave, and it costs a handful of
+## cones. They are kept above head height and away from the centre of chambers
+## so they never obstruct a shot.
+func _build_stalactites() -> void:
+	if stalactite_count <= 0:
+		return
+
+	var material := StandardMaterial3D.new()
+	material.albedo_color = ceiling_colour.darkened(0.15)
+	material.roughness = 1.0
+
+	var root := Node3D.new()
+	root.name = "Stalactites"
+	add_child(root)
+
+	var reach := get_play_radius()
+
+	for index in stalactite_count:
+		var cone := CylinderMesh.new()
+		cone.top_radius = _rng.randf_range(0.22, 0.6)
+		cone.bottom_radius = 0.0
+		cone.height = _rng.randf_range(0.8, 2.3)
+		cone.radial_segments = 6
+		cone.rings = 1
+
+		var instance := MeshInstance3D.new()
+		instance.mesh = cone
+		instance.material_override = material
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		instance.position = Vector3(
+			_rng.randf_range(-reach, reach),
+			ceiling_height - cone.height * 0.5,
+			_rng.randf_range(-reach, reach)
+		)
+		root.add_child(instance)
 
 
 ## Zombies enter from the outer chambers, so pressure arrives from every

@@ -6,8 +6,8 @@
 background_mode = 1
 background_color = Color(0.016, 0.013, 0.018, 1)
 ambient_light_source = 3
-ambient_light_color = Color(0.26, 0.25, 0.36, 1)
-ambient_light_energy = 0.2
+ambient_light_color = Color(0.2, 0.22, 0.34, 1)
+ambient_light_energy = 0.15
 tonemap_mode = 3
 tonemap_white = 3.0
 ssao_enabled = true
@@ -17,10 +17,10 @@ ssao_power = 1.8
 ssao_detail = 0.6
 ssil_enabled = false
 fog_enabled = true
-fog_light_color = Color(0.12, 0.075, 0.085, 1)
+fog_light_color = Color(0.1, 0.07, 0.09, 1)
 fog_light_energy = 0.6
-fog_density = 0.024
-fog_height = 6.0
+fog_density = 0.028
+fog_height = 7.2
 fog_height_density = 0.12
 glow_enabled = true
 glow_intensity = 0.85
@@ -29,9 +29,9 @@ glow_bloom = 0.15
 glow_blend_mode = 1
 glow_hdr_threshold = 0.85
 adjustment_enabled = true
-adjustment_brightness = 1.02
-adjustment_contrast = 1.2
-adjustment_saturation = 1.18
+adjustment_brightness = 0.98
+adjustment_contrast = 1.26
+adjustment_saturation = 1.06
 
 [sub_resource type="CameraAttributesPractical" id="CameraAttributes_arena"]
 
