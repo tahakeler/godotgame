@@ -6,15 +6,13 @@ extends NavigationRegion3D
 ## The kit is built on a 4-unit grid: every piece is centred on its own origin,
 ## rooms are 12x12 or 20x20, and corridors are 4x4.
 ##
-## The constraint that shapes everything here: the kit's rooms open on two
-## opposite walls only. The indentations on the other two walls look like
-## doorways from above but are solid rock, so a room can never be a junction.
-## Branching is done with corridor-intersection, which is genuinely open on all
-## four sides, and rooms always sit inline along a run.
+## Every piece opening was measured with tools/probe_openings.gd rather than
+## read off a render: rooms open on all four sides, an unrotated corridor runs
+## along X, and corridor-end caps a stub. Guessing any of that previously cost
+## real time, so the layout below is built against measured fact.
 ##
-## Layout: a 20x20 arena at the centre, a spine running north and south to a
-## crossroads, and east/west arms off each crossroads threading two chambers
-## each — eleven rooms in all, with ten chambers zombies spawn from.
+## Layout: an irregular network of seven chambers around a central arena, with
+## two uneven loops and a pair of dead-end alcoves.
 ##
 ## Collision is generated from the imported meshes. Navigation is not: see
 ## _add_nav_surface for why the cave's own floors cannot be used.
@@ -27,26 +25,81 @@ const CELL := 4.0
 
 const CENTRE_ROOM := "room-large"
 const OUTER_ROOM := "room-small"
+const WIDE_ROOM := "room-wide"
 const CORRIDOR := "corridor"
-const HUB := "corridor-intersection"
+const DEAD_END := "corridor-end"
 
-## Cell of the crossroads on each spine, where the side arms branch off.
-const HUB_CELL := 5
-## Cell of the chamber that caps each spine.
-const SPINE_END_CELL := 9
-## Cells of the two chambers along each side arm.
-const ARM_ROOM_CELLS := [4, 9]
+## Walkable footprint per piece, before rotation. Measured with
+## tools/probe_openings.gd rather than guessed — every room in this kit opens
+## on all four sides, while an unrotated corridor runs along X.
+const FOOTPRINTS := {
+	CENTRE_ROOM: Vector2(17.0, 17.0),
+	OUTER_ROOM: Vector2(9.0, 9.0),
+	WIDE_ROOM: Vector2(17.0, 9.0),
+	CORRIDOR: Vector2(8.0, 2.6),
+	DEAD_END: Vector2(5.0, 2.6),
+}
+
+## The cave network, as {model, cell, rotation}. Deliberately irregular: arms
+## differ in length, chambers differ in size, and the two loops are not mirror
+## images. A symmetric grid reads as a diagram; an uneven one reads as a place.
+const LAYOUT := [
+	# Central arena.
+	{"model": CENTRE_ROOM, "cell": Vector2i(0, 0), "rotation": 0},
+
+	# North run to a small chamber.
+	{"model": CORRIDOR, "cell": Vector2i(0, 3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(0, 4), "rotation": 90},
+	{"model": OUTER_ROOM, "cell": Vector2i(0, 6), "rotation": 0},
+
+	# Short east run into the long hall.
+	{"model": CORRIDOR, "cell": Vector2i(3, 0), "rotation": 0},
+	{"model": WIDE_ROOM, "cell": Vector2i(6, 0), "rotation": 0},
+
+	# Long west run.
+	{"model": CORRIDOR, "cell": Vector2i(-3, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-4, 0), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(-6, 0), "rotation": 0},
+
+	# Short south run.
+	{"model": CORRIDOR, "cell": Vector2i(0, -3), "rotation": 90},
+	{"model": OUTER_ROOM, "cell": Vector2i(0, -5), "rotation": 0},
+
+	# North-west chamber, closing the upper loop.
+	{"model": OUTER_ROOM, "cell": Vector2i(-6, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-2, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-3, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-4, 6), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-6, 2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-6, 3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-6, 4), "rotation": 90},
+
+	# South-east chamber, closing the lower loop.
+	{"model": OUTER_ROOM, "cell": Vector2i(6, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(6, -2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(6, -3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(2, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, -5), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(4, -5), "rotation": 0},
+
+	# Alcoves. Short stubs that go nowhere, purely so the map has edges that
+	# are not all routes — a network where every passage leads somewhere reads
+	# as a puzzle rather than a cave.
+	{"model": CORRIDOR, "cell": Vector2i(-8, 0), "rotation": 0},
+	{"model": DEAD_END, "cell": Vector2i(-9, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(0, 8), "rotation": 90},
+	{"model": DEAD_END, "cell": Vector2i(0, 9), "rotation": 270},
+]
+
+## Chambers zombies arrive from.
+const SPAWN_CELLS := [
+	Vector2i(0, 6), Vector2i(6, 0), Vector2i(-6, 0), Vector2i(0, -5),
+	Vector2i(-6, 6), Vector2i(6, -5),
+]
 
 ## Nodes in this group are the *only* geometry the navmesh is baked from.
 const NAV_SOURCE_GROUP := "navmesh_source"
 
-## Walkable footprints, kept strictly inside the walls of the piece they sit in.
-const NAV_CENTRE_SIZE := 17.0
-const NAV_ROOM_SIZE := 9.0
-const NAV_CORRIDOR_WIDTH := 2.6
-const NAV_HUB_SIZE := 3.0
-## Corridor strips run long so they overlap their neighbours and the rooms.
-const NAV_CORRIDOR_LENGTH := 8.0
 ## Slightly above the sculpted floor, which varies by a few centimetres.
 const NAV_HEIGHT := 0.05
 
@@ -129,43 +182,9 @@ func pick_spawn_point(away_from: Vector3, minimum_distance: float) -> Vector3:
 	return candidates[_rng.randi_range(0, candidates.size() - 1)]
 
 
-## The kit's rooms open on two opposite walls only — the indentations on the
-## other two are decorative, and a corridor placed against one is a corridor
-## into solid rock. So rooms always sit inline in a run, and every branch is a
-## corridor-intersection, which is genuinely open on all four sides.
 func _build_layout() -> void:
-	_place(CENTRE_ROOM, Vector2i(0, 0), 0)
-
-	# Two spines north and south of the arena, since room-large opens that way.
-	for direction: int in [-1, 1]:
-		_build_spine(direction)
-		_build_arms(direction)
-
-
-## Arena -> corridors -> crossroads -> corridors -> end chamber.
-func _build_spine(direction: int) -> void:
-	for distance in [3, 4]:
-		_place(CORRIDOR, Vector2i(0, distance * direction), 90)
-
-	_place(HUB, Vector2i(0, HUB_CELL * direction), 0)
-
-	for distance in [6, 7]:
-		_place(CORRIDOR, Vector2i(0, distance * direction), 90)
-
-	_place(OUTER_ROOM, Vector2i(0, SPINE_END_CELL * direction), 0)
-
-
-## East and west arms leaving each crossroads, each threading two chambers.
-## Rooms are rotated a quarter turn so their openings face along the arm.
-func _build_arms(direction: int) -> void:
-	var row: int = HUB_CELL * direction
-
-	for side: int in [-1, 1]:
-		for distance in [1, 2, 6, 7]:
-			_place(CORRIDOR, Vector2i(distance * side, row), 0)
-
-		for room_distance in ARM_ROOM_CELLS:
-			_place(OUTER_ROOM, Vector2i(room_distance * side, row), 90)
+	for entry in LAYOUT:
+		_place(entry.model, entry.cell, entry.rotation)
 
 
 func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
@@ -179,22 +198,17 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 	_geometry_root.add_child(instance)
 	_add_collision(instance)
 
-	var footprint := Vector2(NAV_CORRIDOR_WIDTH, NAV_CORRIDOR_LENGTH)
-
-	if model == CENTRE_ROOM:
-		footprint = Vector2(NAV_CENTRE_SIZE, NAV_CENTRE_SIZE)
-	elif model == OUTER_ROOM:
-		footprint = Vector2(NAV_ROOM_SIZE, NAV_ROOM_SIZE)
-	elif model == HUB:
-		footprint = Vector2(NAV_HUB_SIZE, NAV_HUB_SIZE)
-	elif is_zero_approx(rotation_degrees):
-		# An unrotated corridor runs along X; rotating it a quarter turn runs it
-		# along Z. The piece reads the opposite way round from what its footprint
-		# suggests, which is what blocked every route until it was checked.
-		footprint = Vector2(NAV_CORRIDOR_LENGTH, NAV_CORRIDOR_WIDTH)
-
-	_add_nav_surface(cell, footprint)
+	_add_nav_surface(cell, _footprint_for(model, rotation_degrees))
 	_add_lighting(model, cell)
+
+
+## Walkable footprint for a piece, turned to match its placement. Quarter turns
+## swap the axes; half turns leave them alone.
+func _footprint_for(model: String, rotation_degrees: float) -> Vector2:
+	var footprint: Vector2 = FOOTPRINTS.get(model, Vector2(4.0, 2.6))
+	var quarter_turned := is_equal_approx(fposmod(rotation_degrees, 180.0), 90.0)
+
+	return Vector2(footprint.y, footprint.x) if quarter_turned else footprint
 
 
 ## Light every piece as it is placed, so lighting scales with the layout
@@ -222,10 +236,10 @@ func _add_lighting(model: String, cell: Vector2i) -> void:
 			light.light_color = Color(1.0, 0.7, 0.42)
 			light.light_energy = 5.0
 			light.omni_range = 15.0
-		HUB:
-			light.light_color = Color(0.45, 0.68, 1.0)
-			light.light_energy = 3.5
-			light.omni_range = 11.0
+		WIDE_ROOM:
+			light.light_color = Color(1.0, 0.66, 0.36)
+			light.light_energy = 5.5
+			light.omni_range = 18.0
 		_:
 			light.light_color = Color(0.42, 0.62, 1.0)
 			light.light_energy = 2.0
@@ -308,7 +322,7 @@ func _build_props() -> void:
 
 func _build_ceiling() -> void:
 	# Reaches past the furthest chamber so no edge is ever visible from inside.
-	var extent := (float(SPINE_END_CELL) * CELL + 16.0) * 2.0
+	var extent := 160.0
 
 	var mesh_instance := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
@@ -335,15 +349,8 @@ func _build_ceiling() -> void:
 func _build_spawn_points() -> void:
 	spawn_points.clear()
 
-	for direction: int in [-1, 1]:
-		var row: int = HUB_CELL * direction
-		spawn_points.append(_cell_to_world(Vector2i(0, SPINE_END_CELL * direction)) + Vector3.UP * 0.2)
-
-		for side: int in [-1, 1]:
-			for room_distance in ARM_ROOM_CELLS:
-				spawn_points.append(
-					_cell_to_world(Vector2i(room_distance * side, row)) + Vector3.UP * 0.2
-				)
+	for cell in SPAWN_CELLS:
+		spawn_points.append(_cell_to_world(cell) + Vector3.UP * 0.2)
 
 
 func _cell_to_world(cell: Vector2i) -> Vector3:
