@@ -41,7 +41,12 @@ dist/
 # === Engine: Godot ===
 .godot/
 *.translation
-export_presets.cfg
+# export_presets.cfg is tracked deliberately. It is normally ignored because
+# it can hold signing credentials, but this one holds none — codesigning is
+# off and there are no passwords in it. Without it in the repository there is
+# no way to build the game from a fresh clone, which was the point of adding
+# it. Re-add this ignore if signing is ever configured here.
+#export_presets.cfg
 .mono/
 data_LastMagazine*/
 # Uncomment if using Godot:
