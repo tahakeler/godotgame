@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/gameplay/player/player.gd" id="1_player"]
 [ext_resource type="PackedScene" path="res://src/gameplay/weapon/weapon.tscn" id="2_weapon"]
+[ext_resource type="Script" path="res://src/gameplay/health.gd" id="3_health"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.4
@@ -28,6 +29,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 cast_shadow = 3
 mesh = SubResource("CapsuleMesh_player")
 surface_material_override/0 = SubResource("StandardMaterial3D_player")
+
+[node name="Health" type="Node" parent="."]
+script = ExtResource("3_health")
+max_health = 100.0
+invulnerability_duration = 0.45
 
 [node name="Head" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)

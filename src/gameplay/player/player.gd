@@ -1,11 +1,23 @@
 class_name Player
 extends CharacterBody3D
 
-## First-person controller. Owns movement, look, and mouse capture only —
-## health and the weapon are separate components so each can be tested and
-## tuned on its own.
+## First-person controller. Movement, look, and mouse capture live here; health
+## is a separate Health component and the weapon is a separate node, so each can
+## be tested and tuned on its own.
+##
+## FEATURE 1 — Player Health.
+## Implements design/gdd/game-concept.md "Feature 1 — Player Health".
+##
+##   Trigger:      zombie contact calls take_damage()
+##   State change: Health.current_health decrements
+##   Result:       damage_taken drives the HUD health bar and the directional
+##                 damage indicator; reaching zero emits died, ending the round
 
 signal look_sensitivity_changed(value: float)
+## `direction_angle` is radians relative to where the player is looking:
+## 0 is dead ahead, positive is to the right, +/-PI is directly behind.
+signal damage_taken(amount: float, direction_angle: float)
+signal died()
 
 @export_group("Movement")
 @export var move_speed := 6.5
@@ -22,6 +34,7 @@ signal look_sensitivity_changed(value: float)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
+@onready var health: Health = $Health
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _look_enabled := true
@@ -30,7 +43,33 @@ var _spawn_transform: Transform3D
 
 func _ready() -> void:
 	_spawn_transform = global_transform
+	health.died.connect(func() -> void: died.emit())
 	capture_mouse()
+
+
+## Damage entry point used by zombies on contact. Returns the amount actually
+## absorbed — zero while the player is inside their invulnerability window,
+## which stops a surrounding crowd from deleting a full health bar in one second.
+func take_damage(amount: float, from_position := Vector3.ZERO,
+		_direction := Vector3.ZERO) -> float:
+	var applied := health.take_damage(amount)
+	if applied <= 0.0:
+		return 0.0
+
+	damage_taken.emit(applied, get_angle_to_source(from_position))
+	return applied
+
+
+## Bearing of a world position relative to where the player is facing.
+func get_angle_to_source(world_position: Vector3) -> float:
+	var to_source := world_position - global_position
+	to_source.y = 0.0
+
+	if to_source.is_zero_approx():
+		return 0.0
+
+	var local := global_transform.basis.inverse() * to_source
+	return atan2(local.x, -local.z)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -110,8 +149,10 @@ func set_mouse_sensitivity(value: float) -> void:
 	look_sensitivity_changed.emit(value)
 
 
-## Return the player to their starting position and clear momentum.
+## Return the player to their starting position, health, and orientation.
 func reset_to_spawn() -> void:
 	velocity = Vector3.ZERO
 	global_transform = _spawn_transform
 	head.rotation = Vector3.ZERO
+	camera.rotation = Vector3.ZERO
+	health.reset()

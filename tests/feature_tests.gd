@@ -8,6 +8,10 @@ extends SceneTree
 ##   /Applications/Godot47.app/Contents/MacOS/Godot --headless --script tests/feature_tests.gd
 
 const WEAPON_SCENE := "res://src/gameplay/weapon/weapon.tscn"
+const PLAYER_SCENE := "res://src/gameplay/player/player.tscn"
+
+## Matches the zombie's contact_damage export.
+const ZOMBIE_CONTACT_DAMAGE := 12.0
 
 var _results: Array[Dictionary] = []
 
@@ -16,9 +20,63 @@ var _results: Array[Dictionary] = []
 ## before the tree starts running do not get _ready() called yet, so exported
 ## defaults would read as zero.
 func _process(_delta: float) -> bool:
+	_run_health_tests()
 	_run_weapon_tests()
 	_report()
 	return true
+
+
+## --- Feature 1: Player Health ---------------------------------------------
+
+func _run_health_tests() -> void:
+	test_player_health_zombie_contact_reduces_health()
+	test_player_health_zero_health_ends_round()
+
+
+func test_player_health_zombie_contact_reduces_health() -> void:
+	# Arrange
+	var player := _make_player()
+	var starting_health: float = player.health.current_health
+
+	# Act — one zombie contact hit
+	var absorbed: float = player.take_damage(ZOMBIE_CONTACT_DAMAGE, Vector3(0, 0, -3))
+
+	# Assert
+	_check(
+		"player_health_zombie_contact_reduces_health",
+		"NORMAL",
+		"absorbed=12.0, health=%.1f, dead=false" % (starting_health - ZOMBIE_CONTACT_DAMAGE),
+		"absorbed=%.1f, health=%.1f, dead=%s" % [
+			absorbed, player.health.current_health, str(player.health.is_dead).to_lower()
+		]
+	)
+	_destroy(player)
+
+
+func test_player_health_zero_health_ends_round() -> void:
+	# Arrange
+	var player := _make_player()
+	player.health.invulnerability_duration = 0.0
+	var death_count := {"value": 0}
+	player.died.connect(func() -> void: death_count.value += 1)
+
+	# Act — damage well past the pool, then try to damage a corpse
+	player.take_damage(player.health.max_health + 50.0, Vector3(0, 0, -3))
+	var post_death_damage: float = player.take_damage(25.0, Vector3(0, 0, -3))
+
+	# Assert — health floors at zero, death fires once, corpse takes nothing
+	_check(
+		"player_health_zero_health_ends_round",
+		"BOUNDARY",
+		"health=0.0, dead=true, died_signals=1, post_death_damage=0.0",
+		"health=%.1f, dead=%s, died_signals=%d, post_death_damage=%.1f" % [
+			player.health.current_health,
+			str(player.health.is_dead).to_lower(),
+			death_count.value,
+			post_death_damage
+		]
+	)
+	_destroy(player)
 
 
 ## --- Feature 2: Ammunition and Reload -------------------------------------
@@ -45,7 +103,7 @@ func test_weapon_fire_with_ammo_decrements_magazine() -> void:
 		"fired=true, magazine=%d" % (starting_magazine - 1),
 		"fired=%s, magazine=%d" % [str(did_fire).to_lower(), weapon.magazine_ammo]
 	)
-	weapon.queue_free()
+	_destroy(weapon)
 
 
 func test_weapon_fire_with_empty_magazine_is_blocked() -> void:
@@ -67,7 +125,7 @@ func test_weapon_fire_with_empty_magazine_is_blocked() -> void:
 			str(did_fire).to_lower(), weapon.magazine_ammo, dry_fire_count.value
 		]
 	)
-	weapon.queue_free()
+	_destroy(weapon)
 
 
 func test_weapon_reload_refills_magazine_from_reserve() -> void:
@@ -89,7 +147,7 @@ func test_weapon_reload_refills_magazine_from_reserve() -> void:
 			str(did_reload).to_lower(), weapon.magazine_ammo, weapon.reserve_ammo
 		]
 	)
-	weapon.queue_free()
+	_destroy(weapon)
 
 
 func test_weapon_reload_with_empty_reserve_is_blocked() -> void:
@@ -111,7 +169,7 @@ func test_weapon_reload_with_empty_reserve_is_blocked() -> void:
 			str(did_reload).to_lower(), weapon.magazine_ammo, str(fully_dry).to_lower()
 		]
 	)
-	weapon.queue_free()
+	_destroy(weapon)
 
 
 ## --- Harness ---------------------------------------------------------------
@@ -121,6 +179,21 @@ func _make_weapon() -> Node:
 	var weapon: Node = scene.instantiate()
 	root.add_child(weapon)
 	return weapon
+
+
+func _make_player() -> Node:
+	var scene: PackedScene = load(PLAYER_SCENE)
+	var player: Node = scene.instantiate()
+	root.add_child(player)
+	return player
+
+
+## Free synchronously rather than with queue_free(). Deferred frees never run
+## once quit() is called on the same frame, and the engine reports the survivors
+## as leaked RIDs at exit — which reads as a real error in the check output.
+func _destroy(node: Node) -> void:
+	root.remove_child(node)
+	node.free()
 
 
 func _check(test_name: String, kind: String, expected: String, actual: String) -> void:
