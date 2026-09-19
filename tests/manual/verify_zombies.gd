@@ -139,7 +139,9 @@ func _check_kill_awards_ammo() -> void:
 	var victim: Zombie = zombies[0]
 	victim.take_damage(victim.health.max_health)
 
-	var expected_reserve := mini(reserve_before + _game.ammo_per_kill, weapon.max_reserve)
+	var expected_reserve := mini(
+		reserve_before + victim.ammo_value + _game.ammo_bonus_per_kill, weapon.max_reserve
+	)
 
 	if _game.kills != kills_before + 1:
 		_failures.append("kill count did not increment: %d -> %d" % [
@@ -151,7 +153,7 @@ func _check_kill_awards_ammo() -> void:
 		])
 	else:
 		print("PASS: kill awarded %d reserve ammo (%d -> %d)" % [
-			_game.ammo_per_kill, reserve_before, weapon.reserve_ammo
+			weapon.reserve_ammo - reserve_before, reserve_before, weapon.reserve_ammo
 		])
 
 

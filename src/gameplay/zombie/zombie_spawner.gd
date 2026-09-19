@@ -7,7 +7,7 @@ extends Node3D
 ## flow-state design calls for difficulty that rises with the player's warm-up
 ## instead of spiking between rounds.
 
-signal zombie_died(death_position: Vector3)
+signal zombie_died(death_position: Vector3, experience: int, ammo: int)
 signal zombie_hit_player(damage: float, from_position: Vector3)
 signal zombie_groaned(groan_position: Vector3)
 signal population_changed(alive: int)
@@ -46,6 +46,11 @@ var _alive: Array[Zombie] = []
 var _spawn_remaining := 0.0
 var _elapsed := 0.0
 var _active := false
+var _rng := RandomNumberGenerator.new()
+
+
+func _ready() -> void:
+	_rng.randomize()
 
 
 func _process(delta: float) -> void:
@@ -140,6 +145,10 @@ func _spawn_one() -> void:
 
 	var zombie: Zombie = zombie_scene.instantiate()
 	add_child(zombie)
+
+	# Configure before positioning: the kind resizes the capsule, and a Brute
+	# placed first would spend its first frame half inside the floor.
+	zombie.configure(ZombieTypes.pick(_elapsed, _rng))
 	zombie.global_position = spawn_position + Vector3.UP * 0.1
 	zombie.contact_damage *= damage_scale
 	zombie.set_target(_target)
@@ -157,7 +166,9 @@ func _spawn_one() -> void:
 func _on_zombie_died(zombie: Zombie, death_position: Vector3) -> void:
 	_alive.erase(zombie)
 	population_changed.emit(_alive.size())
-	zombie_died.emit(death_position)
+	# Rewards travel with the kind that died, so a Brute is worth the magazine
+	# it took to bring down.
+	zombie_died.emit(death_position, zombie.experience_value, zombie.ammo_value)
 
 
 func _on_zombie_hit_player(damage: float, from_position: Vector3) -> void:

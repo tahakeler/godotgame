@@ -35,9 +35,20 @@ var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _groan_remaining := 0.0
 
+## Set by configure(); read by the spawner when this zombie dies.
+var kind: ZombieTypes.Kind = ZombieTypes.Kind.SHAMBLER
+var experience_value := 1
+var ammo_value := 3
+
+## Capsule dimensions at scale 1, captured before any kind resizes them.
+var base_radius := 0.38
+var base_height := 1.7
+var base_attack_range := 1.9
+
 @onready var health: Health = $Health
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
 @onready var _visual: ZombieVisual = $Visual
+@onready var _collider: CollisionShape3D = $CollisionShape3D
 
 
 func _ready() -> void:
@@ -74,6 +85,33 @@ func _physics_process(delta: float) -> void:
 	_try_attack()
 
 	move_and_slide()
+
+
+## Apply a kind's stats and look. Called by the spawner before the zombie
+## enters the fight, so health is set before _ready reads max_health.
+func configure(zombie_kind: ZombieTypes.Kind) -> void:
+	kind = zombie_kind
+	var definition := ZombieTypes.definition(kind)
+
+	move_speed = definition.speed
+	contact_damage = definition.damage
+	experience_value = definition.experience
+	ammo_value = definition.ammo
+
+	health.max_health = definition.health
+	health.current_health = definition.health
+
+	_visual.apply_kind(definition.scale, definition.tint)
+
+	# A Brute is wider as well as taller, and a capsule that does not match
+	# lets it reach through a wall to hit you.
+	var body_scale: float = definition.scale
+	_collider.shape = _collider.shape.duplicate()
+	_collider.shape.radius = base_radius * body_scale
+	_collider.shape.height = base_height * body_scale
+	_collider.position.y = base_height * body_scale * 0.5
+
+	attack_range = base_attack_range * body_scale
 
 
 ## Assign the node this zombie hunts. Called by the spawner.

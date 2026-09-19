@@ -42,11 +42,11 @@ func _test_kill_shortens_extraction() -> void:
 	var time_before: float = _game.time_remaining
 	var reserve_before: int = _game.weapon.reserve_ammo
 
-	_game._on_zombie_died(Vector3.ZERO)
+	_game._on_zombie_died(Vector3.ZERO, 1, 3)
 
 	var expected_time := time_before - _game.seconds_per_kill
 	var expected_reserve := mini(
-		reserve_before + _game.ammo_per_kill, _game.weapon.max_reserve
+		reserve_before + 3 + _game.ammo_bonus_per_kill, _game.weapon.max_reserve
 	)
 
 	if not is_equal_approx(_game.time_remaining, expected_time):
@@ -61,7 +61,7 @@ func _test_kill_shortens_extraction() -> void:
 		])
 	else:
 		print("PASS: kill removed %.1fs from the clock and awarded %d ammo" % [
-			_game.seconds_per_kill, _game.ammo_per_kill
+			_game.seconds_per_kill, _game.weapon.reserve_ammo - reserve_before
 		])
 
 
