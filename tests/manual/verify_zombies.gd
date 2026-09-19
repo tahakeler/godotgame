@@ -12,7 +12,7 @@ const SPAWN_WAIT := 1.2
 const MOVE_WAIT := 2.4
 const MOVEMENT_THRESHOLD := 1.0
 
-var _game: Node3D
+var _game: Game
 var _elapsed := 0.0
 var _spawn_positions: Dictionary = {}
 var _failures: Array[String] = []
