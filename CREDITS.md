@@ -44,14 +44,16 @@ merges them at runtime into a single AnimationPlayer.
 
 ### Note on the firing sound
 
-The RPG Audio pack contains no firearm sound. The weapon's firing sound is a
-percussive clip from that pack (`chop.ogg`) pitched well down. It reads as a
-shot in context, but it is the one audio event without a purpose-made source.
+The RPG Audio pack contains no firearm, and nothing low enough to mark a
+Brute. Those two sounds are synthesised instead by `tools/generate_audio.gd`
+and live in `assets/audio/generated/`. They are original content, so no
+third-party licence applies to them.
 
 ## Self-Created Content
 
 - All GDScript source code in `src/`
 - All scene files (`.tscn`), the UI theme, and the arena layout
+- The gunshot and Brute growl, synthesised by `tools/generate_audio.gd`
 - All lighting, materials, and environment setup
 - Project icon (`icon.svg`)
 

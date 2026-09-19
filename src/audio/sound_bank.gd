@@ -5,16 +5,23 @@ extends Node
 ## it emits signals, Game routes them here by event name, so audio stays out of
 ## the systems it reports on.
 ##
-## All clips are from the Kenney RPG Audio pack (CC0). That pack has no firearm
-## sound, so "fire" uses a percussive clip pitched down; it reads as a shot in
-## context but is the one event without a purpose-made source.
+## Most clips are from the Kenney RPG Audio pack (CC0). Firing and the Brute
+## growl are synthesised instead (tools/generate_audio.gd), because that pack
+## has no firearm and no sound low enough to mark a Brute — and a shot is what
+## the player hears most in this game.
 
 const BASE := "res://assets/audio/%s.ogg"
+const GENERATED := "res://assets/audio/generated/%s.wav"
+
+## Events whose clips are synthesised rather than from the Kenney pack.
+const GENERATED_EVENTS := {
+	"fire": ["gunshot"],
+	"brute_growl": ["brute_growl"],
+}
 
 ## event name -> clip names. Multiple entries are chosen at random so repeated
 ## events do not sound mechanical.
 const EVENTS := {
-	"fire": ["chop"],
 	"dry_fire": ["metalClick"],
 	"reload_start": ["beltHandle1"],
 	"reload_end": ["metalLatch"],
@@ -31,7 +38,8 @@ const EVENTS := {
 ## Per-event volume in dB and pitch range, so one pack of generic clips can
 ## carry very different weights.
 const MIX := {
-	"fire": {"volume": -4.0, "pitch": Vector2(0.62, 0.72)},
+	"fire": {"volume": -5.0, "pitch": Vector2(0.94, 1.06)},
+	"brute_growl": {"volume": -4.0, "pitch": Vector2(0.9, 1.05)},
 	"dry_fire": {"volume": -6.0, "pitch": Vector2(1.0, 1.08)},
 	"reload_start": {"volume": -8.0, "pitch": Vector2(0.9, 1.0)},
 	"reload_end": {"volume": -7.0, "pitch": Vector2(0.95, 1.05)},
@@ -129,11 +137,18 @@ func _pick(event: String) -> AudioStream:
 
 func _preload_streams() -> void:
 	for event in EVENTS:
-		var loaded: Array[AudioStream] = []
+		_streams[event] = _load_all(EVENTS[event], BASE)
 
-		for clip_name in EVENTS[event]:
-			var stream: AudioStream = load(BASE % clip_name)
-			if stream != null:
-				loaded.append(stream)
+	for event in GENERATED_EVENTS:
+		_streams[event] = _load_all(GENERATED_EVENTS[event], GENERATED)
 
-		_streams[event] = loaded
+
+func _load_all(names: Array, pattern: String) -> Array[AudioStream]:
+	var loaded: Array[AudioStream] = []
+
+	for clip_name in names:
+		var stream: AudioStream = load(pattern % clip_name)
+		if stream != null:
+			loaded.append(stream)
+
+	return loaded
