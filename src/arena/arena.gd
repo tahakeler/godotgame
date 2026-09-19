@@ -79,7 +79,7 @@ const PROPS := [
 ## A roof closes the cave in. Without it the player sees over the walls into
 ## empty space, which reads as an unfinished level rather than a cave.
 @export var ceiling_enabled := true
-@export var ceiling_height := 4.35
+@export var ceiling_height := 4.15
 
 var spawn_points: Array[Vector3] = []
 
@@ -194,6 +194,66 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 		footprint = Vector2(NAV_CORRIDOR_LENGTH, NAV_CORRIDOR_WIDTH)
 
 	_add_nav_surface(cell, footprint)
+	_add_lighting(model, cell)
+
+
+## Light every piece as it is placed, so lighting scales with the layout
+## instead of being hand-placed for one that no longer exists.
+##
+## Rooms are lit warm and corridors cold. The contrast is the point: a single
+## colour temperature across a whole level reads flat no matter how bright it
+## is, whereas warm pools separated by cold runs give the eye depth and make
+## each chamber feel like somewhere rather than more of the same.
+func _add_lighting(model: String, cell: Vector2i) -> void:
+	var light := OmniLight3D.new()
+	light.position = _cell_to_world(cell) + Vector3.UP * 3.3
+	light.shadow_enabled = false
+
+	match model:
+		CENTRE_ROOM:
+			light.light_color = Color(1.0, 0.79, 0.52)
+			light.light_energy = 7.0
+			light.omni_range = 22.0
+			# Only the arena casts shadows; the cost is worth it where the
+			# player actually fights, and invisible everywhere else.
+			light.shadow_enabled = true
+			light.position.y = 4.0
+		OUTER_ROOM:
+			light.light_color = Color(1.0, 0.7, 0.42)
+			light.light_energy = 5.0
+			light.omni_range = 15.0
+		HUB:
+			light.light_color = Color(0.45, 0.68, 1.0)
+			light.light_energy = 3.5
+			light.omni_range = 11.0
+		_:
+			light.light_color = Color(0.42, 0.62, 1.0)
+			light.light_energy = 2.0
+			light.omni_range = 8.0
+			light.position.y = 3.0
+
+	_geometry_root.add_child(light)
+	_add_lamp_glow(light)
+
+
+## A small emissive block at each light, so the glow has a visible source
+## rather than appearing to come from nowhere.
+func _add_lamp_glow(light: OmniLight3D) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(0.35, 0.12, 0.35)
+	mesh_instance.mesh = box
+	mesh_instance.position = light.position + Vector3.UP * 0.35
+
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = light.light_color
+	material.emission_enabled = true
+	material.emission = light.light_color
+	material.emission_energy_multiplier = 4.0
+	mesh_instance.material_override = material
+
+	_geometry_root.add_child(mesh_instance)
 
 
 ## Flat walkable footprint for one piece, used as navmesh source geometry.
@@ -260,8 +320,10 @@ func _build_ceiling() -> void:
 	mesh_instance.rotation_degrees = Vector3(180.0, 0.0, 0.0)
 
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.12, 0.09, 0.09)
+	material.albedo_color = Color(0.42, 0.28, 0.25)
 	material.roughness = 1.0
+	# Double-sided so the roof cannot vanish if the plane ends up facing up.
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh_instance.material_override = material
 	mesh_instance.name = "Ceiling"
 

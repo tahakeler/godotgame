@@ -10,6 +10,7 @@ script = ExtResource("1_menu")
 
 [node name="Arena" parent="." instance=ExtResource("2_arena")]
 bake_navigation = false
+ceiling_enabled = false
 
 [node name="MenuCamera" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 2.6, 0)
