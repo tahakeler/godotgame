@@ -4,17 +4,17 @@
 
 [sub_resource type="Environment" id="Environment_arena"]
 background_mode = 1
-background_color = Color(0.03, 0.035, 0.05, 1)
+background_color = Color(0.055, 0.06, 0.085, 1)
 ambient_light_source = 3
-ambient_light_color = Color(0.38, 0.42, 0.55, 1)
-ambient_light_energy = 0.5
+ambient_light_color = Color(0.5, 0.56, 0.72, 1)
+ambient_light_energy = 1.15
 tonemap_mode = 3
-tonemap_white = 6.0
+tonemap_white = 2.2
 fog_enabled = true
-fog_light_color = Color(0.05, 0.055, 0.08, 1)
-fog_density = 0.012
+fog_light_color = Color(0.1, 0.11, 0.16, 1)
+fog_density = 0.006
 glow_enabled = true
-glow_intensity = 0.5
+glow_intensity = 0.45
 glow_bloom = 0.05
 
 [sub_resource type="CameraAttributesPractical" id="CameraAttributes_arena"]
@@ -29,35 +29,35 @@ camera_attributes = SubResource("CameraAttributes_arena")
 [node name="KeyLight" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 18, 0)
 light_color = Color(0.72, 0.78, 1, 1)
-light_energy = 0.55
+light_energy = 1.35
 shadow_enabled = true
 
 [node name="FloodNorth" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, -16)
-light_color = Color(1, 0.78, 0.5, 1)
-light_energy = 3.0
-omni_range = 22.0
+light_color = Color(1, 0.8, 0.55, 1)
+light_energy = 6.5
+omni_range = 30.0
 
 [node name="FloodSouth" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 16)
-light_color = Color(1, 0.78, 0.5, 1)
-light_energy = 3.0
-omni_range = 22.0
+light_color = Color(1, 0.8, 0.55, 1)
+light_energy = 6.5
+omni_range = 30.0
 
 [node name="FloodEast" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 6, 0)
-light_color = Color(1, 0.45, 0.32, 1)
-light_energy = 2.5
-omni_range = 20.0
+light_color = Color(1, 0.5, 0.38, 1)
+light_energy = 5.5
+omni_range = 28.0
 
 [node name="FloodWest" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 6, 0)
-light_color = Color(1, 0.45, 0.32, 1)
-light_energy = 2.5
-omni_range = 20.0
+light_color = Color(1, 0.5, 0.38, 1)
+light_energy = 5.5
+omni_range = 28.0
 
 [node name="CenterLight" type="OmniLight3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 0)
 light_color = Color(0.85, 0.9, 1, 1)
-light_energy = 2.0
-omni_range = 16.0
+light_energy = 5.0
+omni_range = 26.0

@@ -3,13 +3,13 @@
 [ext_resource type="Script" path="res://src/gameplay/weapon/weapon.gd" id="1_weapon"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
-albedo_color = Color(0.16, 0.17, 0.2, 1)
-metallic = 0.7
-roughness = 0.45
+albedo_color = Color(0.36, 0.38, 0.43, 1)
+metallic = 0.55
+roughness = 0.42
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_grip"]
-albedo_color = Color(0.28, 0.2, 0.14, 1)
-roughness = 0.8
+albedo_color = Color(0.45, 0.32, 0.21, 1)
+roughness = 0.78
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_accent"]
 albedo_color = Color(0.85, 0.65, 0.25, 1)
@@ -29,7 +29,7 @@ size = Vector3(0.045, 0.045, 0.3)
 size = Vector3(0.06, 0.16, 0.08)
 
 [node name="Weapon" type="Node3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, -0.22, -0.4)
+transform = Transform3D(0.72, 0, 0, 0, 0.72, 0, 0, 0, 0.72, 0.32, -0.3, -0.58)
 script = ExtResource("1_weapon")
 
 [node name="Receiver" type="MeshInstance3D" parent="."]
@@ -50,6 +50,13 @@ surface_material_override/0 = SubResource("StandardMaterial3D_grip")
 transform = Transform3D(0.35, 0, 0, 0, 0.35, 0, 0, 0, 0.35, 0, 0.085, -0.1)
 mesh = SubResource("BoxMesh_grip")
 surface_material_override/0 = SubResource("StandardMaterial3D_accent")
+
+[node name="ViewmodelLight" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.15, 0.25, 0.25)
+light_color = Color(0.85, 0.88, 1, 1)
+light_energy = 0.85
+omni_range = 1.4
+shadow_enabled = false
 
 [node name="Muzzle" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, -0.46)

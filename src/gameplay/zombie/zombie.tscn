@@ -8,12 +8,12 @@ radius = 0.4
 height = 1.7
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_flesh"]
-albedo_color = Color(0.31, 0.42, 0.26, 1)
-roughness = 0.9
+albedo_color = Color(0.44, 0.58, 0.34, 1)
+roughness = 0.88
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cloth"]
-albedo_color = Color(0.19, 0.21, 0.24, 1)
-roughness = 0.95
+albedo_color = Color(0.3, 0.33, 0.37, 1)
+roughness = 0.92
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eyes"]
 albedo_color = Color(1, 0.25, 0.18, 1)

@@ -149,3 +149,4 @@ $RECYCLE.BIN/
 # .gd carrying the same class_name breaks the whole project at parse time.
 * 2.*
 * [0-9].gd
+screenshot.png
