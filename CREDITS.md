@@ -26,19 +26,21 @@ supporting the work is encouraged at [kenney.nl](https://kenney.nl/).
 | [Modular Cave Kit](https://kenney.nl/assets/modular-cave-kit) | 1.0 | CC0 1.0 | The entire play space — central chamber, corridors, side rooms, and the rock formations used as cover |
 | [Blaster Kit](https://kenney.nl/assets/blaster-kit) | 2.1 | CC0 1.0 | The player's weapon viewmodel (`blaster-a`) and the weapon cases used as floor dressing |
 | [RPG Audio](https://kenney.nl/assets/rpg-audio) | 1.0 | CC0 1.0 | All sound effects — firing, dry-fire, reload, impacts, zombie groans, footsteps, round results |
-| [Animated Characters: Survivors](https://kenney.nl/assets/animated-characters-survivors) | 1.0 | CC0 1.0 | Licence retained for reference; see note below |
+| [Animated Characters: Survivors](https://kenney.nl/assets/animated-characters-survivors) | 1.0 | CC0 1.0 | The zombies — rigged character mesh, zombie skins, and the idle/run animations |
 
 Each pack's original `License.txt` is preserved verbatim under
 `assets/licenses/`.
 
 ### Note on the Survivors pack
 
-The Animated Characters: Survivors pack ships **FBX only**. Godot 4 cannot
-import FBX without an external `FBX2glTF` converter, which would make the
-project depend on a binary that does not travel with it — and the submission
-has to open and run from the ZIP alone. The zombies therefore use original
-primitive-built models rather than this pack. Its licence is retained above
-because the pack was downloaded and evaluated.
+This pack ships **FBX only**, which historically required the external
+`FBX2glTF` converter. Godot 4.7 imports it directly with its built-in `ufbx`
+importer, so no external tool is needed and the project runs from the ZIP
+alone.
+
+The pack separates the rigged mesh from its animations — one file per clip,
+all sharing the same 58-bone skeleton. `src/gameplay/zombie/zombie_visual.gd`
+merges them at runtime into a single AnimationPlayer.
 
 ### Note on the firing sound
 
@@ -50,7 +52,6 @@ shot in context, but it is the one audio event without a purpose-made source.
 
 - All GDScript source code in `src/`
 - All scene files (`.tscn`), the UI theme, and the arena layout
-- Zombie models, built from primitive meshes
 - All lighting, materials, and environment setup
 - Project icon (`icon.svg`)
 

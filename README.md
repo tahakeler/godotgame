@@ -118,12 +118,13 @@ released under **CC0 1.0** (public domain):
 - **Modular Cave Kit** — the cave complex and rock cover
 - **Blaster Kit** — the weapon viewmodel and floor props
 - **RPG Audio** — all sound effects
+- **Animated Characters: Survivors** — the zombie model, skins, and animations
 
 CC0 requires no attribution, but Kenney is credited anyway. Each pack's
 original licence file is preserved under `assets/licenses/`.
 
-All code, scenes, lighting, the UI theme, the arena layout, and the zombie
-models are original to this project. Full details in [CREDITS.md](CREDITS.md).
+All code, scenes, lighting, the UI theme, and the arena layout are original to
+this project. Full details in [CREDITS.md](CREDITS.md).
 
 ## Licence
 
