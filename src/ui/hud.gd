@@ -11,6 +11,11 @@ extends CanvasLayer
 const LOW_HEALTH_FRACTION := 0.35
 const LOW_AMMO_ROUNDS := 2
 
+## A spent round stays visible rather than disappearing, so the magazine's
+## capacity reads as a fixed shape and the gap tells you what you have left.
+const PIP_LOADED := Color(0.929, 0.933, 0.949, 0.95)
+const PIP_SPENT := Color(0.929, 0.933, 0.949, 0.16)
+
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
 
@@ -36,6 +41,7 @@ var _weapon: Weapon
 @onready var _level_label: Label = %LevelLabel
 @onready var _experience_bar: ProgressBar = %ExperienceBar
 @onready var _hurt_vignette: TextureRect = %HurtVignette
+@onready var _magazine_pips: HBoxContainer = %MagazinePips
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -154,7 +160,8 @@ func _on_health_changed(current: float, maximum: float) -> void:
 
 func _on_ammo_changed(magazine: int, reserve: int) -> void:
 	_magazine_label.text = str(magazine)
-	_reserve_label.text = "/ %d" % reserve
+	_reserve_label.text = str(reserve)
+	_update_magazine_pips(magazine)
 
 	if magazine == 0:
 		_magazine_label.modulate = Color(0.9, 0.25, 0.2)
@@ -162,6 +169,34 @@ func _on_ammo_changed(magazine: int, reserve: int) -> void:
 		_magazine_label.modulate = Color(1.0, 0.72, 0.25)
 	else:
 		_magazine_label.modulate = Color(0.95, 0.95, 0.95)
+
+
+## Draw the magazine as a row of rounds rather than only a number.
+##
+## A count has to be read; a row of pips is taken in at a glance, which is the
+## difference between knowing you are nearly dry and noticing it afterwards.
+## The number stays for the exact figure — the pips are for peripheral vision.
+func _update_magazine_pips(magazine: int) -> void:
+	if _weapon == null:
+		return
+
+	var capacity: int = maxi(_weapon.magazine_size, 1)
+
+	# Rebuild only when the capacity itself changes, which an upgrade can do.
+	# Rebuilding every shot would churn a dozen nodes several times a second.
+	if _magazine_pips.get_child_count() != capacity:
+		for child in _magazine_pips.get_children():
+			child.queue_free()
+		for index in capacity:
+			var pip := ColorRect.new()
+			pip.custom_minimum_size = Vector2(9.0, 10.0)
+			pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_magazine_pips.add_child(pip)
+
+	for index in _magazine_pips.get_child_count():
+		var pip: ColorRect = _magazine_pips.get_child(index)
+		var loaded := index < magazine
+		pip.color = PIP_LOADED if loaded else PIP_SPENT
 
 	# Clear a stale "MAGAZINE EMPTY" once rounds are actually available again.
 	if magazine > 0 and _weapon_status_label.text == "MAGAZINE EMPTY":
