@@ -127,7 +127,19 @@ func _test_clock_reaching_zero_wins() -> void:
 		print("PASS: extraction clock reaching zero won the round")
 
 
+## Tear the scene down before quitting. The sound bank holds preloaded audio
+## streams, and leaving them referenced at exit is reported as "resources still
+## in use", which the check treats as a real error.
+func _teardown() -> void:
+	if _game != null and is_instance_valid(_game):
+		root.remove_child(_game)
+		_game.free()
+		_game = null
+
+
 func _report() -> void:
+	_teardown()
+
 	if _failures.is_empty():
 		quit(0)
 		return
