@@ -12,10 +12,11 @@ const REQUIRED_ACTIONS := [
 	"fire",
 	"reload",
 	"restart",
+	"jump",
 ]
 
 const REQUIRED_SCENES := [
-	"res://src/core/main.tscn",
+	"res://src/core/game.tscn",
 ]
 
 func _initialize() -> void:
