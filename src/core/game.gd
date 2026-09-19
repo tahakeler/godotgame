@@ -91,8 +91,14 @@ func _wire_audio() -> void:
 	)
 	player.footstep_taken.connect(func() -> void: sounds.play("footstep"))
 
-	spawner.zombie_groaned.connect(func(groan_position: Vector3) -> void:
-		sounds.play_at("zombie_groan", groan_position)
+	# A Brute announces itself with something lower than the crowd, so it can be
+	# heard coming before the corridor gives it away.
+	spawner.zombie_groaned.connect(
+		func(groan_position: Vector3, kind: ZombieTypes.Kind) -> void:
+			var event := (
+				"brute_growl" if kind == ZombieTypes.Kind.BRUTE else "zombie_groan"
+			)
+			sounds.play_at(event, groan_position)
 	)
 
 	round_won.connect(
