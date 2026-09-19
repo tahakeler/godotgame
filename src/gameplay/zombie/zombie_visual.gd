@@ -21,10 +21,27 @@ const ANIMATION_SOURCES := {
 	"run": {"scene": "res://assets/models/characters/run.fbx", "clip": "Root|Run"},
 }
 
-@export var model_scale := 0.95
+## Height of the unscaled model from feet to the top of the head, in metres.
+##
+## Measured from the rig's bone poses rather than the mesh bounds — a skinned
+## mesh reports its bind-pose AABB, which for this pack is a few centimetres
+## across and tells you nothing. Everything else here is derived from this, so
+## if the model is ever replaced this is the one number to re-measure.
+const NATIVE_HEIGHT := 3.705
+
 ## Run animation plays above this horizontal speed.
 @export var run_speed_threshold := 0.5
 @export var hit_flash_duration := 0.09
+
+@export_group("Locomotion")
+## Ground speed the run animation was authored to travel at, for a model at
+## NATIVE_HEIGHT. Playback is scaled against this so the feet keep up with the
+## body instead of skating — the run cycle is otherwise played at a fixed rate
+## no matter how fast the zombie is actually moving.
+@export var run_reference_speed := 4.4
+## Playback bounds, so a very fast or very slow zombie still animates legibly.
+@export var min_animation_speed := 0.55
+@export var max_animation_speed := 1.9
 
 var _mesh: MeshInstance3D
 var _animation_player: AnimationPlayer
@@ -32,7 +49,10 @@ var _skin_material: StandardMaterial3D
 var _flash_material: StandardMaterial3D
 var _current_animation := ""
 var _model: Node3D
-var _kind_scale := 1.0
+## Ratio the model is drawn at. Defaults to a plain Shambler's height so a
+## zombie built without configure() is still the right size rather than the
+## model's raw 3.7m.
+var _kind_scale := 2.0 / NATIVE_HEIGHT
 var _flash_remaining := 0.0
 
 
@@ -52,19 +72,25 @@ func _process(delta: float) -> void:
 		_mesh.material_override = _skin_material
 
 
-## Resize and tint the body for a kind.
+## Resize the body to a real height in metres, and tint it for its kind.
 ##
 ## Tint multiplies the skin rather than replacing it, so a Brute still reads as
 ## the same creature rather than a recoloured prop — the silhouette does the
 ## identifying and the colour only confirms it.
-func apply_kind(scale_factor: float, tint: Color) -> void:
-	_kind_scale = scale_factor
+func apply_kind(target_height: float, tint: Color) -> void:
+	_kind_scale = target_height / NATIVE_HEIGHT
 
 	if _model != null:
-		_model.scale = Vector3.ONE * model_scale * scale_factor
+		_model.scale = Vector3.ONE * _kind_scale
 
 	if _skin_material != null:
 		_skin_material.albedo_color = tint
+
+
+## How much the model was shrunk to reach its height. The zombie uses it to
+## keep the collision capsule the same size as what is actually drawn.
+func get_body_scale() -> float:
+	return _kind_scale
 
 
 ## Cut the body loose as a corpse that collapses and fades.
@@ -103,9 +129,28 @@ func detach_as_corpse(collapse_time: float) -> Node3D:
 	return self
 
 
-## Switch animation based on how fast the zombie is actually moving.
+## Switch animation based on how fast the zombie is actually moving, and play
+## it at a rate that matches that speed.
+##
+## A shorter zombie covers less ground per stride, so the speed it needs to
+## animate at is relative to its own size — scaling by the body scale is what
+## keeps a Runner from looking like it is gliding and a Brute from looking like
+## it is running on the spot.
 func update_locomotion(horizontal_speed: float) -> void:
-	play_animation("run" if horizontal_speed > run_speed_threshold else "idle")
+	var is_running := horizontal_speed > run_speed_threshold
+	play_animation("run" if is_running else "idle")
+
+	if _animation_player == null:
+		return
+
+	if not is_running:
+		_animation_player.speed_scale = 1.0
+		return
+
+	var stride_speed: float = run_reference_speed * maxf(_kind_scale, 0.01)
+	_animation_player.speed_scale = clampf(
+		horizontal_speed / stride_speed, min_animation_speed, max_animation_speed
+	)
 
 
 func play_animation(name: String) -> void:
@@ -134,7 +179,7 @@ func _build_model() -> void:
 		return
 
 	var model: Node3D = scene.instantiate()
-	model.scale = Vector3.ONE * model_scale * _kind_scale
+	model.scale = Vector3.ONE * _kind_scale
 	add_child(model)
 
 	_model = model

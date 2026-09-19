@@ -19,7 +19,15 @@ const DEFINITIONS := {
 		"health": 50.0,
 		"speed": 3.2,
 		"damage": 12.0,
-		"scale": 1.0,
+		## Rendered height in metres, measured from the floor. This is a real
+		## world measurement rather than a multiplier because it drives two
+		## things that must agree — the model and the collision capsule. They
+		## were previously set from separate numbers and drifted a factor of
+		## two apart, which put the hitbox around a zombie's legs while the
+		## player was aiming at its chest.
+		##
+		## Two metres is deliberately a head taller than the 1.8m player.
+		"height": 2.0,
 		"tint": Color(1.0, 1.0, 1.0),
 		"experience": 1,
 		"ammo": 3,
@@ -35,7 +43,7 @@ const DEFINITIONS := {
 		"health": 26.0,
 		"speed": 5.8,
 		"damage": 8.0,
-		"scale": 0.9,
+		"height": 1.85,
 		"tint": Color(0.78, 1.0, 0.82),
 		"experience": 2,
 		"ammo": 3,
@@ -49,7 +57,7 @@ const DEFINITIONS := {
 		"health": 165.0,
 		"speed": 2.0,
 		"damage": 28.0,
-		"scale": 1.3,
+		"height": 2.6,
 		"tint": Color(0.95, 0.62, 0.58),
 		"experience": 5,
 		"ammo": 8,

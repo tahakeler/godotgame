@@ -84,6 +84,7 @@ func _wire_audio() -> void:
 		sounds.play("fire")
 	)
 	weapon.dry_fired.connect(func() -> void: sounds.play("dry_fire"))
+	weapon.scrounged.connect(func(_amount: int) -> void: sounds.play("ammo_gained"))
 	weapon.reload_started.connect(func(_duration: float) -> void:
 		sounds.play("reload_start")
 	)
