@@ -69,6 +69,7 @@ run_step "arena" "$GODOT" --headless --script tests/manual/verify_arena.gd
 run_step "navmesh" "$GODOT" --headless --script tests/manual/verify_navmesh.gd
 run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
+run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
 run_step "feature-tests" "$GODOT" --headless --script tests/feature_tests.gd
 run_step "boot" "$GODOT" --headless --quit-after 120
 

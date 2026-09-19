@@ -32,6 +32,8 @@ var _weapon: Weapon
 @onready var _overlay_title: Label = %OverlayTitle
 @onready var _overlay_detail: Label = %OverlayDetail
 @onready var _hitmarker: Control = %Hitmarker
+@onready var _level_label: Label = %LevelLabel
+@onready var _experience_bar: ProgressBar = %ExperienceBar
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -62,6 +64,7 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	game.round_won.connect(_on_round_won)
 	game.round_lost.connect(_on_round_lost)
 	game.round_started.connect(_on_round_started)
+	game.progression.experience_changed.connect(_on_experience_changed)
 
 	player.health.changed.connect(_on_health_changed)
 	player.damage_taken.connect(_on_damage_taken)
@@ -115,6 +118,12 @@ func _timer_caption() -> String:
 			return "SURVIVED"
 		_:
 			return "EXTRACTION"
+
+
+func _on_experience_changed(current: int, needed: int, level: int) -> void:
+	_level_label.text = "LV %d" % level
+	_experience_bar.max_value = maxf(float(needed), 1.0)
+	_experience_bar.value = current
 
 
 func _on_kills_changed(kills: int) -> void:

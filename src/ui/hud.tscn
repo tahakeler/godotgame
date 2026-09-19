@@ -129,6 +129,37 @@ theme_override_constants/outline_size = 5
 theme_override_font_sizes/font_size = 22
 text = "KILLS  0"
 
+[node name="LevelLabel" type="Label" parent="."]
+unique_name_in_owner = true
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = -112.0
+offset_right = 200.0
+offset_bottom = -88.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 19
+text = "LV 1"
+
+[node name="ExperienceBar" type="ProgressBar" parent="."]
+unique_name_in_owner = true
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 90.0
+offset_top = -106.0
+offset_right = 288.0
+offset_bottom = -94.0
+mouse_filter = 2
+modulate = Color(0.878, 0.631, 0.235, 1)
+max_value = 4.0
+value = 0.0
+show_percentage = false
+
 [node name="ZombiesLabel" type="Label" parent="."]
 unique_name_in_owner = true
 offset_left = 28.0
