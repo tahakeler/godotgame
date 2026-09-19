@@ -1,58 +1,97 @@
 class_name Arena
 extends NavigationRegion3D
 
-## Builds the play space procedurally: floor, perimeter walls, cover obstacles,
-## and the spawn ring zombies enter from. Geometry is generated rather than
-## hand-placed so the layout can be re-tuned by changing exported values, and so
-## the navigation mesh is always baked against the geometry that actually exists.
+## The play space, assembled from Kenney Modular Cave Kit pieces (CC0).
+##
+## The kit is built on a 4-unit grid: every piece is centred on its own origin,
+## rooms are 12x12 or 20x20, corridors are 4x4, and each room wall carries a
+## one-cell door opening at its midpoint. The layout table below places pieces
+## on that grid — a central arena with four side chambers, so the horde can
+## arrive from any bearing instead of funnelling down a single route.
+##
+## Collision and navigation are both generated from the imported meshes; the
+## kit ships neither.
 
-@export_group("Dimensions")
-@export var arena_size := 44.0
-@export var wall_height := 6.0
-@export var wall_thickness := 1.0
+const CAVE_PATH := "res://assets/models/cave/%s.glb"
+const PROP_PATH := "res://assets/models/weapons/%s.glb"
 
-@export_group("Obstacles")
-@export var obstacle_count := 14
-@export var obstacle_min_size := Vector3(1.6, 1.2, 1.6)
-@export var obstacle_max_size := Vector3(4.5, 3.4, 4.5)
-## Obstacles are kept out of this radius so the player never spawns inside cover.
-@export var center_clearance := 6.0
+## Grid unit of the cave kit. Every placement below is a multiple of this.
+const CELL := 4.0
 
-@export_group("Spawning")
-@export var spawn_point_count := 10
-## How far inside the walls zombies appear.
-@export var spawn_inset := 3.5
+## model, grid position in cells, y-rotation in degrees.
+const LAYOUT := [
+	{"model": "room-large", "cell": Vector2i(0, 0), "rotation": 0},
 
-@export_group("Generation")
-## Fixed so the arena is identical every run — players learn one layout.
+	{"model": "corridor", "cell": Vector2i(0, -3), "rotation": 0},
+	{"model": "room-small", "cell": Vector2i(0, -5), "rotation": 0},
+
+	{"model": "corridor", "cell": Vector2i(0, 3), "rotation": 0},
+	{"model": "room-small", "cell": Vector2i(0, 5), "rotation": 0},
+
+	{"model": "corridor", "cell": Vector2i(3, 0), "rotation": 90},
+	{"model": "room-small", "cell": Vector2i(5, 0), "rotation": 90},
+
+	{"model": "corridor", "cell": Vector2i(-3, 0), "rotation": 90},
+	{"model": "room-small", "cell": Vector2i(-5, 0), "rotation": 90},
+]
+
+## Rock formations used as cover in the central room, from the cave kit. Scaled
+## below full wall height so they break sightlines without turning the arena
+## into a maze — the concept's anti-pillar rules out anything that makes
+## turtling viable.
+const COVER := [
+	{"position": Vector3(-6.0, 0, -4.5), "rotation": 18, "scale": 0.62},
+	{"position": Vector3(6.5, 0, 4.0), "rotation": -110, "scale": 0.7},
+	{"position": Vector3(5.5, 0, -6.5), "rotation": 65, "scale": 0.55},
+	{"position": Vector3(-6.5, 0, 6.0), "rotation": -40, "scale": 0.66},
+	{"position": Vector3(-1.5, 0, 7.8), "rotation": 140, "scale": 0.5},
+	{"position": Vector3(2.0, 0, -8.0), "rotation": -75, "scale": 0.58},
+]
+
+## Flat weapon cases from the Kenney Blaster Kit (CC0), used as floor dressing.
+## They are 0.23m tall, so they are set dressing rather than cover.
+const PROPS := [
+	{"model": "crate-wide", "position": Vector3(3.2, 0, 2.4), "rotation": 24},
+	{"model": "crate-medium", "position": Vector3(-3.6, 0, 1.6), "rotation": -52},
+	{"model": "crate-small", "position": Vector3(1.2, 0, -3.4), "rotation": 88},
+]
+
+## Where zombies enter. Side chambers and corridor mouths, so pressure arrives
+## from several bearings at once.
+const SPAWN_CELLS := [
+	Vector2i(0, -5), Vector2i(0, 5), Vector2i(5, 0), Vector2i(-5, 0),
+	Vector2i(0, -3), Vector2i(0, 3), Vector2i(3, 0), Vector2i(-3, 0),
+]
+
 @export var generation_seed := 20260919
 
 var spawn_points: Array[Vector3] = []
 
-var _obstacle_bounds: Array[AABB] = []
 var _rng := RandomNumberGenerator.new()
-
-@onready var _floor_material := _make_material(Color(0.3, 0.31, 0.35), 0.88)
-@onready var _wall_material := _make_material(Color(0.22, 0.23, 0.28), 0.82)
-@onready var _obstacle_material := _make_material(Color(0.44, 0.39, 0.32), 0.72)
+var _geometry_root: Node3D
 
 
 func _ready() -> void:
 	_rng.seed = generation_seed
-	_build_floor()
-	_build_walls()
-	_build_obstacles()
+
+	_geometry_root = Node3D.new()
+	_geometry_root.name = "Geometry"
+	add_child(_geometry_root)
+
+	_build_layout()
+	_build_cover()
+	_build_props()
 	_build_spawn_points()
 	_bake()
 
 
-## Half-extent of the playable floor, minus wall thickness.
+## Half-extent of the central room.
 func get_play_radius() -> float:
-	return arena_size * 0.5 - wall_thickness
+	return 10.0
 
 
-## A random spawn position, biased away from the player so zombies do not
-## materialise on top of them.
+## A spawn position biased away from the player, so zombies never appear on
+## top of them.
 func pick_spawn_point(away_from: Vector3, minimum_distance: float) -> Vector3:
 	if spawn_points.is_empty():
 		return Vector3.ZERO
@@ -67,131 +106,87 @@ func pick_spawn_point(away_from: Vector3, minimum_distance: float) -> Vector3:
 	return candidates[_rng.randi_range(0, candidates.size() - 1)]
 
 
-func _build_floor() -> void:
-	var body := StaticBody3D.new()
-	body.name = "Floor"
-
-	var mesh := MeshInstance3D.new()
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(arena_size, arena_size)
-	mesh.mesh = plane
-	mesh.material_override = _floor_material
-	body.add_child(mesh)
-
-	var collider := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(arena_size, wall_thickness, arena_size)
-	collider.shape = box
-	collider.position = Vector3(0.0, -wall_thickness * 0.5, 0.0)
-	body.add_child(collider)
-
-	add_child(body)
-
-
-func _build_walls() -> void:
-	var half := arena_size * 0.5
-	var offsets := [
-		Vector3(0.0, wall_height * 0.5, -half),
-		Vector3(0.0, wall_height * 0.5, half),
-		Vector3(-half, wall_height * 0.5, 0.0),
-		Vector3(half, wall_height * 0.5, 0.0),
-	]
-	var sizes := [
-		Vector3(arena_size + wall_thickness, wall_height, wall_thickness),
-		Vector3(arena_size + wall_thickness, wall_height, wall_thickness),
-		Vector3(wall_thickness, wall_height, arena_size + wall_thickness),
-		Vector3(wall_thickness, wall_height, arena_size + wall_thickness),
-	]
-
-	for i in offsets.size():
-		_add_box("Wall%d" % i, offsets[i], sizes[i], _wall_material)
-
-
-func _build_obstacles() -> void:
-	var placement_limit := get_play_radius() - 2.0
-	var attempts := 0
-
-	while _obstacle_bounds.size() < obstacle_count and attempts < obstacle_count * 40:
-		attempts += 1
-
-		var size := Vector3(
-			_rng.randf_range(obstacle_min_size.x, obstacle_max_size.x),
-			_rng.randf_range(obstacle_min_size.y, obstacle_max_size.y),
-			_rng.randf_range(obstacle_min_size.z, obstacle_max_size.z)
-		)
-		var position := Vector3(
-			_rng.randf_range(-placement_limit, placement_limit),
-			size.y * 0.5,
-			_rng.randf_range(-placement_limit, placement_limit)
-		)
-
-		if Vector2(position.x, position.z).length() < center_clearance:
+func _build_layout() -> void:
+	for entry in LAYOUT:
+		var instance := _instantiate(CAVE_PATH % entry.model)
+		if instance == null:
 			continue
 
-		# Padding keeps a walkable gap between obstacles so the navmesh stays
-		# connected and zombies cannot wedge themselves in a crevice.
-		var candidate := AABB(position - size * 0.5, size).grow(1.5)
-		var overlaps := _obstacle_bounds.any(
-			func(existing: AABB) -> bool: return existing.intersects(candidate)
-		)
-		if overlaps:
+		instance.position = _cell_to_world(entry.cell)
+		instance.rotation.y = deg_to_rad(entry.rotation)
+		instance.name = "%s_%d_%d" % [entry.model, entry.cell.x, entry.cell.y]
+		_geometry_root.add_child(instance)
+		_add_collision(instance)
+
+
+func _build_cover() -> void:
+	for entry in COVER:
+		var instance := _instantiate(CAVE_PATH % "template-detail")
+		if instance == null:
 			continue
 
-		_obstacle_bounds.append(candidate)
-		_add_box("Obstacle%d" % _obstacle_bounds.size(), position, size, _obstacle_material)
+		instance.position = entry.position
+		instance.rotation.y = deg_to_rad(entry.rotation)
+		instance.scale = Vector3.ONE * entry.scale
+		instance.name = "Cover"
+		_geometry_root.add_child(instance)
+		_add_collision(instance)
+
+
+func _build_props() -> void:
+	for entry in PROPS:
+		var instance := _instantiate(PROP_PATH % entry.model)
+		if instance == null:
+			continue
+
+		instance.position = entry.position
+		instance.rotation.y = deg_to_rad(entry.rotation)
+		_geometry_root.add_child(instance)
+		_add_collision(instance)
 
 
 func _build_spawn_points() -> void:
 	spawn_points.clear()
-	var radius := get_play_radius() - spawn_inset
-
-	for i in spawn_point_count:
-		var angle := TAU * float(i) / float(spawn_point_count)
-		var candidate := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-
-		# Nudge inward until the point is clear of cover, so zombies never spawn
-		# inside a crate.
-		var pullback := 0.0
-		while pullback < radius * 0.6 and _is_blocked(candidate):
-			pullback += 1.0
-			candidate = Vector3(
-				cos(angle) * (radius - pullback), 0.0, sin(angle) * (radius - pullback)
-			)
-
-		if not _is_blocked(candidate):
-			spawn_points.append(candidate)
+	for cell in SPAWN_CELLS:
+		spawn_points.append(_cell_to_world(cell) + Vector3.UP * 0.2)
 
 
-func _is_blocked(point: Vector3) -> bool:
-	var probe := AABB(point - Vector3(0.5, 0.0, 0.5), Vector3(1.0, 2.0, 1.0))
-	return _obstacle_bounds.any(func(bounds: AABB) -> bool: return bounds.intersects(probe))
+func _cell_to_world(cell: Vector2i) -> Vector3:
+	return Vector3(float(cell.x) * CELL, 0.0, float(cell.y) * CELL)
 
 
-func _add_box(node_name: String, position: Vector3, size: Vector3, material: Material) -> void:
-	var body := StaticBody3D.new()
-	body.name = node_name
-	body.position = position
+func _instantiate(path: String) -> Node3D:
+	var scene: PackedScene = load(path)
+	if scene == null:
+		push_error("Arena: could not load %s" % path)
+		return null
+	return scene.instantiate()
 
-	var mesh := MeshInstance3D.new()
-	var box_mesh := BoxMesh.new()
-	box_mesh.size = size
-	mesh.mesh = box_mesh
-	mesh.material_override = material
-	body.add_child(mesh)
 
-	var collider := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = size
-	collider.shape = shape
-	body.add_child(collider)
+## The kit ships no collision shapes, so build static trimesh bodies from the
+## imported meshes. Trimesh is correct here because every piece is static level
+## geometry that never moves.
+func _add_collision(node: Node) -> void:
+	for mesh_instance in _find_mesh_instances(node):
+		mesh_instance.create_trimesh_collision()
 
-	add_child(body)
+
+func _find_mesh_instances(node: Node) -> Array[MeshInstance3D]:
+	var found: Array[MeshInstance3D] = []
+
+	if node is MeshInstance3D and node.mesh != null:
+		found.append(node)
+
+	for child in node.get_children():
+		found.append_array(_find_mesh_instances(child))
+
+	return found
 
 
 func _bake() -> void:
 	var nav_mesh := NavigationMesh.new()
-	# Agent dimensions are exact multiples of cell_size, otherwise the baker
-	# rounds them to voxel units and the mesh no longer matches these values.
+	# Agent dimensions must be exact multiples of cell_size, or the baker rounds
+	# them to voxel units and the mesh stops matching these values.
 	nav_mesh.agent_radius = 0.5
 	nav_mesh.agent_height = 2.0
 	nav_mesh.agent_max_climb = 0.5
@@ -199,18 +194,11 @@ func _bake() -> void:
 	# the mesh rasterises against a different grid than the one agents query.
 	nav_mesh.cell_size = 0.25
 	nav_mesh.cell_height = 0.25
-	nav_mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	# Parse meshes rather than colliders: create_trimesh_collision() attaches
+	# its bodies deferred, so they are not reliably in the tree at bake time.
+	nav_mesh.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_MESH_INSTANCES
 	nav_mesh.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_ROOT_NODE_CHILDREN
 	navigation_mesh = nav_mesh
 
-	# Synchronous bake — zombies query the mesh on the first frame, so it has to
-	# exist before _ready() returns.
+	# Synchronous — zombies query the mesh on their first frame.
 	bake_navigation_mesh(false)
-
-
-func _make_material(albedo: Color, roughness: float) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = albedo
-	material.roughness = roughness
-	material.metallic = 0.05
-	return material
