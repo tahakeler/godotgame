@@ -16,6 +16,8 @@ signal kills_changed(kills: int)
 
 enum RoundState { PLAYING, WON, LOST }
 
+const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
+
 @export_group("Extraction")
 ## Baseline round length before any kills are counted.
 @export var extraction_duration := 120.0
@@ -36,6 +38,10 @@ var round_duration := 120.0
 var time_remaining := 0.0
 var elapsed_time := 0.0
 var kills := 0
+## Shots that left the barrel, and shots that reached a zombie. Reset with the
+## round, so accuracy on the results screen is for that run only.
+var shots_fired := 0
+var shots_hit := 0
 
 @onready var arena: Arena = $Arena
 @onready var player: Player = $Player
@@ -72,6 +78,7 @@ func _ready() -> void:
 
 	_capture_baselines()
 	_wire_audio()
+	_wire_statistics()
 	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
 	start_round()
@@ -117,6 +124,21 @@ func _wire_audio() -> void:
 	)
 
 
+## Count what the results screen reports.
+##
+## Kept on the round rather than on the weapon, because accuracy describes a
+## run and the weapon outlives runs. A shot that leaves the barrel is one
+## attempt and a shot that reaches a zombie is one hit, so missing costs the
+## bullet and the percentage but nothing more.
+func _wire_statistics() -> void:
+	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
+		shots_fired += 1
+	)
+	weapon.target_hit.connect(func(_target: Node, _damage: float) -> void:
+		shots_hit += 1
+	)
+
+
 ## Route gameplay signals to visual effects and camera feel, for the same reason
 ## audio is routed here: the weapon should not know what a hit looks like, only
 ## that it hit.
@@ -146,9 +168,17 @@ func _wire_effects() -> void:
 ## the only way out was clicking Resume, with a mouse. Closing is handled by
 ## PauseMenu itself, which is the node still awake at that point.
 func _unhandled_input(event: InputEvent) -> void:
-	if state == RoundState.PLAYING and event.is_action_pressed("pause"):
+	if not event.is_action_pressed("pause"):
+		return
+
+	if state == RoundState.PLAYING:
 		_toggle_pause()
-		get_viewport().set_input_as_handled()
+	else:
+		# There is nothing to pause once the round is over, so the same control
+		# leaves for the menu — which is what the results screen offers.
+		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
+
+	get_viewport().set_input_as_handled()
 
 
 func _process(delta: float) -> void:
@@ -190,6 +220,8 @@ func start_round() -> void:
 
 	state = RoundState.PLAYING
 	kills = 0
+	shots_fired = 0
+	shots_hit = 0
 	elapsed_time = 0.0
 	time_remaining = round_duration
 
