@@ -82,6 +82,7 @@ run_step "tension" "$GODOT" --headless --script tests/manual/verify_tension.gd
 run_step "game-loop" "$GODOT" --headless --script tests/manual/verify_game_loop.gd
 run_step "pause" "$GODOT" --headless --script tests/manual/verify_pause.gd
 run_step "look" "$GODOT" --headless --script tests/manual/verify_look.gd
+run_step "flashlight" "$GODOT" --headless --script tests/manual/verify_flashlight.gd
 run_step "accessibility" "$GODOT" --headless --script tests/manual/verify_accessibility.gd
 run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
 run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
