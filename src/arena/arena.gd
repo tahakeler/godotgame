@@ -518,7 +518,15 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 	# A crossroads is walkable along both axes, so it contributes two strips.
 	if EXTRA_FOOTPRINTS.has(model):
 		_add_nav_surface(cell, _turned(EXTRA_FOOTPRINTS[model], rotation_degrees))
-	_add_lighting(model, cell)
+
+	# Lighting and rock tint are driven from the same profile, so a chamber's
+	# identity colour never drifts out of sync between the two. The rock is
+	# tinted even on a corridor cell that skips its light (see _add_lighting)
+	# so the colour reads as a continuous stretch rather than resetting at
+	# every dark gap.
+	var profile := _lighting_profile_for(model, cell)
+	_tint_rock(instance, profile.color)
+	_add_lighting(model, cell, profile)
 
 
 ## Pick which mesh actually gets placed for a logical piece.
@@ -547,14 +555,94 @@ func _turned(footprint: Vector2, rotation_degrees: float) -> Vector2:
 	return Vector2(footprint.y, footprint.x) if quarter_turned else footprint
 
 
+## Fallback lighting per piece type, keyed by model. Used for every layout
+## cell that CHAMBER_IDENTITY does not name explicitly below — which is
+## every plain corridor cell, and the safety net for any piece type this
+## table has not been taught a chamber identity for.
+##
+## `height` is the lamp's absolute world Y (cells are all at Y=0, so this is
+## the whole offset): rooms hang their lamp a little higher than the low
+## corridor ceiling, which is as much a silhouette cue as a light source.
+const _DEFAULT_LIGHTING := {
+	CENTRE_ROOM: {"color": Color(1.0, 0.79, 0.52), "energy": 5.6, "range": 20.0, "height": 4.0},
+	OUTER_ROOM: {"color": Color(1.0, 0.7, 0.42), "energy": 3.6, "range": 13.0, "height": 3.3},
+	WIDE_ROOM: {"color": Color(1.0, 0.66, 0.36), "energy": 4.0, "range": 16.0, "height": 3.3},
+	# Previously undifferentiated from a corridor (both fell into the match
+	# statement's `_` branch below) — the single biggest reason a corner
+	# chamber and the passage leading to it used to be indistinguishable.
+	CORNER_ROOM: {"color": Color(0.55, 0.85, 0.85), "energy": 3.2, "range": 11.0, "height": 3.3},
+	CROSS: {"color": Color(0.8, 0.82, 0.9), "energy": 2.4, "range": 9.0, "height": 3.0},
+	DEAD_END: {"color": Color(0.85, 0.4, 0.32), "energy": 1.0, "range": 6.0, "height": 3.0},
+	CORRIDOR: {"color": Color(0.42, 0.62, 1.0), "energy": 1.3, "range": 6.0, "height": 3.0},
+}
+
+## Explicit identity for every chamber called out in the lighting brief, keyed
+## by cell rather than model — several of these share a model (room-wide,
+## room-large, room-corner all appear more than once) and would otherwise be
+## impossible to tell apart on light colour alone, which was the whole
+## complaint. Only color/energy/range are overridden; height still comes from
+## the model default above.
+##
+## Chosen as a rough compass so the palette itself is a wayfinding cue: cool
+## blues/violets read north and west, warm ambers/embers read south and east,
+## greens mark the two approaches deepest into the network. None of this
+## changes what a colour-blind player can do — it is a bonus read on top of
+## the HUD and geometry, never the only one.
+const CHAMBER_IDENTITY := {
+	# Deep north chamber — the far end of the map. Cool and a little dimmer
+	# than the arena so it reads as a destination, not a second hub.
+	Vector2i(0, 12): {"color": Color(0.55, 0.75, 1.0), "energy": 4.6, "range": 18.0},
+	# The approach to it — a bioluminescent green, so the shift from the
+	# corridor's cold blue starts a chamber early.
+	Vector2i(0, 7): {"color": Color(0.55, 1.0, 0.78), "energy": 3.6, "range": 13.0},
+	Vector2i(-5, 0): {"color": Color(1.0, 0.85, 0.4), "energy": 3.6, "range": 13.0},
+	Vector2i(5, 0): {"color": Color(0.85, 0.55, 1.0), "energy": 3.6, "range": 13.0},
+	Vector2i(5, -4): {"color": Color(1.0, 0.58, 0.42), "energy": 3.6, "range": 13.0},
+	# South wide room — hot and slightly brighter than a standard wide room,
+	# the deliberate counterpoint to the cool deep-north chamber. Two earlier
+	# passes (min channel 0.3 at energy 4.2, then 0.42 at 3.9) both rendered as
+	# a solid blood-red wash up close — checked in-engine, not just eyeballed
+	# as numbers — drowning the rock's own texture the same way the flat
+	# orange did, and reading closer to horror than to a warm cavern. Held
+	# against the arena's own proven G/B ratio (0.79/0.52 against its 1.0 red)
+	# rather than picked by eye a third time: this sits a little hotter than
+	# that, not several times hotter.
+	Vector2i(0, -8): {"color": Color(1.0, 0.62, 0.48), "energy": 3.7, "range": 16.0},
+	Vector2i(12, 0): {"color": Color(0.75, 1.0, 0.55), "energy": 4.0, "range": 16.0},
+	Vector2i(-11, 0): {"color": Color(0.55, 0.65, 1.0), "energy": 4.0, "range": 16.0},
+	Vector2i(-4, 4): {"color": Color(0.4, 0.9, 0.95), "energy": 3.2, "range": 11.0},
+	Vector2i(5, 4): {"color": Color(1.0, 0.55, 0.65), "energy": 3.2, "range": 11.0},
+	Vector2i(-4, -4): {"color": Color(0.95, 0.65, 0.35), "energy": 3.2, "range": 11.0},
+	# The two crossroads are deliberately close to neutral white rather than
+	# picking a side of the compass — a junction is a decision point, not a
+	# destination, and a bright neutral beacon is what makes it findable from
+	# every corridor that feeds it. Warmed a touch differently so the two
+	# do not read as the same landmark.
+	Vector2i(0, 4): {"color": Color(0.75, 0.85, 1.0), "energy": 2.4, "range": 9.0},
+	Vector2i(0, -4): {"color": Color(0.88, 0.8, 0.68), "energy": 2.4, "range": 9.0},
+}
+
+## Combine a piece's model default with any chamber-specific override for its
+## cell. Every layout cell resolves to a full profile even when it is not
+## named in CHAMBER_IDENTITY, so adding a new placement never leaves a light
+## with missing fields.
+func _lighting_profile_for(model: String, cell: Vector2i) -> Dictionary:
+	var profile: Dictionary = (
+		_DEFAULT_LIGHTING.get(model, _DEFAULT_LIGHTING[CORRIDOR]) as Dictionary
+	).duplicate()
+	if CHAMBER_IDENTITY.has(cell):
+		profile.merge(CHAMBER_IDENTITY[cell], true)
+	return profile
+
+
 ## Light every piece as it is placed, so lighting scales with the layout
 ## instead of being hand-placed for one that no longer exists.
 ##
-## Rooms are lit warm and corridors cold. The contrast is the point: a single
-## colour temperature across a whole level reads flat no matter how bright it
-## is, whereas warm pools separated by cold runs give the eye depth and make
-## each chamber feel like somewhere rather than more of the same.
-func _add_lighting(model: String, cell: Vector2i) -> void:
+## A single colour temperature across a whole level reads flat no matter how
+## bright it is. Every named chamber now gets its own hue and intensity (see
+## CHAMBER_IDENTITY); corridors stay a neutral cold blue so those chambers have
+## something to visibly pop against instead of competing with a second colour.
+func _add_lighting(model: String, cell: Vector2i, profile: Dictionary) -> void:
 	# Corridors are lit every few cells rather than every cell. With the map at
 	# its current size that is the difference between roughly ninety lights and
 	# nearly three hundred, and a run of evenly spaced lamps reads better than
@@ -564,8 +652,18 @@ func _add_lighting(model: String, cell: Vector2i) -> void:
 		return
 
 	var light := OmniLight3D.new()
-	light.position = _cell_to_world(cell) + Vector3.UP * 3.3
+	light.position = _cell_to_world(cell) + Vector3.UP * float(profile.height)
+	light.light_color = profile.color
+	light.light_energy = profile.energy
+	light.omni_range = profile.range
 	light.shadow_enabled = false
+
+	# Only the arena itself casts shadows — tied to the cell rather than the
+	# model, so the deep north chamber (the same room-large piece) does not
+	# quietly double that cost. The cost is worth it where the player actually
+	# fights, and invisible everywhere else.
+	if cell == Vector2i(0, 0):
+		light.shadow_enabled = quality >= GameSettings.Quality.MEDIUM
 
 	# A light the player cannot see is still a light the renderer pays for.
 	# The map is now far larger than anything visible at once, so lights fade
@@ -573,29 +671,6 @@ func _add_lighting(model: String, cell: Vector2i) -> void:
 	light.distance_fade_enabled = true
 	light.distance_fade_begin = LIGHT_FADE_BEGIN
 	light.distance_fade_length = LIGHT_FADE_LENGTH
-
-	match model:
-		CENTRE_ROOM:
-			light.light_color = Color(1.0, 0.79, 0.52)
-			light.light_energy = 5.6
-			light.omni_range = 20.0
-			# Only the arena casts shadows; the cost is worth it where the
-			# player actually fights, and invisible everywhere else.
-			light.shadow_enabled = quality >= GameSettings.Quality.MEDIUM
-			light.position.y = 4.0
-		OUTER_ROOM:
-			light.light_color = Color(1.0, 0.7, 0.42)
-			light.light_energy = 3.6
-			light.omni_range = 13.0
-		WIDE_ROOM:
-			light.light_color = Color(1.0, 0.66, 0.36)
-			light.light_energy = 4.0
-			light.omni_range = 16.0
-		_:
-			light.light_color = Color(0.42, 0.62, 1.0)
-			light.light_energy = 1.5
-			light.omni_range = 7.0
-			light.position.y = 3.0
 
 	_geometry_root.add_child(light)
 	_add_lamp_glow(light)
@@ -665,6 +740,55 @@ func _add_lamp_glow(light: OmniLight3D) -> void:
 	mesh_instance.material_override = material
 
 	_geometry_root.add_child(mesh_instance)
+
+
+## How strongly a chamber's identity colour tints its rock, versus leaving the
+## kit's own albedo alone. Deliberately low: the kit's texture is a trim-sheet
+## atlas (see assets/models/cave/Textures/colormap.png) with real baked
+## variation in its rock swatch, and the goal is a hue the eye picks up
+## passively across a room, not a wash that flattens that variation under a
+## single flat colour the way the lighting alone used to.
+const ROCK_TINT_STRENGTH := 0.22
+
+## Per-instance brightness jitter on top of the tint, so the handful of
+## reused meshes (four small rooms, three corner rooms, and so on) do not read
+## as visibly stamped copies of each other. Deterministic per seed via _rng,
+## so two runs of the same seed still produce the same cave.
+const ROCK_JITTER := 0.06
+
+## Dielectric reflectance to use on cave rock, replacing the material's
+## imported default of 0.5.
+##
+## The kit ships only an albedo texture — no roughness or normal map — and its
+## imported roughness is already 1.0 (fully matte, confirmed by inspecting the
+## imported material directly rather than assuming). That default specular is
+## what was left making the rock read faintly plastic: at any roughness a
+## dielectric still shows a Fresnel highlight at grazing angles, sized by this
+## value, and 0.5 is tuned for a generic glossy surface, not dry stone.
+const ROCK_SPECULAR := 0.22
+
+## Tint a placed piece's rock to match its chamber's identity colour, and
+## dial back the kit's default specular so it reads as dry stone rather than
+## the faintly glossy plastic the imported default produces.
+##
+## Multiplies the existing albedo rather than replacing it, so the atlas's own
+## baked variation (the mottled rock swatch, see colormap.png) survives the
+## tint instead of being flattened under a flat wash of colour.
+func _tint_rock(instance: Node3D, identity_colour: Color) -> void:
+	var tint := Color.WHITE.lerp(identity_colour, ROCK_TINT_STRENGTH)
+	tint *= 1.0 + _rng.randf_range(-ROCK_JITTER, ROCK_JITTER)
+	tint.a = 1.0
+
+	for mesh_instance in _find_mesh_instances(instance):
+		for surface in mesh_instance.mesh.get_surface_count():
+			var material := mesh_instance.get_active_material(surface)
+			if not (material is StandardMaterial3D):
+				continue
+
+			var tinted: StandardMaterial3D = material.duplicate()
+			tinted.albedo_color = material.albedo_color * tint
+			tinted.metallic_specular = ROCK_SPECULAR
+			mesh_instance.set_surface_override_material(surface, tinted)
 
 
 ## Flat walkable footprint for one piece, used as navmesh source geometry.
