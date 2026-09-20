@@ -39,6 +39,25 @@ signal toggled(is_on: bool)
 ## its frame budget. Exposed so it can be turned on where there is headroom.
 @export var cast_shadows := false
 
+## How much easier a lit player is to see, as a multiplier on a zombie's sight
+## range while the torch is on.
+##
+## This is the tradeoff the class comment above promises but the game does not
+## yet actually charge. A torch is currently free: the beam is the only thing
+## in the cave that announces your position at the speed of light, and nothing
+## reads it. Exposing it here, with `visibility_scale()` below, puts the
+## player's half of that bargain in place.
+##
+## The other half is one line in zombie.gd's `_can_see_target()` — see the
+## note on `visibility_scale()`. It is not written here because that file
+## belongs to the AI work in flight.
+##
+## 1.45 rather than something dramatic: the torch must remain worth carrying.
+## At a 20m sight range this turns a zombie that notices you at 20m into one
+## that notices you at 29m, which is roughly the difference between meeting it
+## in the next chamber and meeting it in this one.
+@export var lit_visibility_scale := 1.45
+
 var is_on := false
 
 
@@ -70,6 +89,26 @@ func set_on(on: bool) -> void:
 	is_on = on
 	_apply()
 	toggled.emit(is_on)
+
+
+## How visible the torch is currently making its carrier. 1.0 when it is off.
+##
+## Read by anything that hunts by sight. The intended consumer is zombie.gd,
+## which should scale its own `sight_range` by the target's visibility before
+## the distance test in `_can_see_target()`:
+##
+##     var reach := sight_range
+##     if _target != null and _target.has_method("visibility_scale"):
+##         reach *= _target.visibility_scale()
+##     if distance > reach:
+##         return false
+##
+## Deliberately a pull, not a push: the light does not reach into the AI and
+## edit anyone's stats, which would fight the tuning values in the inspector
+## and leave a zombie permanently buffed if the player died mid-beam. The
+## zombie asks, every time it looks, and the answer is always current.
+func visibility_scale() -> float:
+	return lit_visibility_scale if is_on else 1.0
 
 
 func _apply() -> void:

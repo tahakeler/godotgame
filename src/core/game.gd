@@ -96,6 +96,10 @@ func _ready() -> void:
 	_wire_caches()
 	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
+
+	# The interactor never touches the HUD itself — it emits text and Game
+	# decides where text goes, the same rule audio and effects follow here.
+	player.interactor.prompt_changed.connect(hud.show_prompt)
 	start_round()
 
 
