@@ -35,6 +35,12 @@ const MINIMUM_SIZE := 0.5
 ## matters much less.
 const REACH_HEIGHT := 3.2
 
+## Compass directions swept from each cell when testing containment, and how
+## far. Far enough to cross the whole cave, so an unobstructed sweep is
+## unambiguous rather than merely long.
+const SWEEP_DIRECTIONS := 16
+const SWEEP_DISTANCE := 160.0
+
 var _game: Node
 var _frames := 0
 var _problems: Array[String] = []
@@ -62,8 +68,82 @@ func _process(_delta: float) -> bool:
 
 	_report_layer_matrix()
 	_audit_objects(arena)
+	_audit_containment(arena)
 	_report()
 	return true
+
+
+## Whether the cave actually holds the player in.
+##
+## The walls are a box shell generated from the walkable cells rather than from
+## the rock that is drawn, so the question is never "does this wall look solid"
+## — it is "does the shell have a hole in it". Sweeping the player's own capsule
+## outward from every cell they can stand in and checking where it comes to
+## rest answers that directly: a sweep that ends outside the cave found a way
+## out, and a way out of a cave in a game about being chased through one is the
+## most valuable exploit there is.
+func _audit_containment(arena: Node) -> void:
+	var space: PhysicsDirectSpaceState3D = arena.get_world_3d().direct_space_state
+	var cells: Dictionary = arena._occupied_cells()
+
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = PLAYER_RADIUS
+	capsule.height = PLAYER_HEIGHT
+
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.collision_mask = 1
+	query.collide_with_areas = false
+
+	var tested := 0
+	var escapes := 0
+
+	for cell in cells:
+		# Lifted a little off the floor: a capsule whose feet rest exactly on the
+		# slab reads as overlapping it, and every cell would be skipped as solid.
+		var origin: Vector3 = (
+			arena._cell_to_world(cell) + Vector3.UP * (PLAYER_HEIGHT * 0.5 + 0.15)
+		)
+
+		# Cells inside rock or under a deck are not places to sweep from.
+		query.transform = Transform3D(Basis.IDENTITY, origin)
+		query.motion = Vector3.ZERO
+		if not space.intersect_shape(query, 1).is_empty():
+			continue
+
+		tested += 1
+
+		for step in SWEEP_DIRECTIONS:
+			var heading := float(step) * TAU / float(SWEEP_DIRECTIONS)
+			var direction := Vector3(sin(heading), 0.0, cos(heading))
+
+			query.transform = Transform3D(Basis.IDENTITY, origin)
+			query.motion = direction * SWEEP_DISTANCE
+
+			var fractions: PackedFloat32Array = space.cast_motion(query)
+			if fractions.is_empty():
+				continue
+
+			var stopped: Vector3 = origin + query.motion * fractions[0]
+			var landed := Vector2i(
+				roundi(stopped.x / Arena.CELL), roundi(stopped.z / Arena.CELL)
+			)
+
+			if not cells.has(landed):
+				escapes += 1
+				_problems.append(
+					"the player can walk out of the cave from (%d, %d) heading %.0f degrees, "
+					% [cell.x * 4, cell.y * 4, rad_to_deg(heading)]
+					+ "ending up at %s" % _round(stopped)
+				)
+				break
+
+	print("")
+	print("--- containment: %d standable cells swept in %d directions ---" % [
+		tested, SWEEP_DIRECTIONS
+	])
+	if escapes == 0:
+		print("  the shell holds — no sweep left the cave")
 
 
 ## The layer matrix, printed rather than asserted, because what is right
