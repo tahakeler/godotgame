@@ -116,6 +116,13 @@ func _wire_audio() -> void:
 
 	# A Brute announces itself with something lower than the crowd, so it can be
 	# heard coming before the corridor gives it away.
+	# The one sound that means something changed about you rather than about
+	# them. Played where the zombie is, so it carries a direction.
+	spawner.zombie_noticed_player.connect(
+		func(at: Vector3, _kind: ZombieTypes.Kind) -> void:
+			sounds.play_at("zombie_alerted", at)
+	)
+
 	spawner.zombie_groaned.connect(
 		func(groan_position: Vector3, kind: ZombieTypes.Kind) -> void:
 			var event := (

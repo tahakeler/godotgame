@@ -15,6 +15,9 @@ signal groaned(groan_position: Vector3)
 ## spawner passes it to anything close enough to hear, which is what turns one
 ## noticed gunshot into a chamber emptying toward you.
 signal raised_alarm(zombie: Zombie, believed_position: Vector3)
+## The instant this zombie starts hunting. The most important event in a round,
+## and it used to happen silently.
+signal noticed_player(at: Vector3, kind: ZombieTypes.Kind)
 
 ## What a zombie knows about the player right now.
 enum Awareness {
@@ -109,6 +112,19 @@ const BODY_RADIUS_RATIO := 0.22
 const REFERENCE_HEIGHT := 2.0
 ## Close enough to a sound to count as having reached it.
 const ARRIVAL_DISTANCE := 2.0
+
+## What a zombie glows when it has heard something, and when it has seen you.
+const INVESTIGATING_GLOW := Color(1.0, 0.62, 0.2)
+const HUNTING_GLOW := Color(1.0, 0.2, 0.12)
+
+## Deliberately faint. Emission adds on top of the skin, so anything stronger
+## floods the whole body and flattens a zombie into a glowing silhouette —
+## losing the character entirely and costing more atmosphere than the clarity
+## is worth. These read at corridor distance against an unlit wall and are
+## barely noticeable up close, which is the right way round: up close you can
+## already see what it is doing.
+const INVESTIGATING_GLOW_ENERGY := 0.09
+const HUNTING_GLOW_ENERGY := 0.32
 
 var base_attack_range := 1.9
 
@@ -271,12 +287,52 @@ func _can_hear(noise_position: Vector3, loudness: float) -> bool:
 	return true
 
 
+## Change state, and make the change visible and audible.
+##
+## Every zombie has had a mental model since the awareness system landed, and
+## none of it reached the player. A system you cannot read is indistinguishable
+## from one that is cheating: a crowd converges and you have no way to know
+## whether you were seen, heard, or told. The tells are not decoration — they
+## are what turns the model into something you can play against.
+func _set_awareness(next: Awareness) -> void:
+	if next == awareness:
+		return
+
+	var previous := awareness
+	awareness = next
+	_apply_awareness_tell()
+
+	# The moment something starts hunting you is the single most important
+	# thing that happens in a round, and it used to happen in silence.
+	if next == Awareness.HUNTING and previous != Awareness.HUNTING:
+		noticed_player.emit(global_position, kind)
+
+
+## Colour a zombie by what it knows.
+##
+## Emission rather than albedo, so it reads in a dark corridor at distance —
+## which is exactly where you need to know whether the shape ahead has noticed
+## you. Kept dim on purpose: this is a tell, not a healthbar, and a cave full
+## of glowing outlines would cost more atmosphere than it buys clarity.
+func _apply_awareness_tell() -> void:
+	if _visual == null:
+		return
+
+	match awareness:
+		Awareness.HUNTING:
+			_visual.apply_glow(HUNTING_GLOW, HUNTING_GLOW_ENERGY)
+		Awareness.INVESTIGATING:
+			_visual.apply_glow(INVESTIGATING_GLOW, INVESTIGATING_GLOW_ENERGY)
+		_:
+			_visual.apply_glow(Color.BLACK, 0.0)
+
+
 ## Adopt a belief about where the player is, and go and look.
 func _believe(where: Vector3) -> void:
 	last_known_position = where
 	_investigate_remaining = investigate_duration
 	_search_remaining = 0.0
-	awareness = Awareness.INVESTIGATING
+	_set_awareness(Awareness.INVESTIGATING)
 
 
 ## Told by another zombie. Alerts spread through a crowd, which is what turns
@@ -321,7 +377,7 @@ func _tick_senses(delta: float) -> void:
 	_sight_remaining = sight_interval
 
 	if _can_see_target():
-		awareness = Awareness.HUNTING
+		_set_awareness(Awareness.HUNTING)
 		last_known_position = _target.global_position
 		_lost_sight_remaining = lose_sight_duration
 		return
@@ -374,7 +430,7 @@ func _tick_awareness(delta: float) -> void:
 	if _search_remaining > 0.0:
 		_search_remaining -= delta
 		if _search_remaining <= 0.0:
-			awareness = Awareness.UNAWARE
+			_set_awareness(Awareness.UNAWARE)
 		return
 
 	_investigate_remaining -= delta

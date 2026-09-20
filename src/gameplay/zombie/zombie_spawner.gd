@@ -11,6 +11,8 @@ signal zombie_died(death_position: Vector3, experience: int, ammo: int)
 signal zombie_hit_player(damage: float, from_position: Vector3)
 signal zombie_groaned(groan_position: Vector3, kind: ZombieTypes.Kind)
 signal population_changed(alive: int)
+## A zombie has just started hunting the player.
+signal zombie_noticed_player(at: Vector3, kind: ZombieTypes.Kind)
 
 @export var zombie_scene: PackedScene
 
@@ -194,6 +196,10 @@ func _spawn_one() -> void:
 	zombie.set_target(_target)
 
 	zombie.raised_alarm.connect(_on_alarm_raised)
+	zombie.noticed_player.connect(
+		func(at: Vector3, kind: ZombieTypes.Kind) -> void:
+			zombie_noticed_player.emit(at, kind)
+	)
 	zombie.died.connect(_on_zombie_died)
 	zombie.hit_player.connect(_on_zombie_hit_player)
 	zombie.groaned.connect(func(groan_position: Vector3) -> void:
