@@ -68,6 +68,7 @@ var _weapon: Weapon
 @onready var _noise_ring: Control = %NoiseRing
 @onready var _throw_arc: Control = %ThrowArc
 @onready var _vignette: TextureRect = $Vignette
+@onready var _torch_label: Label = %TorchLabel
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -124,6 +125,7 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	game.round_started.connect(_on_round_started)
 	game.progression.experience_changed.connect(_on_experience_changed)
 
+	player.flashlight.toggled.connect(_on_flashlight_toggled)
 	player.health.changed.connect(_on_health_changed)
 	player.damage_taken.connect(_on_damage_taken)
 
@@ -134,6 +136,7 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 
 	spawner.population_changed.connect(_on_population_changed)
 
+	_on_flashlight_toggled(player.flashlight.is_on)
 	_on_health_changed(player.health.current_health, player.health.max_health)
 	_on_ammo_changed(weapon.magazine_ammo, weapon.reserve_ammo)
 
@@ -203,6 +206,19 @@ func _on_kills_changed(kills: int) -> void:
 
 func _on_population_changed(alive: int) -> void:
 	_zombies_label.text = "HOSTILES  %d" % alive
+
+
+## The torch state has to be readable without looking away from the cave, so
+## it sits with the other status captions rather than anywhere new. Amber when
+## lit follows the rule the rest of the HUD uses: amber means a resource is
+## being spent, and light is the loudest thing the player owns that is not a
+## gun.
+func _on_flashlight_toggled(is_on: bool) -> void:
+	_torch_label.text = "T O R C H   O N" if is_on else "T O R C H   O F F"
+	_torch_label.modulate = (
+		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+		if is_on else Color(1.0, 1.0, 1.0)
+	)
 
 
 func _on_health_changed(current: float, maximum: float) -> void:

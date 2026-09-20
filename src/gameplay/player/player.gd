@@ -62,6 +62,7 @@ var shake_scale := 1.0
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
 @onready var health: Health = $Health
+@onready var flashlight: Flashlight = $Head/Camera/Flashlight
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _look_enabled := true
@@ -170,6 +171,11 @@ func _notification(what: int) -> void:
 ## change here — unlike velocity, nothing integrates it.
 func _process(delta: float) -> void:
 	_tick_gamepad_look(delta)
+
+	# Taken here rather than in _unhandled_input so it is ignored while a menu
+	# has focus, which is the same rule the weapon follows.
+	if _look_enabled and Input.is_action_just_pressed("flashlight"):
+		flashlight.toggle()
 
 
 func _physics_process(delta: float) -> void:

@@ -37,6 +37,10 @@ const BUTTON_BINDINGS := {
 	"jump": JOY_BUTTON_A,
 	"reload": JOY_BUTTON_X,
 	"throw_decoy": JOY_BUTTON_RIGHT_SHOULDER,
+	# Left shoulder mirrors the right, which throw_decoy owns. A torch toggle
+	# sits naturally under the same finger — off the sticks and face buttons a
+	# controller player is holding aim with.
+	"flashlight": JOY_BUTTON_LEFT_SHOULDER,
 	"restart": JOY_BUTTON_Y,
 	"pause": JOY_BUTTON_START,
 }
@@ -49,6 +53,7 @@ const NEW_ACTIONS := {
 	"look_up": KEY_UP,
 	"look_down": KEY_DOWN,
 	"throw_decoy": KEY_G,
+	"flashlight": KEY_F,
 }
 
 const DEADZONE := 0.2
