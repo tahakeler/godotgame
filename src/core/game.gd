@@ -99,6 +99,10 @@ func _ready() -> void:
 	_wire_caches()
 	_wire_effects()
 	hud.bind(self, player, weapon, spawner)
+
+	# The interactor never touches the HUD itself — it emits text and Game
+	# decides where text goes, the same rule audio and effects follow here.
+	player.interactor.prompt_changed.connect(hud.show_prompt)
 	start_round()
 
 
@@ -259,7 +263,9 @@ func _wire_statistics() -> void:
 ## that it hit.
 func _wire_effects() -> void:
 	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
-		player.add_trauma(fire_trauma)
+		# Per weapon, not per game: a shotgun and a pistol going off with the
+		# same screen shake is how three weapons collapse back into one.
+		player.add_trauma(weapon.fire_trauma)
 	)
 	weapon.impacted.connect(func(position: Vector3, normal: Vector3, is_flesh: bool) -> void:
 		effects.spawn_impact(position, normal, is_flesh)
@@ -388,15 +394,16 @@ func _apply_difficulty() -> void:
 ## values back. Without this the next round silently inherits every upgrade from
 ## the last, and the difficulty curve quietly stops meaning anything.
 func _capture_baselines() -> void:
+	# Ballistics are deliberately absent. Since the arsenal landed, every
+	# weapon's stats live in its own slot inside Weapon, and an upgrade writes
+	# into the slot of whatever was in hand. Restoring a single set of numbers
+	# here would stamp the pistol's figures onto whichever weapon happened to
+	# be equipped at the moment of the restart. Weapon.reset_state() rebuilds
+	# all three slots from WeaponTypes, which is the real undo.
 	_baselines = {
-		"magazine_size": weapon.magazine_size,
-		"damage": weapon.damage,
-		"reload_duration": weapon.reload_duration,
-		"max_reserve": weapon.max_reserve,
 		"move_speed": player.move_speed,
 		"max_health": player.health.max_health,
 		"ammo_bonus_per_kill": ammo_bonus_per_kill,
-		"noise_loudness": weapon.noise_loudness,
 		"decoy_loudness": weapon.decoy_loudness,
 	}
 
@@ -405,14 +412,9 @@ func _restore_baselines() -> void:
 	if _baselines.is_empty():
 		return
 
-	weapon.magazine_size = _baselines.magazine_size
-	weapon.damage = _baselines.damage
-	weapon.reload_duration = _baselines.reload_duration
-	weapon.max_reserve = _baselines.max_reserve
 	player.move_speed = _baselines.move_speed
 	player.health.max_health = _baselines.max_health
 	ammo_bonus_per_kill = _baselines.ammo_bonus_per_kill
-	weapon.noise_loudness = _baselines.noise_loudness
 	weapon.decoy_loudness = _baselines.decoy_loudness
 
 

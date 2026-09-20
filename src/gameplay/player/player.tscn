@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://src/gameplay/weapon/weapon.tscn" id="2_weapon"]
 [ext_resource type="Script" path="res://src/gameplay/health.gd" id="3_health"]
 [ext_resource type="Script" path="res://src/gameplay/player/flashlight.gd" id="4_flashlight"]
+[ext_resource type="Script" path="res://src/gameplay/player/interactor.gd" id="5_interactor"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.4
@@ -35,6 +36,9 @@ surface_material_override/0 = SubResource("StandardMaterial3D_player")
 script = ExtResource("3_health")
 max_health = 100.0
 invulnerability_duration = 0.45
+
+[node name="Interactor" type="Node" parent="."]
+script = ExtResource("5_interactor")
 
 [node name="Head" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)

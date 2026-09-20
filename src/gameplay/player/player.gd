@@ -92,6 +92,7 @@ var shake_scale := 1.0
 @onready var camera: Camera3D = $Head/Camera
 @onready var health: Health = $Health
 @onready var flashlight: Flashlight = $Head/Camera/Flashlight
+@onready var interactor: Interactor = $Interactor
 @onready var _collider: CollisionShape3D = $CollisionShape3D
 @onready var _body_mesh: MeshInstance3D = $Body
 
@@ -118,6 +119,17 @@ func _ready() -> void:
 	_apply_collider_height(stand_height)
 	health.died.connect(func() -> void: died.emit())
 	capture_mouse()
+
+
+## How easy the player currently is to see, as a multiplier on a looker's sight
+## range. Above 1.0 while the torch is lit.
+##
+## Exposed on the player rather than only on the flashlight so that anything
+## hunting by sight asks one question of one object, and future sources of
+## visibility — a flare, a muzzle flash, standing in a lit chamber — can be
+## folded in here without every zombie learning about each of them.
+func visibility_scale() -> float:
+	return flashlight.visibility_scale()
 
 
 ## Damage entry point used by zombies on contact. Returns the amount actually
