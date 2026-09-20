@@ -21,11 +21,11 @@ const ZOMBIE_SCENE := "res://src/gameplay/zombie/zombie.tscn"
 ## gap between a skull's top bone and the top of its head.
 const TOLERANCE := 0.1
 
-var _kinds := [
-	ZombieTypes.Kind.SHAMBLER,
-	ZombieTypes.Kind.RUNNER,
-	ZombieTypes.Kind.BRUTE,
-]
+## Every kind, taken from the enum rather than listed by hand. A hand-written
+## list silently stops covering the thing it exists to cover the moment someone
+## adds a sixth archetype — which is exactly how the Stalker and the Screamer
+## would have shipped untested.
+var _kinds := ZombieTypes.Kind.values()
 
 var _failures: Array[String] = []
 var _started := false
