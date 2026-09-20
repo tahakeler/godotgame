@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://src/core/game.gd" id="1_game"]
 [ext_resource type="PackedScene" path="res://src/arena/arena.tscn" id="2_arena"]
@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://src/ui/hud.tscn" id="6_hud"]
 [ext_resource type="PackedScene" path="res://src/ui/pause_menu.tscn" id="7_pause"]
 [ext_resource type="Script" path="res://src/audio/sound_bank.gd" id="8_sounds"]
+[ext_resource type="Script" path="res://src/audio/ambience.gd" id="12_ambience"]
 [ext_resource type="Script" path="res://src/gameplay/effects/effect_spawner.gd" id="9_effects"]
 [ext_resource type="Script" path="res://src/core/progression.gd" id="10_progress"]
 [ext_resource type="PackedScene" path="res://src/ui/upgrade_menu.tscn" id="11_upgrade"]
@@ -28,6 +29,9 @@ zombie_scene = ExtResource("5_zombie")
 
 [node name="SoundBank" type="Node" parent="."]
 script = ExtResource("8_sounds")
+
+[node name="Ambience" type="Node" parent="."]
+script = ExtResource("12_ambience")
 
 [node name="EffectSpawner" type="Node3D" parent="."]
 script = ExtResource("9_effects")
