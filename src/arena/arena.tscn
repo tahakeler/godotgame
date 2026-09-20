@@ -4,45 +4,36 @@
 
 [sub_resource type="Environment" id="Environment_arena"]
 background_mode = 1
-background_color = Color(0.016, 0.013, 0.018, 1)
-ambient_light_source = 3
-ambient_light_color = Color(0.2, 0.22, 0.34, 1)
-# Was 0.15. The per-chamber light colours are the whole point now, and a
-# brighter blue ambient fill was tinting every dark gap the same cold hue
-# regardless of which chambers it sat between, softening the falloff into
-# corridors. Lower still leaves every room and lit corridor cell comfortably
-# playable — their own lights are an order of magnitude stronger than this
-# fill — while letting the unlit stretches between them read as genuinely
-# dark rather than uniformly dim-blue.
-ambient_light_energy = 0.1
+background_color = Color(0.014, 0.016, 0.018, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.32, 0.35, 0.38, 1)
+# A small neutral fill preserves silhouettes outside the practical light pools.
+ambient_light_energy = 0.18
+ambient_light_sky_contribution = 0.0
 tonemap_mode = 3
 tonemap_white = 3.0
 ssao_enabled = true
-ssao_radius = 1.4
-ssao_intensity = 3.4
-ssao_power = 1.8
-ssao_detail = 0.6
+ssao_radius = 1.0
+ssao_intensity = 1.8
+ssao_power = 1.35
+ssao_detail = 0.4
 ssil_enabled = false
 fog_enabled = true
-fog_light_color = Color(0.1, 0.07, 0.09, 1)
-fog_light_energy = 0.6
-fog_density = 0.028
-fog_height = 7.2
-fog_height_density = 0.12
+fog_light_color = Color(0.13, 0.145, 0.15, 1)
+fog_light_energy = 0.45
+fog_density = 0.014
+fog_height = 0.0
+fog_height_density = 0.0
 glow_enabled = true
-glow_intensity = 0.85
-glow_strength = 1.1
-glow_bloom = 0.15
+glow_intensity = 0.3
+glow_strength = 0.65
+glow_bloom = 0.0
 glow_blend_mode = 1
-glow_hdr_threshold = 0.85
+glow_hdr_threshold = 1.4
 adjustment_enabled = true
-adjustment_brightness = 0.98
-# Was 1.26. A small bump pulls lit pools and dark stretches further apart in
-# the final image at zero runtime cost — this is a post-process curve, not
-# another light — which is the cheapest lever available for the brief's
-# contrast ask given lights are already the frame's main expense.
-adjustment_contrast = 1.32
-adjustment_saturation = 1.06
+adjustment_brightness = 1.0
+adjustment_contrast = 1.12
+adjustment_saturation = 0.78
 
 [sub_resource type="CameraAttributesPractical" id="CameraAttributes_arena"]
 
@@ -55,7 +46,7 @@ camera_attributes = SubResource("CameraAttributes_arena")
 
 [node name="KeyLight" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 16, 0)
-light_color = Color(0.62, 0.66, 0.92, 1)
-light_energy = 0.35
+light_color = Color(0.8, 0.85, 0.9, 1)
+light_energy = 0.12
 shadow_enabled = true
 directional_shadow_max_distance = 60.0
