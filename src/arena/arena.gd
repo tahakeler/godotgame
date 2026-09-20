@@ -262,6 +262,15 @@ const RAMP_WIDTH := 3.6
 const RAMP_THICKNESS := 0.5
 const RAMP_COLOUR := Color(0.36, 0.25, 0.17)
 ## How far the ramp's navmesh strip runs past the slab at each end.
+## Stair dressing. The kit ships no stair that fits a 3m rise — its stairs.glb
+## climbs 8.55m — so treads are cut from the flat floor tile instead.
+const TREAD_TILE := "template-floor-layer"
+const TILE_SIZE := 4.0
+## Roughly how deep each tread is along the slope, before it is divided evenly.
+const TREAD_DEPTH := 1.15
+## Lifts the treads clear of the slab so they read as separate boards.
+const TREAD_RISE := 0.28
+
 const RAMP_NAV_OVERLAP := 0.9
 ## How far the flat landing reaches onto the deck, and out over the ramp.
 const LANDING_INNER := 2.2
@@ -1068,20 +1077,52 @@ func _add_landing(edge: Vector2, along_x: bool, direction: float,
 	)
 
 
+## Dress the ramp as a built wooden stair.
+##
+## The slope stays a smooth ramp for collision and navigation — that part is
+## proven and a flight of discrete steps would need step-up logic in the player
+## and would sit badly with the navmesh baker. What changes is only what you
+## see: a run of treads from the kit's own floor tile, which is the difference
+## between a structure someone built and the untextured box this used to be.
+##
+## Visual stairs over ramp collision is the standard trick for exactly this
+## reason, and at low-poly scale the eye reads the treads, not the slide.
 func _add_ramp_visual(transform: Transform3D, size: Vector3, centre: Vector2) -> void:
-	var mesh_instance := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh_instance.mesh = box
-	mesh_instance.transform = transform
-	mesh_instance.name = "Ramp_%d_%d" % [int(centre.x), int(centre.y)]
+	var root := Node3D.new()
+	root.name = "Ramp_%d_%d" % [int(centre.x), int(centre.y)]
+	root.transform = transform
+	_geometry_root.add_child(root)
 
-	var material := StandardMaterial3D.new()
-	material.albedo_color = RAMP_COLOUR
-	material.roughness = 0.9
-	mesh_instance.material_override = material
+	var run: float = size.x if size.x > size.z else size.z
+	var along_x := size.x > size.z
+	var treads: int = maxi(2, int(run / TREAD_DEPTH))
+	var tread_run := run / float(treads)
 
-	_geometry_root.add_child(mesh_instance)
+	for index in treads:
+		var tile := _instantiate(CAVE_PATH % TREAD_TILE)
+		if tile == null:
+			break
+
+		# Along the slope, each tread is one step further and one step down.
+		# The root is already tilted, so working in its local space means the
+		# treads follow the slope without any trigonometry here.
+		var offset := -run * 0.5 + tread_run * (float(index) + 0.5)
+		tile.position = (
+			Vector3(offset, TREAD_RISE, 0.0) if along_x
+			else Vector3(0.0, TREAD_RISE, offset)
+		)
+
+		# The tile is 4m square and 0.5m thick. Squeeze it to the tread it has
+		# to cover; the tile is a plain slab, so this reads as a shorter plank
+		# rather than as a distorted prop.
+		var width_scale: float = (size.z if along_x else size.x) / TILE_SIZE
+		var depth_scale := tread_run / TILE_SIZE
+		tile.scale = (
+			Vector3(depth_scale, 1.0, width_scale) if along_x
+			else Vector3(width_scale, 1.0, depth_scale)
+		)
+
+		root.add_child(tile)
 
 
 func _add_ramp_collision(transform: Transform3D, size: Vector3, centre: Vector2) -> void:
