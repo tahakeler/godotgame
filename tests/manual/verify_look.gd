@@ -33,7 +33,11 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	match _step:
 		Step.WARMUP:
-			pass
+			# Godot 4.7 loads autoloads under --script, and they do not exist
+			# until after _initialize. Pinning here, then restarting the round,
+			# stops the test inheriting the menu choices saved on this machine.
+			DeterministicSettings.apply(root)
+			_game.start_round()
 
 		Step.SEND:
 			print("mouse mode after a round starts: %s" % _mode_name())
