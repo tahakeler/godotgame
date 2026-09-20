@@ -81,6 +81,12 @@ var _weapon: Weapon
 @onready var _experience_bar: ProgressBar = %ExperienceBar
 @onready var _hurt_vignette: TextureRect = %HurtVignette
 @onready var _magazine_pips: HBoxContainer = %MagazinePips
+## The caption under the ammo counts. Doubles as the weapon name once there is
+## more than one weapon — with three separate reserves, a bare "12 / 34" does
+## not say which gun's 34 it is, and that is the number the player is deciding
+## on. Reusing the caption keeps this to one line rather than a new HUD element;
+## the full readout is a later pass.
+@onready var _ammo_caption: Label = $AmmoBlock/AmmoCaption
 @onready var _stats_row: HBoxContainer = %StatsRow
 @onready var _play_again_button: Button = %PlayAgainButton
 @onready var _menu_button: Button = %MenuButton
@@ -185,6 +191,8 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	weapon.reload_finished.connect(_on_weapon_status_cleared)
 	weapon.dry_fired.connect(_on_dry_fired)
 	weapon.fired.connect(_on_weapon_fired)
+	weapon.weapon_switched.connect(_on_weapon_switched)
+	_on_weapon_switched(weapon.kind, weapon.display_name)
 
 	spawner.population_changed.connect(_on_population_changed)
 	spawner.zombie_died.connect(_on_zombie_killed)
@@ -349,6 +357,20 @@ func _update_magazine_pips(magazine: int) -> void:
 func _on_reload_started(_duration: float) -> void:
 	_weapon_status_label.text = "RELOADING"
 	_weapon_status_label.modulate = Color(1.0, 0.82, 0.35)
+
+
+## Name the weapon whose magazine and reserve the counts belong to.
+func _on_weapon_switched(_kind: WeaponTypes.Kind, display_name: String) -> void:
+	if _ammo_caption == null:
+		return
+	# Letter-spaced to match the caption it replaces.
+	var spaced := ""
+	for index in display_name.length():
+		if index > 0:
+			spaced += " "
+		spaced += display_name[index]
+
+	_ammo_caption.text = "%s   ·   M A G   ·   R E S" % spaced
 
 
 func _on_weapon_status_cleared() -> void:
