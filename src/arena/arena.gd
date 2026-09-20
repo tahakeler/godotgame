@@ -25,10 +25,15 @@ const PROP_PATH := "res://assets/models/weapons/%s.glb"
 ## Grid unit of the cave kit. Every placement below is a multiple of this.
 const CELL := 4.0
 
+
 const CENTRE_ROOM := "room-large"
 const OUTER_ROOM := "room-small"
 const WIDE_ROOM := "room-wide"
+const CORNER_ROOM := "room-corner"
 const CORRIDOR := "corridor"
+## A true four-way crossroads. Corridors can branch anywhere now, instead of
+## every junction having to be a room.
+const CROSS := "corridor-intersection"
 const DEAD_END := "corridor-end"
 
 ## Interchangeable sculpts of the same chamber: identical footprint, identical
@@ -39,8 +44,11 @@ const VARIANTS := {
 	WIDE_ROOM: ["room-wide", "room-wide-variation"],
 }
 
-## Chambers that are square, and so can be turned without changing what they
-## connect to.
+## Chambers that are square *and* open on every side, so a free quarter turn
+## changes the rock without changing what they connect to.
+##
+## A corner room is square but emphatically not in this list: its rotation is
+## what decides which two sides are open.
 const SQUARE_ROOMS := [CENTRE_ROOM, OUTER_ROOM]
 
 ## Spawn scoring. Relative weights for a point directly behind the player
@@ -67,132 +75,134 @@ const SPAWN_SPREAD := [
 	Vector2(-2.4, -3.0),
 ]
 
-## Walkable footprint per piece, before rotation. Measured with
-## tools/probe_openings.gd rather than guessed — every room in this kit opens
-## on all four sides, while an unrotated corridor runs along X.
+## Walkable footprint per piece, before rotation.
+##
+## Every one of these was measured with tools/probe_openings.gd rather than
+## read off a render. The kit's rooms have decorative indentations that look
+## like doorways from above and are solid rock, an unrotated corridor runs
+## along X, and `corridor-corner` reads as walled on all four sides at head
+## height — which is why it is not used here despite being exactly the piece
+## the layout would seem to want.
+##
+## Corridor footprints deliberately run longer than the 4m piece so they lap
+## into their neighbours and the navmesh bakes as one surface. Room footprints
+## sit inside their piece, so they never poke walkable ground into rock.
 const FOOTPRINTS := {
 	CENTRE_ROOM: Vector2(17.0, 17.0),
 	OUTER_ROOM: Vector2(9.0, 9.0),
+	CORNER_ROOM: Vector2(9.0, 9.0),
 	WIDE_ROOM: Vector2(17.0, 9.0),
 	CORRIDOR: Vector2(8.0, 2.6),
+	CROSS: Vector2(8.0, 2.6),
 	DEAD_END: Vector2(5.0, 2.6),
+}
+
+## A second footprint for pieces that are walkable along both axes.
+##
+## Only the four-way crossroads needs one, and only because it is the single
+## piece whose walkable area is a plus rather than a rectangle. Giving a T
+## junction the same treatment would lay navmesh through its closed side and
+## send zombies walking into rock, so T junctions are not used.
+const EXTRA_FOOTPRINTS := {
+	CROSS: Vector2(2.6, 8.0),
 }
 
 
 ## The cave network, as {model, cell, rotation}.
 ##
-## Rooms are the nodes and corridors are the edges. Every bend happens inside a
-## room, never between two corridors — an unrotated corridor runs along X and
-## presents a solid end wall on its Z faces, so two corridors meeting at a
-## right angle produce a dead end that looks like a passage. Rooms open on all
-## four sides, which is what makes them safe to turn in.
+## Corridors branch at crossroads and chambers are not all rectangles, so the
+## map reads as a place that was dug rather than a diagram that was drawn.
+## Every outer chamber is on a loop: there is no arm that has to be walked back
+## down, which matters more than usual in a game where being followed is the
+## whole problem.
 ##
-## Fourteen chambers on four rings, with every outer chamber reachable by at
-## least two routes. Deliberately irregular: arms differ in length, chambers
-## differ in size, and no two loops are mirror images. A symmetric grid reads
-## as a diagram; an uneven one reads as a place.
+## Rotations for `room-corner` come from the probe: unrotated it opens -X and
+## -Z, and each quarter turn moves both. 0 is -X/-Z, 90 is -X/+Z, 180 is
+## +X/+Z, 270 is +X/-Z.
 const LAYOUT := [
-	# ---- Core -------------------------------------------------------------
+	# ---- The arena ---------------------------------------------------------
 	{"model": CENTRE_ROOM, "cell": Vector2i(0, 0), "rotation": 0},
 
-	# ---- North spine ------------------------------------------------------
+	# ---- North crossroads --------------------------------------------------
 	{"model": CORRIDOR, "cell": Vector2i(0, 3), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(0, 4), "rotation": 90},
-	{"model": OUTER_ROOM, "cell": Vector2i(0, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(0, 8), "rotation": 90},
-	{"model": WIDE_ROOM, "cell": Vector2i(0, 11), "rotation": 90},
+	{"model": CROSS, "cell": Vector2i(0, 4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(0, 5), "rotation": 90},
+	{"model": OUTER_ROOM, "cell": Vector2i(0, 7), "rotation": 0},
 
-	# ---- East spine -------------------------------------------------------
-	{"model": CORRIDOR, "cell": Vector2i(3, 0), "rotation": 0},
-	{"model": WIDE_ROOM, "cell": Vector2i(6, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(9, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(10, 0), "rotation": 0},
-	{"model": OUTER_ROOM, "cell": Vector2i(12, 0), "rotation": 0},
+	# West off the crossroads, into a corner chamber that turns south.
+	{"model": CORRIDOR, "cell": Vector2i(-1, 4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-2, 4), "rotation": 0},
+	{"model": CORNER_ROOM, "cell": Vector2i(-4, 4), "rotation": 270},
+	{"model": CORRIDOR, "cell": Vector2i(-4, 2), "rotation": 90},
 
-	# East chamber up to the north-east corner.
-	{"model": CORRIDOR, "cell": Vector2i(12, 2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(12, 3), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(12, 4), "rotation": 90},
-	{"model": OUTER_ROOM, "cell": Vector2i(12, 6), "rotation": 0},
+	# East off the crossroads, mirrored but not symmetrical.
+	# One cell further out than its western twin, and reached by a longer run.
+	{"model": CORRIDOR, "cell": Vector2i(1, 4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(2, 4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, 4), "rotation": 0},
+	{"model": CORNER_ROOM, "cell": Vector2i(5, 4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(5, 2), "rotation": 90},
 
-	# The long north hall, closing the biggest loop on the map.
-	{"model": CORRIDOR, "cell": Vector2i(2, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(3, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(4, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(5, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(6, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(7, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(8, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(9, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(10, 6), "rotation": 0},
+	# The deep north chamber, furthest point on the map.
+	{"model": CORRIDOR, "cell": Vector2i(0, 9), "rotation": 90},
+	{"model": CENTRE_ROOM, "cell": Vector2i(0, 12), "rotation": 0},
 
-	# ---- West spine -------------------------------------------------------
+	# ---- Flanking chambers -------------------------------------------------
 	{"model": CORRIDOR, "cell": Vector2i(-3, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-4, 0), "rotation": 0},
-	{"model": OUTER_ROOM, "cell": Vector2i(-6, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-8, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-9, 0), "rotation": 0},
-	{"model": WIDE_ROOM, "cell": Vector2i(-12, 0), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(-5, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, 0), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(5, 0), "rotation": 0},
 
-	# North-west chamber, closing the upper-left loop.
-	{"model": CORRIDOR, "cell": Vector2i(-6, 2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(-6, 3), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(-6, 4), "rotation": 90},
-	{"model": OUTER_ROOM, "cell": Vector2i(-6, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-2, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-3, 6), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-4, 6), "rotation": 0},
-
-	# ---- South ring -------------------------------------------------------
+	# ---- South crossroads --------------------------------------------------
 	{"model": CORRIDOR, "cell": Vector2i(0, -3), "rotation": 90},
-	{"model": OUTER_ROOM, "cell": Vector2i(0, -5), "rotation": 0},
+	{"model": CROSS, "cell": Vector2i(0, -4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(0, -5), "rotation": 90},
+	{"model": WIDE_ROOM, "cell": Vector2i(0, -8), "rotation": 90},
 
-	{"model": CORRIDOR, "cell": Vector2i(2, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(3, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(4, -5), "rotation": 0},
-	{"model": OUTER_ROOM, "cell": Vector2i(6, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(6, -2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(6, -3), "rotation": 90},
+	# West off the south crossroads, turning north to close the loop.
+	{"model": CORRIDOR, "cell": Vector2i(-1, -4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-2, -4), "rotation": 0},
+	{"model": CORNER_ROOM, "cell": Vector2i(-4, -4), "rotation": 180},
+	{"model": CORRIDOR, "cell": Vector2i(-4, -2), "rotation": 90},
 
-	{"model": CORRIDOR, "cell": Vector2i(-2, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-3, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-4, -5), "rotation": 0},
-	{"model": OUTER_ROOM, "cell": Vector2i(-6, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(-6, -2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(-6, -3), "rotation": 90},
+	# East off the south crossroads.
+	# A plain chamber rather than a fourth corner room, so the south-east does
+	# not mirror the north-east.
+	{"model": CORRIDOR, "cell": Vector2i(1, -4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(2, -4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, -4), "rotation": 0},
+	{"model": OUTER_ROOM, "cell": Vector2i(5, -4), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(5, -2), "rotation": 90},
 
-	# South-east chamber, hung off the south-east corner.
-	{"model": CORRIDOR, "cell": Vector2i(9, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(10, -5), "rotation": 0},
-	{"model": OUTER_ROOM, "cell": Vector2i(12, -5), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(12, -2), "rotation": 90},
-	{"model": CORRIDOR, "cell": Vector2i(12, -3), "rotation": 90},
+	# ---- The long halls ----------------------------------------------------
+	# Deliberately uneven: the east run is one cell longer than the west, so
+	# the two sides of the map never feel like reflections of each other.
+	{"model": CORRIDOR, "cell": Vector2i(7, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(8, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(9, 0), "rotation": 0},
+	{"model": WIDE_ROOM, "cell": Vector2i(12, 0), "rotation": 0},
 
-	# The deep south chamber, furthest point on the map from the centre.
-	{"model": CORRIDOR, "cell": Vector2i(0, -7), "rotation": 90},
-	{"model": CENTRE_ROOM, "cell": Vector2i(0, -10), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 0), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-8, 0), "rotation": 0},
+	{"model": WIDE_ROOM, "cell": Vector2i(-11, 0), "rotation": 0},
 
-	# ---- Alcoves ----------------------------------------------------------
-	# Short stubs that go nowhere, purely so the map has edges that are not all
-	# routes — a network where every passage leads somewhere reads as a puzzle
-	# rather than a cave.
-	{"model": CORRIDOR, "cell": Vector2i(-15, 0), "rotation": 0},
-	{"model": DEAD_END, "cell": Vector2i(-16, 0), "rotation": 0},
-	{"model": CORRIDOR, "cell": Vector2i(0, 14), "rotation": 90},
-	{"model": DEAD_END, "cell": Vector2i(0, 15), "rotation": 270},
+	# ---- Alcoves -----------------------------------------------------------
+	# Stubs that go nowhere, so not every passage is a route. A network where
+	# everything leads somewhere reads as a puzzle rather than a cave.
+	{"model": CORRIDOR, "cell": Vector2i(0, -11), "rotation": 90},
+	{"model": DEAD_END, "cell": Vector2i(0, -12), "rotation": 90},
 	{"model": CORRIDOR, "cell": Vector2i(15, 0), "rotation": 0},
 	{"model": DEAD_END, "cell": Vector2i(16, 0), "rotation": 0},
 ]
 
 ## Chambers zombies arrive from.
 ##
-## Every outer chamber on the map, so pressure can come from any bearing. Which
-## of them is actually used for a given spawn is decided at runtime — see
-## pick_spawn_point.
+## Every outer chamber, so pressure can come from any bearing. Which one is
+## used for a given spawn is decided at runtime — see pick_spawn_point.
 const SPAWN_CELLS := [
-	Vector2i(0, 11), Vector2i(0, 6), Vector2i(12, 0), Vector2i(12, 6),
-	Vector2i(-6, 0), Vector2i(-12, 0), Vector2i(-6, 6), Vector2i(0, -5),
-	Vector2i(6, -5), Vector2i(-6, -5), Vector2i(12, -5), Vector2i(0, -10),
+	Vector2i(0, 7), Vector2i(0, 12), Vector2i(-5, 0), Vector2i(5, 0),
+	Vector2i(0, -8), Vector2i(-4, 4), Vector2i(5, 4), Vector2i(-4, -4),
+	Vector2i(5, -4), Vector2i(12, 0), Vector2i(-11, 0),
 ]
 
 
@@ -201,10 +211,13 @@ const SPAWN_CELLS := [
 const CELL_EXTENTS := {
 	CENTRE_ROOM: Vector2i(2, 2),
 	OUTER_ROOM: Vector2i(1, 1),
+	CORNER_ROOM: Vector2i(1, 1),
 	WIDE_ROOM: Vector2i(2, 1),
 	CORRIDOR: Vector2i(0, 0),
+	CROSS: Vector2i(0, 0),
 	DEAD_END: Vector2i(0, 0),
 }
+
 
 ## Collision shell dimensions.
 const WALL_HEIGHT := 5.0
@@ -268,13 +281,10 @@ const PLATFORMS := [
 		"tiles": Vector2i(2, 1),
 		"ramp_from": Vector2(-5.5, -5.0),
 	},
-	# In the long east hall, so the hall is not simply a corridor with a wide
-	# middle.
-	{
-		"centre": Vector2(28.0, 0.0),
-		"tiles": Vector2i(1, 2),
-		"ramp_from": Vector2(19.0, 0.0),
-	},
+	# There were three of these. The third sat in an outer chamber and kept
+	# landing on that chamber's spawn points and its supply crate — the outer
+	# rooms are 9m across and a deck plus its ramp is most of that. Two decks in
+	# the arena, where fights actually concentrate, is the better trade.
 ]
 
 ## Chambers holding a resupply cache, and where in the chamber it sits.
@@ -293,12 +303,12 @@ const PLATFORMS := [
 const CACHE_OFFSET := Vector3(2.8, 0.0, 0.0)
 
 const CACHE_CELLS := [
-	Vector2i(0, 6),
+	Vector2i(0, 7),
+	Vector2i(-5, 0),
+	Vector2i(5, 0),
+	Vector2i(0, -8),
+	Vector2i(-4, -4),
 	Vector2i(12, 0),
-	Vector2i(-6, 0),
-	Vector2i(6, -5),
-	Vector2i(-6, -5),
-	Vector2i(0, -10),
 ]
 
 ## Flat weapon cases from the Kenney Blaster Kit (CC0), as floor dressing.
@@ -504,6 +514,10 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 	_geometry_root.add_child(instance)
 
 	_add_nav_surface(cell, _footprint_for(model, rotation_degrees))
+
+	# A crossroads is walkable along both axes, so it contributes two strips.
+	if EXTRA_FOOTPRINTS.has(model):
+		_add_nav_surface(cell, _turned(EXTRA_FOOTPRINTS[model], rotation_degrees))
 	_add_lighting(model, cell)
 
 
@@ -524,8 +538,12 @@ func _mesh_for(model: String) -> String:
 ## swap the axes; half turns leave them alone.
 func _footprint_for(model: String, rotation_degrees: float) -> Vector2:
 	var footprint: Vector2 = FOOTPRINTS.get(model, Vector2(4.0, 2.6))
-	var quarter_turned := is_equal_approx(fposmod(rotation_degrees, 180.0), 90.0)
+	return _turned(footprint, rotation_degrees)
 
+
+## Swap a footprint's axes when a piece is stood a quarter turn round.
+func _turned(footprint: Vector2, rotation_degrees: float) -> Vector2:
+	var quarter_turned := is_equal_approx(fposmod(rotation_degrees, 180.0), 90.0)
 	return Vector2(footprint.y, footprint.x) if quarter_turned else footprint
 
 
