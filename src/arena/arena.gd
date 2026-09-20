@@ -261,6 +261,13 @@ const DECK_TILE := "template-floor-layer-raised"
 const RAMP_WIDTH := 3.6
 const RAMP_THICKNESS := 0.5
 const RAMP_COLOUR := Color(0.36, 0.25, 0.17)
+## Timber, not stone. The decks are built structures and should not read as
+## another kind of rock.
+const DECK_COLOUR := Color(0.62, 0.44, 0.3)
+## The beam the treads are nailed to. Without it the treads hang in the air
+## on nothing, which reads as a flimsy table rather than a staircase.
+const STRINGER_COLOUR := Color(0.24, 0.16, 0.11)
+const STRINGER_THICKNESS := 0.34
 ## How far the ramp's navmesh strip runs past the slab at each end.
 ## Stair dressing. The kit ships no stair that fits a 3m rise — its stairs.glb
 ## climbs 8.55m — so treads are cut from the flat floor tile instead.
@@ -922,6 +929,12 @@ func _build_deck_blocks(centre: Vector2, tiles: Vector2i) -> void:
 			if block == null:
 				return
 			block.position = Vector3(centre.x + offset.x, 0.0, centre.y + offset.y)
+			# Tinted like everything else placed in the cave. These went in
+			# untinted and read as grey concrete slabs dropped into a rock
+			# chamber — the one thing in the arena that looked imported.
+			# Timber rather than stone, so the decks and the stairs that reach
+			# them tell the same story about who built them.
+			_tint_rock(block, DECK_COLOUR)
 			_geometry_root.add_child(block)
 
 
@@ -1100,6 +1113,22 @@ func _add_ramp_visual(transform: Transform3D, size: Vector3, centre: Vector2) ->
 	root.name = "Ramp_%d_%d" % [int(centre.x), int(centre.y)]
 	root.transform = transform
 	_geometry_root.add_child(root)
+
+	# The beam the treads sit on. Replacing the old box ramp with treads alone
+	# left them hanging in mid-air on nothing, which read as a flimsy table
+	# rather than a staircase — the collision ramp underneath is invisible, so
+	# something has to actually be there.
+	var stringer := MeshInstance3D.new()
+	var beam := BoxMesh.new()
+	beam.size = Vector3(size.x, STRINGER_THICKNESS, size.z)
+	stringer.mesh = beam
+	stringer.name = "Stringer"
+
+	var beam_material := StandardMaterial3D.new()
+	beam_material.albedo_color = STRINGER_COLOUR
+	beam_material.roughness = 0.95
+	stringer.material_override = beam_material
+	root.add_child(stringer)
 
 	var run: float = size.x if size.x > size.z else size.z
 	var along_x := size.x > size.z
