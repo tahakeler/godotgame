@@ -156,3 +156,7 @@ $RECYCLE.BIN/
 * [0-9].gd
 screenshot.png
 *_shot.png
+
+# Agent worktrees. Each is its own checkout of this repo; committing one
+# embeds a git repository inside the repository.
+.claude/worktrees/
