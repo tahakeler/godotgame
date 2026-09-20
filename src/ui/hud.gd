@@ -26,6 +26,11 @@ const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
 ## How long the noise ring stays on screen as it expands and fades.
 const NOISE_RING_DURATION := 0.55
 
+## How heavy the frame sits when nothing is hunting, and when the room is as
+## dangerous as it gets.
+const BASE_VIGNETTE_ALPHA := 1.0
+const THREAT_VIGNETTE_ALPHA := 1.7
+
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
 
@@ -62,6 +67,7 @@ var _weapon: Weapon
 @onready var _ammo_block: Control = $AmmoBlock
 @onready var _noise_ring: Control = %NoiseRing
 @onready var _throw_arc: Control = %ThrowArc
+@onready var _vignette: TextureRect = $Vignette
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -513,6 +519,25 @@ func _draw_throw_arc() -> void:
 		_throw_arc.draw_arc(
 			camera.unproject_position(landing), 9.0, 0.0, TAU, 20, colour, 1.5, true
 		)
+
+
+## Tighten the edges of the screen as danger closes in.
+##
+## The same smoothed figure that drives the audio, so the picture and the mix
+## move together rather than each doing its own thing. It is deliberately the
+## base vignette being pushed rather than a new overlay: the frame simply gets
+## heavier, which the eye reads as pressure without ever looking like a HUD
+## element switching on.
+##
+## Separate from the hurt vignette, which is about the state of your body. This
+## one is about the state of the room.
+func set_threat(threat: float) -> void:
+	if _vignette == null:
+		return
+
+	_vignette.modulate.a = lerpf(
+		BASE_VIGNETTE_ALPHA, THREAT_VIGNETTE_ALPHA, clampf(threat, 0.0, 1.0)
+	)
 
 
 func _tick_noise_ring(delta: float) -> void:

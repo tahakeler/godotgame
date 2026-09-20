@@ -25,6 +25,8 @@ func _initialize() -> void:
 	_write("brute_growl", _build_brute_growl())
 	_write("decoy_land", _build_decoy_land())
 	_write("zombie_alerted", _build_zombie_alerted())
+	_write("cave_ambience", _build_cave_ambience())
+	_write("tension_pulse", _build_tension_pulse())
 
 	quit(0)
 
@@ -61,6 +63,75 @@ func _build_gunshot() -> PackedFloat32Array:
 		var tail: float = previous * exp(-t * 9.0) * 0.22
 
 		samples[index] = clampf(crack * 0.85 + body * 0.75 + tail, -1.0, 1.0)
+
+	return samples
+
+
+## The cave itself: a slow low drone under a breath of filtered air.
+##
+## Built from tones whose frequencies are exact multiples of 1/duration, so
+## every partial completes a whole number of cycles and the loop point lands
+## on the same phase it started at. A drone that clicks once every eight
+## seconds is worse than no drone at all — the ear finds the seam immediately
+## and then cannot stop hearing it.
+func _build_cave_ambience() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3030
+
+	var duration := 8.0
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var previous := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+
+		# 384, 572 and 778 whole cycles across eight seconds.
+		var drone: float = (
+			sin(TAU * 48.0 * t) * 0.5
+			+ sin(TAU * 71.5 * t) * 0.3
+			+ sin(TAU * 97.25 * t) * 0.2
+		)
+
+		# A very slow swell, also an exact multiple, so the room seems to
+		# breathe rather than hum.
+		var swell: float = 0.75 + 0.25 * sin(TAU * 0.125 * t)
+
+		# Heavily rolled-off noise for air movement. Kept low enough that the
+		# seam where it wraps is inaudible under the drone.
+		var noise := rng.randf_range(-1.0, 1.0)
+		previous = lerpf(previous, noise, 0.02)
+
+		samples[index] = clampf(drone * swell * 0.34 + previous * 0.5, -1.0, 1.0)
+
+	return samples
+
+
+## The layer that fades in when the cave is coming for you.
+##
+## A slow two-beat pulse, deliberately close to a heart at exertion. It carries
+## no information the HUD does not already have — it exists so that the moment
+## several things start hunting you is felt before it is read.
+func _build_tension_pulse() -> PackedFloat32Array:
+	var duration := 4.0
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	# Four beats across four seconds, so the loop closes on a whole number.
+	var beats := 4.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+		var phase: float = fmod(t * beats, 1.0)
+
+		# Two thumps per beat, the second softer, like a heart.
+		var strike: float = exp(-phase * 26.0) + exp(-maxf(0.0, phase - 0.22) * 30.0) * 0.55
+		var tone: float = sin(TAU * 41.0 * t)
+
+		samples[index] = clampf(tone * strike * 0.5, -1.0, 1.0)
 
 	return samples
 

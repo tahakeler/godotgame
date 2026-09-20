@@ -24,6 +24,10 @@ const RELOAD_LOUDNESS := 0.3
 const FOOTSTEP_LOUDNESS := 0.22
 const CACHE_LOUDNESS := 0.45
 
+## How often danger is recomputed. Ten times a second is far finer than the
+## mix it drives can respond to.
+const THREAT_SAMPLE_INTERVAL := 0.1
+
 @export_group("Extraction")
 ## Baseline round length before any kills are counted.
 @export var extraction_duration := 120.0
@@ -48,6 +52,8 @@ var kills := 0
 ## round, so accuracy on the results screen is for that run only.
 var shots_fired := 0
 var shots_hit := 0
+var _threat_remaining := 0.0
+var _threat_elapsed := 0.0
 
 @onready var arena: Arena = $Arena
 @onready var player: Player = $Player
@@ -55,6 +61,7 @@ var shots_hit := 0
 @onready var weapon: Weapon = $Player/Head/Camera/Weapon
 @onready var hud: HUD = $HUD
 @onready var sounds: SoundBank = $SoundBank
+@onready var ambience: Ambience = $Ambience
 @onready var effects: EffectSpawner = $EffectSpawner
 @onready var pause_menu: PauseMenu = $PauseMenu
 @onready var progression: Progression = $Progression
@@ -114,8 +121,6 @@ func _wire_audio() -> void:
 	)
 	player.footstep_taken.connect(func() -> void: sounds.play("footstep"))
 
-	# A Brute announces itself with something lower than the crowd, so it can be
-	# heard coming before the corridor gives it away.
 	# The one sound that means something changed about you rather than about
 	# them. Played where the zombie is, so it carries a direction.
 	spawner.zombie_noticed_player.connect(
@@ -123,6 +128,8 @@ func _wire_audio() -> void:
 			sounds.play_at("zombie_alerted", at)
 	)
 
+	# A Brute announces itself with something lower than the crowd, so it can be
+	# heard coming before the corridor gives it away.
 	spawner.zombie_groaned.connect(
 		func(groan_position: Vector3, kind: ZombieTypes.Kind) -> void:
 			var event := (
@@ -187,6 +194,31 @@ func _wire_noise() -> void:
 			_make_noise(at, loudness)
 		)
 	)
+
+
+## Danger drives the audio mix and the weight of the frame.
+##
+## Sampled several times a second rather than every frame. The figure walks
+## every living zombie, and the mix it feeds is smoothed over more than a
+## second anyway — so a tenth of a second of staleness is not something anyone
+## can hear, while the per-frame walk is cost paid for nothing.
+##
+## The accumulated time is handed to the smoothing rather than the frame delta,
+## so the ramp runs at the same rate regardless of how often this is sampled.
+func _tick_threat(delta: float) -> void:
+	_threat_remaining -= delta
+	_threat_elapsed += delta
+
+	if _threat_remaining > 0.0:
+		return
+
+	ambience.set_threat(
+		spawner.threat_level(player.global_position), _threat_elapsed
+	)
+	hud.set_threat(ambience.threat())
+
+	_threat_remaining = THREAT_SAMPLE_INTERVAL
+	_threat_elapsed = 0.0
 
 
 ## Emit a sound into the world and tell the HUD what it cost.
@@ -262,6 +294,8 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		start_round()
 		return
+
+	_tick_threat(delta)
 
 	if state != RoundState.PLAYING:
 		return

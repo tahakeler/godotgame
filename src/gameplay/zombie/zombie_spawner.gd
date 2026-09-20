@@ -31,6 +31,12 @@ signal zombie_noticed_player(at: Vector3, kind: ZombieTypes.Kind)
 ## How far a hunting zombie's alarm passes to the ones around it.
 @export var alert_radius := 14.0
 
+@export_group("Threat")
+## Distance over which a hunter's contribution halves.
+@export var threat_falloff := 12.0
+## Weighted hunters needed to read as maximum danger.
+@export var threat_saturation := 2.6
+
 @export_group("Endless")
 ## Set by Game when the endless mode is chosen.
 @export var endless := false
@@ -86,6 +92,31 @@ func begin(arena: Arena, target: Node3D) -> void:
 
 func stop() -> void:
 	_active = false
+
+
+## How much danger the player is actually in, from 0 to 1.
+##
+## Counts only zombies that are hunting — something wandering a chamber away
+## is not a threat however close it happens to be standing, and something that
+## has seen you is a threat even at range. That distinction is the whole reason
+## the awareness system exists, and a meter built on raw proximity would throw
+## it away and go back to measuring how crowded the room is.
+##
+## Each hunter contributes on a falloff, so three closing in reads hotter than
+## three across the map, and the total saturates rather than climbing forever:
+## past a certain point the difference between five and nine is not something
+## the player can act on differently.
+func threat_level(from: Vector3) -> float:
+	var total := 0.0
+
+	for zombie in _alive:
+		if not is_instance_valid(zombie) or not zombie.is_hunting():
+			continue
+
+		var distance := zombie.global_position.distance_to(from)
+		total += 1.0 / (1.0 + distance / threat_falloff)
+
+	return clampf(total / maxf(threat_saturation, 0.01), 0.0, 1.0)
 
 
 ## Pass one zombie's belief to the ones near it.
