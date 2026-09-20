@@ -66,6 +66,36 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
+[node name="Compass" type="Control" parent="."]
+unique_name_in_owner = true
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -190.0
+offset_top = 86.0
+offset_right = 190.0
+offset_bottom = 110.0
+mouse_filter = 2
+
+[node name="PromptLabel" type="Label" parent="."]
+unique_name_in_owner = true
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -186.0
+offset_right = 300.0
+offset_bottom = -160.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.937, 0.945, 0.961, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.7)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 17
+text = ""
+horizontal_alignment = 1
+
 [node name="Crosshair" type="Control" parent="."]
 anchors_preset = 8
 anchor_left = 0.5
@@ -295,6 +325,13 @@ mouse_filter = 2
 max_value = 100.0
 value = 100.0
 show_percentage = false
+
+[node name="HealthDelta" type="Control" parent="VitalsBlock/HealthRow/HealthColumn/HealthBar"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
 
 [node name="AmmoBlock" type="VBoxContainer" parent="."]
 anchors_preset = 3

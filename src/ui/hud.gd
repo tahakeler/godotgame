@@ -31,6 +31,30 @@ const NOISE_RING_DURATION := 0.55
 const BASE_VIGNETTE_ALPHA := 1.0
 const THREAT_VIGNETTE_ALPHA := 1.7
 
+## Crosshair spread, in pixels from the centre. Rest is how tight it sits when
+## the player is still; the rest is what movement and firing add.
+const CROSSHAIR_REST := 0.0
+const CROSSHAIR_MOVE_SPREAD := 9.0
+const CROSSHAIR_FIRE_KICK := 5.0
+const CROSSHAIR_MAX_KICK := 14.0
+const CROSSHAIR_RECOVERY := 22.0
+const CROSSHAIR_SMOOTHING := 14.0
+
+## A kill marker is bigger and lasts longer than a hit marker, because the two
+## are different pieces of news.
+const KILL_MARKER_SCALE := 1.45
+const KILL_MARKER_DURATION_SCALE := 2.2
+
+## The pale bar trailing the health bar: how long it waits before draining, how
+## fast it drains, and what colour the wound is.
+const HEALTH_DELTA_HOLD := 0.35
+const HEALTH_DELTA_DRAIN := 55.0
+const HEALTH_DELTA_COLOUR := Color(1.0, 0.82, 0.55, 0.5)
+
+## Compass bearings in degrees, and how much of the horizon the strip shows.
+const COMPASS_POINTS := {"N": 0.0, "E": 90.0, "S": 180.0, "W": -90.0}
+const COMPASS_VISIBLE_ARC := 160.0
+
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
 
@@ -69,6 +93,13 @@ var _weapon: Weapon
 @onready var _throw_arc: Control = %ThrowArc
 @onready var _vignette: TextureRect = $Vignette
 @onready var _torch_label: Label = %TorchLabel
+@onready var _compass: Control = %Compass
+@onready var _prompt_label: Label = %PromptLabel
+@onready var _health_delta: Control = %HealthDelta
+@onready var _crosshair_up: ColorRect = $Crosshair/Up
+@onready var _crosshair_down: ColorRect = $Crosshair/Down
+@onready var _crosshair_left: ColorRect = $Crosshair/Left
+@onready var _crosshair_right: ColorRect = $Crosshair/Right
 
 var _damage_markers: Array[Dictionary] = []
 var _flash_remaining := 0.0
@@ -81,6 +112,14 @@ var _noise_heard := 0
 ## Where the sound came from in the world, or INF when it has no place.
 var _noise_world := Vector3.INF
 
+## How far the reticle is currently opened, and how much of that came from
+## recoil rather than from movement.
+var _crosshair_spread := 0.0
+var _crosshair_kick := 0.0
+## The pale health bar trailing behind the real one.
+var _health_delta_value := 0.0
+var _health_delta_hold := 0.0
+
 
 func _ready() -> void:
 	_overlay.visible = false
@@ -90,6 +129,13 @@ func _ready() -> void:
 	_damage_indicator.draw.connect(_draw_damage_markers)
 	_noise_ring.draw.connect(_draw_noise_ring)
 	_throw_arc.draw.connect(_draw_throw_arc)
+	_compass.draw.connect(_draw_compass)
+	_health_delta.draw.connect(_draw_health_delta)
+
+	# The arms are moved relative to where the scene put them, so the authored
+	# gap between the reticle and its centre survives the spread maths.
+	for arm in [_crosshair_up, _crosshair_down, _crosshair_left, _crosshair_right]:
+		arm.set_meta("rest_position", arm.position)
 
 	# The results buttons must keep working after the round ends. Nothing pauses
 	# the tree here, but the HUD outliving a round is the point of them.
@@ -103,6 +149,11 @@ func _process(delta: float) -> void:
 	_tick_hitmarker(delta)
 	_tick_hurt_vignette(delta)
 	_tick_noise_ring(delta)
+	_tick_crosshair(delta)
+	_tick_health_delta(delta)
+
+	# The bearing changes every time the player turns, which is constantly.
+	_compass.queue_redraw()
 
 	# The arc follows the camera, so it has to be redrawn every frame it is up
 	# rather than only when something changes.
@@ -133,9 +184,14 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	weapon.reload_started.connect(_on_reload_started)
 	weapon.reload_finished.connect(_on_weapon_status_cleared)
 	weapon.dry_fired.connect(_on_dry_fired)
+	weapon.fired.connect(_on_weapon_fired)
 
 	spawner.population_changed.connect(_on_population_changed)
+	spawner.zombie_died.connect(_on_zombie_killed)
 
+	# Seeded from the real value, or the pale bar drains from zero on the first
+	# frame and reads as damage the player never took.
+	_health_delta_value = player.health.current_health
 	_on_flashlight_toggled(player.flashlight.is_on)
 	_on_health_changed(player.health.current_health, player.health.max_health)
 	_on_ammo_changed(weapon.magazine_ammo, weapon.reserve_ammo)
@@ -224,6 +280,13 @@ func _on_flashlight_toggled(is_on: bool) -> void:
 func _on_health_changed(current: float, maximum: float) -> void:
 	_health_bar.max_value = maximum
 	_health_bar.value = current
+
+	# A hit leaves the pale bar behind at the old value; healing pulls it up
+	# immediately, because there is no wound to show.
+	if current < _health_delta_value:
+		_health_delta_hold = HEALTH_DELTA_HOLD
+	else:
+		_health_delta_value = current
 	_health_label.text = "%d" % roundi(current)
 
 	# Colour comes from the active palette rather than being hard-coded, so the
@@ -427,7 +490,10 @@ func _tick_damage_markers(delta: float) -> void:
 ## a considered decision and a superstition.
 func flash_hitmarker() -> void:
 	_hitmarker_remaining = hitmarker_duration
-	_hitmarker.modulate.a = 1.0
+	# Reset from any kill marker still fading, so a hit never inherits its
+	# colour or its size.
+	_hitmarker.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	_hitmarker.scale = Vector2.ONE
 
 
 func _tick_hitmarker(delta: float) -> void:
@@ -628,3 +694,146 @@ func _draw_damage_markers() -> void:
 
 func _format_duration(seconds: float) -> String:
 	return "%02d:%02d" % [int(seconds) / 60, int(seconds) % 60]
+
+
+# --- Interactive layer -------------------------------------------------------
+#
+# Everything below exists so the HUD answers back. The readouts above report
+# state; these react to what the player is doing, which is most of the
+# difference between an interface that informs and one that feels connected to
+# the game.
+
+
+## Open the crosshair to match how accurate the player actually is.
+##
+## A fixed reticle lies: it promises the same precision standing still and
+## sprinting. Opening it while moving and kicking it on every shot turns the
+## crosshair into a readout of the one thing it was always pretending to show,
+## and it costs no screen space to say it.
+func _tick_crosshair(delta: float) -> void:
+	if _player == null:
+		return
+
+	var speed := Vector2(_player.velocity.x, _player.velocity.z).length()
+	var from_movement: float = minf(speed / maxf(_player.move_speed, 0.01), 1.0)
+
+	var target: float = CROSSHAIR_REST + CROSSHAIR_MOVE_SPREAD * from_movement + _crosshair_kick
+	_crosshair_kick = maxf(0.0, _crosshair_kick - CROSSHAIR_RECOVERY * delta)
+
+	# Chased rather than snapped. A reticle that tracked speed exactly would
+	# jitter with every footfall and read as a bug.
+	_crosshair_spread = lerpf(
+		_crosshair_spread, target, clampf(CROSSHAIR_SMOOTHING * delta, 0.0, 1.0)
+	)
+
+	_place_crosshair_arm(_crosshair_up, Vector2(0.0, -_crosshair_spread))
+	_place_crosshair_arm(_crosshair_down, Vector2(0.0, _crosshair_spread))
+	_place_crosshair_arm(_crosshair_left, Vector2(-_crosshair_spread, 0.0))
+	_place_crosshair_arm(_crosshair_right, Vector2(_crosshair_spread, 0.0))
+
+
+func _place_crosshair_arm(arm: Control, offset: Vector2) -> void:
+	if arm != null:
+		arm.position = arm.get_meta("rest_position", Vector2.ZERO) + offset
+
+
+## Kick the reticle open. Called on every shot.
+func _on_weapon_fired(_from: Vector3, _to: Vector3) -> void:
+	_crosshair_kick = minf(_crosshair_kick + CROSSHAIR_FIRE_KICK, CROSSHAIR_MAX_KICK)
+
+
+## A kill gets its own confirmation, distinct from a hit.
+##
+## Landing a shot and finishing something are different pieces of news, and a
+## game about ammunition needs the second one to be unmistakable — it is the
+## moment the bullet is confirmed to have been worth spending.
+func _on_zombie_killed(_at: Vector3, _experience: int, _ammo: int) -> void:
+	_hitmarker_remaining = hitmarker_duration * KILL_MARKER_DURATION_SCALE
+	_hitmarker.modulate = GameSettings.colour(
+		self, "danger", Color(0.95, 0.3, 0.24)
+	)
+	_hitmarker.modulate.a = 1.0
+	_hitmarker.scale = Vector2.ONE * KILL_MARKER_SCALE
+
+
+## Drain the pale bar down to the real one, so a hit leaves a visible wound.
+##
+## The health bar alone is a number that changes between glances. The lagging
+## bar shows how much was just taken and from where, which is the difference
+## between noticing damage and reconstructing it afterwards.
+func _tick_health_delta(delta: float) -> void:
+	if _health_delta_value <= _health_bar.value:
+		_health_delta_value = _health_bar.value
+		_health_delta.queue_redraw()
+		return
+
+	_health_delta_hold = maxf(0.0, _health_delta_hold - delta)
+	if _health_delta_hold > 0.0:
+		return
+
+	_health_delta_value = move_toward(
+		_health_delta_value, _health_bar.value, HEALTH_DELTA_DRAIN * delta
+	)
+	_health_delta.queue_redraw()
+
+
+func _draw_health_delta() -> void:
+	var maximum: float = maxf(_health_bar.max_value, 1.0)
+	var current: float = _health_bar.value / maximum
+	var ghost: float = _health_delta_value / maximum
+
+	if ghost - current < 0.001:
+		return
+
+	var size := _health_delta.size
+	_health_delta.draw_rect(
+		Rect2(size.x * current, 0.0, size.x * (ghost - current), size.y),
+		HEALTH_DELTA_COLOUR
+	)
+
+
+## A compass strip, so the cave can be navigated by memory.
+##
+## The map is a loop of chambers that look increasingly alike by design, and
+## "which way is the north hall" is a question the player asks constantly. A
+## bearing answers it without a minimap drawing the whole map for them, which
+## would take the tension out of being lost.
+func _draw_compass() -> void:
+	if _player == null:
+		return
+
+	var facing := -_player.global_transform.basis.z
+	var bearing := atan2(facing.x, -facing.z)
+	var width := _compass.size.x
+	var centre := width * 0.5
+
+	for point in COMPASS_POINTS:
+		var offset := angle_difference(bearing, deg_to_rad(COMPASS_POINTS[point]))
+
+		# Only the arc actually in front of the player is drawn; the rest would
+		# be a ring of labels pointing at the back of their head.
+		if absf(offset) > deg_to_rad(COMPASS_VISIBLE_ARC * 0.5):
+			continue
+
+		var x: float = centre + offset / deg_to_rad(COMPASS_VISIBLE_ARC * 0.5) * centre
+		var fade: float = 1.0 - absf(offset) / deg_to_rad(COMPASS_VISIBLE_ARC * 0.5)
+
+		var colour := Color(0.886, 0.914, 0.965, 0.25 + 0.45 * fade)
+		_compass.draw_string(
+			ThemeDB.fallback_font, Vector2(x - 6.0, 14.0), point,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, colour
+		)
+
+	# The centre tick is what the labels are read against.
+	_compass.draw_rect(
+		Rect2(centre - 1.0, 18.0, 2.0, 6.0),
+		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	)
+
+
+## Show a contextual prompt, or clear it when given nothing.
+##
+## Bottom centre and close to the crosshair on purpose: a prompt the player has
+## to look away from the world to read is a prompt they will miss.
+func show_prompt(text: String) -> void:
+	_prompt_label.text = text
