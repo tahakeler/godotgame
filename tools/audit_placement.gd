@@ -48,6 +48,7 @@ func _process(_delta: float) -> bool:
 		solids.size(), _arena.spawn_points.size()
 	])
 
+	_check_pieces_do_not_share_cells()
 	_check_solids_do_not_overlap(solids)
 	_check_spawn_points_are_clear(solids)
 	_check_player_spawn_is_clear(solids)
@@ -55,6 +56,46 @@ func _process(_delta: float) -> bool:
 
 	_report()
 	return true
+
+
+## No two cave pieces may claim the same grid cell.
+##
+## This is the one that bites hardest and shows least. A corridor placed inside
+## a room's cells renders as rock jammed through the middle of the chamber, and
+## the collision shell — which is built from which cells are walkable — treats
+## the pair as one blob and puts no wall between them. Two corridors were
+## sitting inside corner rooms when this check was written, and nothing else in
+## the build had anything to say about it.
+func _check_pieces_do_not_share_cells() -> void:
+	var owner_of := {}
+	var clashes := 0
+
+	for entry in Arena.LAYOUT:
+		var extent: Vector2i = Arena.CELL_EXTENTS.get(entry.model, Vector2i.ZERO)
+
+		# A quarter turn swaps which axis the piece is long on.
+		if is_equal_approx(fposmod(float(entry.rotation), 180.0), 90.0):
+			extent = Vector2i(extent.y, extent.x)
+
+		for x in range(entry.cell.x - extent.x, entry.cell.x + extent.x + 1):
+			for z in range(entry.cell.y - extent.y, entry.cell.y + extent.y + 1):
+				var cell := Vector2i(x, z)
+
+				if owner_of.has(cell):
+					_problems.append(
+						"%s at %v and %s at %v both claim cell %v"
+						% [entry.model, entry.cell, owner_of[cell].model,
+							owner_of[cell].cell, cell]
+					)
+					clashes += 1
+					continue
+
+				owner_of[cell] = entry
+
+	if clashes == 0:
+		print("PASS: all %d pieces occupy %d cells with no overlap" % [
+			Arena.LAYOUT.size(), owner_of.size()
+		])
 
 
 ## Everything a body could be standing inside, as an XZ rectangle.
