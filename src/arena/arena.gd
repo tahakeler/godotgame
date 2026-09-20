@@ -112,9 +112,7 @@ const EXTRA_FOOTPRINTS := {
 ##
 ## Corridors branch at crossroads and chambers are not all rectangles, so the
 ## map reads as a place that was dug rather than a diagram that was drawn.
-## Every outer chamber is on a loop: there is no arm that has to be walked back
-## down, which matters more than usual in a game where being followed is the
-## whole problem.
+## The central network has two loops; terminal branches require backtracking.
 ##
 ## Rotations for `room-corner` come from the probe: unrotated it opens -X and
 ## -Z, and each quarter turn moves both. 0 is -X/-Z, 90 is -X/+Z, 180 is
@@ -236,7 +234,10 @@ const NAV_HEIGHT := 0.05
 const COVER := [
 	# Moved clear of the south-east ramp, which it was standing 0.4m inside.
 	{"position": Vector3(-7.3, 0, -4.8), "rotation": 18, "scale": 0.62},
-	{"position": Vector3(6.5, 0, 4.0), "rotation": -110, "scale": 0.7},
+	# Pulled south off the north ramp's landing, which it stood 0.3m inside.
+	# Invisible until all six of these were given distinct names — five of them
+	# had been skipped by the placement audit entirely.
+	{"position": Vector3(7.2, 0, 2.0), "rotation": -110, "scale": 0.7},
 	# Moved clear of the raised decks below, which would otherwise have rock
 	# growing up through the floorboards.
 	{"position": Vector3(7.8, 0, -1.0), "rotation": 65, "scale": 0.55},
@@ -260,26 +261,25 @@ const DECK_HEIGHT := 3.0
 const DECK_TILE := "template-floor-layer-raised"
 const RAMP_WIDTH := 3.6
 const RAMP_THICKNESS := 0.5
-const RAMP_COLOUR := Color(0.36, 0.25, 0.17)
-## Timber, not stone. The decks are built structures and should not read as
-## another kind of rock.
-const DECK_COLOUR := Color(0.62, 0.44, 0.3)
-## The beam the treads are nailed to. Without it the treads hang in the air
-## on nothing, which reads as a flimsy table rather than a staircase.
-const STRINGER_COLOUR := Color(0.24, 0.16, 0.11)
-const STRINGER_THICKNESS := 0.34
-## How far the ramp's navmesh strip runs past the slab at each end.
-## Stair dressing. The kit ships no stair that fits a 3m rise — its stairs.glb
-## climbs 8.55m — so treads are cut from the flat floor tile instead.
-const TREAD_TILE := "template-floor-layer"
-const TILE_SIZE := 4.0
-## Roughly how deep each tread is along the slope, before it is divided evenly.
-const TREAD_DEPTH := 1.15
-## Lifts the treads clear of the slab so they read as separate boards.
-const TREAD_RISE := 0.28
+## Weathered timber for the kit's raised platforms and their matching stairs.
+const TIMBER_COLOUR := Color(0.29, 0.235, 0.17)
+const TREAD_DEPTH := 0.34
+const TREAD_THICKNESS := 0.12
+const STRINGER_THICKNESS := 0.22
 
 ## The kit's doorway lintel. It hangs from 3.25m, clear of head height.
 const DOORWAY_BEAM := "gate-overhang"
+
+## Things that are drawn here but whose collision comes from somewhere else —
+## the cave's box shell, a deck body, a ramp body — or that are out of reach
+## and need none at all.
+##
+## Declared rather than inferred so that tools/audit_collision.gd can hold
+## everything else to the rule that it must carry its own collider. The
+## polarity matters: marking what is exempt means the next prop somebody adds
+## is audited by default, where marking what is solid would let it slip through
+## unnoticed.
+const SHELL_BACKED := "collision_provided_elsewhere"
 
 const RAMP_NAV_OVERLAP := 0.9
 ## How far the flat landing reaches onto the deck, and out over the ramp.
@@ -336,8 +336,55 @@ const PROPS := [
 	# Pulled back from the north ramp, whose footprint it was touching.
 	{"model": "crate-wide", "position": Vector3(3.2, 0, 1.2), "rotation": 24},
 	{"model": "crate-medium", "position": Vector3(-3.6, 0, 1.6), "rotation": -52},
-	{"model": "crate-small", "position": Vector3(1.2, 0, -3.4), "rotation": 88},
+	# Was sitting inside the south deck and its ramp at once. Now that props
+	# are solid this would have been a crate embedded in a staircase that you
+	# could also stand on.
+	{"model": "crate-small", "position": Vector3(-2.0, 0, -1.5), "rotation": 88},
 ]
+
+## Retain the atlas detail in neutral stone; world-space mottling spans seams.
+const STONE_SHADER := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D stone_atlas : source_color, filter_linear_mipmap, repeat_enable;
+uniform bool textured = true;
+uniform vec4 stone_color : source_color = vec4(0.48, 0.47, 0.435, 1.0);
+uniform float variation = 1.0;
+uniform vec3 grain_scale = vec3(14.0);
+uniform vec3 mottle_scale = vec3(0.7, 1.5, 0.7);
+uniform float strata_strength = 0.025;
+varying vec3 world_position;
+float hash3(vec3 p) {
+	p = fract(p * 0.1031);
+	p += dot(p, p.yzx + 33.33);
+	return fract((p.x + p.y) * p.z);
+}
+float stone_noise(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(mix(hash3(i), hash3(i + vec3(1,0,0)), f.x),
+		mix(hash3(i + vec3(0,1,0)), hash3(i + vec3(1,1,0)), f.x), f.y),
+		mix(mix(hash3(i + vec3(0,0,1)), hash3(i + vec3(1,0,1)), f.x),
+		mix(hash3(i + vec3(0,1,1)), hash3(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+void vertex() {
+	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+	float atlas = 0.55;
+	if (textured) {
+		atlas = dot(texture(stone_atlas, UV).rgb, vec3(0.2126, 0.7152, 0.0722));
+	}
+	float broad = stone_noise(world_position * mottle_scale);
+	float grain = stone_noise(world_position * grain_scale);
+	float strata = sin(world_position.y * 10.0 + broad * 7.0) * strata_strength;
+	ALBEDO = stone_color.rgb * (0.64 + atlas * 0.7) *
+		(0.79 + broad * 0.27 + grain * 0.12 + strata) * variation;
+	ROUGHNESS = 0.92 + grain * 0.08;
+	SPECULAR = 0.18;
+}
+"""
 
 @export var generation_seed := 20260919
 ## The main menu uses this scene purely as a backdrop and has nothing to
@@ -348,18 +395,16 @@ const PROPS := [
 ## Set from the graphics preset before the arena builds itself.
 @export var quality: GameSettings.Quality = GameSettings.Quality.HIGH
 @export var dust_enabled := true
-@export var dust_amount := 160
+@export var dust_amount := 45
 
 @export_group("Ceiling")
 ## A roof closes the cave in. Without it the player sees over the walls into
 ## empty space, which reads as an unfinished level rather than a cave.
 @export var ceiling_enabled := true
-## Sits clear of the 5m walls. It used to be below them, so the wall tops cut
-## through the roof and the cave leaked into empty space along every edge.
+## Minimum roof baseline. Irregular facets rise above it and blend into walls.
 @export var ceiling_height := 5.6
-@export var ceiling_thickness := 0.6
-@export var ceiling_colour := Color(0.3, 0.2, 0.19)
-@export var stalactite_count := 90
+@export var ceiling_colour := Color(0.32, 0.31, 0.285)
+
 
 @export_group("Dressing")
 ## Overhead beams where corridors meet chambers.
@@ -377,6 +422,7 @@ var ammo_caches: Array[AmmoCache] = []
 
 var _rng := RandomNumberGenerator.new()
 var _geometry_root: Node3D
+var _stone_shader: Shader
 ## Chambers used for the last few spawns.
 var _recent_chambers: Array[int] = []
 
@@ -399,8 +445,8 @@ func _ready() -> void:
 	if bake_navigation:
 		_bake()
 
-	# Added after baking on purpose: the ceiling is a large flat surface, and
-	# the navmesh generator would happily carpet the top of it.
+	# Roof dressing is added after baking so overhead rock cannot become
+	# a disconnected walkable surface.
 	if ceiling_enabled:
 		_build_ceiling()
 
@@ -431,7 +477,7 @@ func _apply_quality() -> void:
 	if quality == GameSettings.Quality.LOW:
 		# Fog is cheap, but without SSAO or glow the scene needs a little more
 		# of it to keep depth readable.
-		environment.fog_density = 0.03
+		environment.fog_density = 0.018
 
 
 ## Half-extent of the central room.
@@ -535,6 +581,7 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 	instance.position = _cell_to_world(cell)
 	instance.rotation.y = deg_to_rad(placed_rotation)
 	instance.name = "%s_%d_%d" % [model, cell.x, cell.y]
+	instance.add_to_group(SHELL_BACKED)
 	_geometry_root.add_child(instance)
 
 	_add_nav_surface(cell, _footprint_for(model, rotation_degrees))
@@ -543,11 +590,7 @@ func _place(model: String, cell: Vector2i, rotation_degrees: float) -> void:
 	if EXTRA_FOOTPRINTS.has(model):
 		_add_nav_surface(cell, _turned(EXTRA_FOOTPRINTS[model], rotation_degrees))
 
-	# Lighting and rock tint are driven from the same profile, so a chamber's
-	# identity colour never drifts out of sync between the two. The rock is
-	# tinted even on a corridor cell that skips its light (see _add_lighting)
-	# so the colour reads as a continuous stretch rather than resetting at
-	# every dark gap.
+	# Stone stays neutral; fixtures carry subtle temperature differences.
 	var profile := _lighting_profile_for(model, cell)
 	_tint_rock(instance, profile.color)
 	_add_lighting(model, cell, profile)
@@ -588,62 +631,24 @@ func _turned(footprint: Vector2, rotation_degrees: float) -> Vector2:
 ## the whole offset): rooms hang their lamp a little higher than the low
 ## corridor ceiling, which is as much a silhouette cue as a light source.
 const _DEFAULT_LIGHTING := {
-	CENTRE_ROOM: {"color": Color(1.0, 0.79, 0.52), "energy": 5.6, "range": 20.0, "height": 4.0},
-	OUTER_ROOM: {"color": Color(1.0, 0.7, 0.42), "energy": 3.6, "range": 13.0, "height": 3.3},
-	WIDE_ROOM: {"color": Color(1.0, 0.66, 0.36), "energy": 4.0, "range": 16.0, "height": 3.3},
-	# Previously undifferentiated from a corridor (both fell into the match
-	# statement's `_` branch below) — the single biggest reason a corner
-	# chamber and the passage leading to it used to be indistinguishable.
-	CORNER_ROOM: {"color": Color(0.55, 0.85, 0.85), "energy": 3.2, "range": 11.0, "height": 3.3},
-	CROSS: {"color": Color(0.8, 0.82, 0.9), "energy": 2.4, "range": 9.0, "height": 3.0},
-	DEAD_END: {"color": Color(0.85, 0.4, 0.32), "energy": 1.0, "range": 6.0, "height": 3.0},
-	CORRIDOR: {"color": Color(0.42, 0.62, 1.0), "energy": 1.3, "range": 6.0, "height": 3.0},
+	CENTRE_ROOM: {"color": Color(1.0, 0.90, 0.76), "energy": 3.5, "range": 17.0, "height": 4.6},
+	OUTER_ROOM: {"color": Color(1.0, 0.91, 0.79), "energy": 2.6, "range": 12.0, "height": 4.2},
+	WIDE_ROOM: {"color": Color(1.0, 0.91, 0.79), "energy": 2.8, "range": 15.0, "height": 4.4},
+	CORNER_ROOM: {"color": Color(0.86, 0.91, 1.0), "energy": 2.5, "range": 10.0, "height": 4.1},
+	CROSS: {"color": Color(0.93, 0.95, 1.0), "energy": 1.8, "range": 8.0, "height": 3.8},
+	DEAD_END: {"color": Color(1.0, 0.89, 0.74), "energy": 0.9, "range": 5.5, "height": 3.8},
+	CORRIDOR: {"color": Color(0.80, 0.87, 1.0), "energy": 1.1, "range": 6.0, "height": 3.8},
 }
 
-## Explicit identity for every chamber called out in the lighting brief, keyed
-## by cell rather than model — several of these share a model (room-wide,
-## room-large, room-corner all appear more than once) and would otherwise be
-## impossible to tell apart on light colour alone, which was the whole
-## complaint. Only color/energy/range are overridden; height still comes from
-## the model default above.
-##
-## Chosen as a rough compass so the palette itself is a wayfinding cue: cool
-## blues/violets read north and west, warm ambers/embers read south and east,
-## greens mark the two approaches deepest into the network. None of this
-## changes what a colour-blind player can do — it is a bonus read on top of
-## the HUD and geometry, never the only one.
+## Subtle temperature shifts rather than a separate hue per room.
 const CHAMBER_IDENTITY := {
-	# Deep north chamber — the far end of the map. Cool and a little dimmer
-	# than the arena so it reads as a destination, not a second hub.
-	Vector2i(0, 12): {"color": Color(0.55, 0.75, 1.0), "energy": 4.6, "range": 18.0},
-	# The approach to it — a bioluminescent green, so the shift from the
-	# corridor's cold blue starts a chamber early.
-	Vector2i(0, 7): {"color": Color(0.55, 1.0, 0.78), "energy": 3.6, "range": 13.0},
-	Vector2i(-5, 0): {"color": Color(1.0, 0.85, 0.4), "energy": 3.6, "range": 13.0},
-	Vector2i(5, 0): {"color": Color(0.85, 0.55, 1.0), "energy": 3.6, "range": 13.0},
-	Vector2i(5, -4): {"color": Color(1.0, 0.58, 0.42), "energy": 3.6, "range": 13.0},
-	# South wide room — hot and slightly brighter than a standard wide room,
-	# the deliberate counterpoint to the cool deep-north chamber. Two earlier
-	# passes (min channel 0.3 at energy 4.2, then 0.42 at 3.9) both rendered as
-	# a solid blood-red wash up close — checked in-engine, not just eyeballed
-	# as numbers — drowning the rock's own texture the same way the flat
-	# orange did, and reading closer to horror than to a warm cavern. Held
-	# against the arena's own proven G/B ratio (0.79/0.52 against its 1.0 red)
-	# rather than picked by eye a third time: this sits a little hotter than
-	# that, not several times hotter.
-	Vector2i(0, -8): {"color": Color(1.0, 0.62, 0.48), "energy": 3.7, "range": 16.0},
-	Vector2i(12, 0): {"color": Color(0.75, 1.0, 0.55), "energy": 4.0, "range": 16.0},
-	Vector2i(-11, 0): {"color": Color(0.55, 0.65, 1.0), "energy": 4.0, "range": 16.0},
-	Vector2i(-4, 4): {"color": Color(0.4, 0.9, 0.95), "energy": 3.2, "range": 11.0},
-	Vector2i(5, 4): {"color": Color(1.0, 0.55, 0.65), "energy": 3.2, "range": 11.0},
-	Vector2i(-4, -4): {"color": Color(0.95, 0.65, 0.35), "energy": 3.2, "range": 11.0},
-	# The two crossroads are deliberately close to neutral white rather than
-	# picking a side of the compass — a junction is a decision point, not a
-	# destination, and a bright neutral beacon is what makes it findable from
-	# every corridor that feeds it. Warmed a touch differently so the two
-	# do not read as the same landmark.
-	Vector2i(0, 4): {"color": Color(0.75, 0.85, 1.0), "energy": 2.4, "range": 9.0},
-	Vector2i(0, -4): {"color": Color(0.88, 0.8, 0.68), "energy": 2.4, "range": 9.0},
+	Vector2i(0, 12): {"color": Color(0.84, 0.90, 1.0), "energy": 2.9},
+	Vector2i(0, 7): {"color": Color(0.90, 0.94, 1.0)},
+	Vector2i(-5, 0): {"color": Color(1.0, 0.92, 0.80)},
+	Vector2i(5, 0): {"color": Color(0.87, 0.92, 1.0)},
+	Vector2i(0, -8): {"color": Color(1.0, 0.87, 0.72), "energy": 2.7},
+	Vector2i(12, 0): {"color": Color(0.91, 0.94, 1.0)},
+	Vector2i(-11, 0): {"color": Color(0.84, 0.90, 1.0), "energy": 2.5},
 }
 
 ## Combine a piece's model default with any chamber-specific override for its
@@ -659,13 +664,7 @@ func _lighting_profile_for(model: String, cell: Vector2i) -> Dictionary:
 	return profile
 
 
-## Light every piece as it is placed, so lighting scales with the layout
-## instead of being hand-placed for one that no longer exists.
-##
-## A single colour temperature across a whole level reads flat no matter how
-## bright it is. Every named chamber now gets its own hue and intensity (see
-## CHAMBER_IDENTITY); corridors stay a neutral cold blue so those chambers have
-## something to visibly pop against instead of competing with a second colour.
+## Restrained work lights leave dark intervals between chambers.
 func _add_lighting(model: String, cell: Vector2i, profile: Dictionary) -> void:
 	# Corridors are lit every few cells rather than every cell. With the map at
 	# its current size that is the difference between roughly ninety lights and
@@ -746,73 +745,77 @@ func _build_dust() -> void:
 	add_child(particles)
 
 
-## A small emissive block at each light, so the glow has a visible source
-## rather than appearing to come from nowhere.
+## Suspended work lights have a dark housing and cable anchored into the roof.
 func _add_lamp_glow(light: OmniLight3D) -> void:
-	var mesh_instance := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(0.35, 0.12, 0.35)
-	mesh_instance.mesh = box
-	mesh_instance.position = light.position + Vector3.UP * 0.35
+	var fixture := Node3D.new()
+	fixture.name = "WorkLight"
+	fixture.add_to_group(SHELL_BACKED)
+	_geometry_root.add_child(fixture)
+	var metal := StandardMaterial3D.new()
+	metal.albedo_color = Color(0.065, 0.072, 0.075)
+	metal.roughness = 0.8
+	metal.metallic = 0.65
+	var anchor: Vector3 = light.position + Vector3.UP * 0.22
+	var housing: MeshInstance3D = _add_detail_box(fixture, Vector3(0.6, 0.12, 0.28), anchor, metal)
+	# A small housing next to a point source otherwise casts an enormous square
+	# across the roof. The room geometry still casts the central light's shadows.
+	housing.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var cable_height: float = ceiling_height + 2.8 - anchor.y
+	_add_detail_box(fixture, Vector3(0.025, cable_height, 0.025),
+		anchor + Vector3.UP * (cable_height * 0.5), metal)
+	var diffuser := StandardMaterial3D.new()
+	diffuser.albedo_color = light.light_color
+	diffuser.emission_enabled = true
+	diffuser.emission = light.light_color
+	diffuser.emission_energy_multiplier = 1.8
+	_add_detail_box(fixture, Vector3(0.45, 0.035, 0.19),
+		anchor - Vector3.UP * 0.072, diffuser)
+	for mesh_instance: MeshInstance3D in _find_mesh_instances(fixture):
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = light.light_color
-	material.emission_enabled = true
-	material.emission = light.light_color
-	material.emission_energy_multiplier = 4.0
-	mesh_instance.material_override = material
 
-	_geometry_root.add_child(mesh_instance)
+func _stone_material(texture: Texture2D, tint: Color, variation: float = 1.0) -> ShaderMaterial:
+	if _stone_shader == null:
+		_stone_shader = Shader.new()
+		_stone_shader.code = STONE_SHADER
+	var material := ShaderMaterial.new()
+	material.shader = _stone_shader
+	material.set_shader_parameter("textured", texture != null)
+	if texture != null:
+		material.set_shader_parameter("stone_atlas", texture)
+	material.set_shader_parameter("stone_color", tint)
+	material.set_shader_parameter("variation", variation)
+	return material
 
 
-## How strongly a chamber's identity colour tints its rock, versus leaving the
-## kit's own albedo alone. Deliberately low: the kit's texture is a trim-sheet
-## atlas (see assets/models/cave/Textures/colormap.png) with real baked
-## variation in its rock swatch, and the goal is a hue the eye picks up
-## passively across a room, not a wash that flattens that variation under a
-## single flat colour the way the lighting alone used to.
-const ROCK_TINT_STRENGTH := 0.22
+func _timber_material() -> ShaderMaterial:
+	var material: ShaderMaterial = _stone_material(null, TIMBER_COLOUR)
+	material.set_shader_parameter("grain_scale", Vector3(0.6, 18.0, 18.0))
+	material.set_shader_parameter("mottle_scale", Vector3(0.3, 3.0, 3.0))
+	material.set_shader_parameter("strata_strength", 0.0)
+	return material
 
-## Per-instance brightness jitter on top of the tint, so the handful of
-## reused meshes (four small rooms, three corner rooms, and so on) do not read
-## as visibly stamped copies of each other. Deterministic per seed via _rng,
-## so two runs of the same seed still produce the same cave.
-const ROCK_JITTER := 0.06
 
-## Dielectric reflectance to use on cave rock, replacing the material's
-## imported default of 0.5.
-##
-## The kit ships only an albedo texture — no roughness or normal map — and its
-## imported roughness is already 1.0 (fully matte, confirmed by inspecting the
-## imported material directly rather than assuming). That default specular is
-## what was left making the rock read faintly plastic: at any roughness a
-## dielectric still shows a Fresnel highlight at grazing angles, sized by this
-## value, and 0.5 is tuned for a generic glossy surface, not dry stone.
-const ROCK_SPECULAR := 0.22
-
-## Tint a placed piece's rock to match its chamber's identity colour, and
-## dial back the kit's default specular so it reads as dry stone rather than
-## the faintly glossy plastic the imported default produces.
-##
-## Multiplies the existing albedo rather than replacing it, so the atlas's own
-## baked variation (the mottled rock swatch, see colormap.png) survives the
-## tint instead of being flattened under a flat wash of colour.
-func _tint_rock(instance: Node3D, identity_colour: Color) -> void:
-	var tint := Color.WHITE.lerp(identity_colour, ROCK_TINT_STRENGTH)
-	tint *= 1.0 + _rng.randf_range(-ROCK_JITTER, ROCK_JITTER)
-	tint.a = 1.0
-
+func _tint_rock(instance: Node3D, _identity_colour: Color) -> void:
+	var variation: float = 1.0 + _rng.randf_range(-0.04, 0.04)
 	for mesh_instance in _find_mesh_instances(instance):
 		for surface in mesh_instance.mesh.get_surface_count():
-			var material := mesh_instance.get_active_material(surface)
-			if not (material is StandardMaterial3D):
-				continue
+			var material: Material = mesh_instance.get_active_material(surface)
+			if material is StandardMaterial3D:
+				mesh_instance.set_surface_override_material(surface, _stone_material(
+					material.albedo_texture, Color(0.48, 0.47, 0.435), variation))
 
-			var tinted: StandardMaterial3D = material.duplicate()
-			tinted.albedo_color = material.albedo_color * tint
-			tinted.metallic_specular = ROCK_SPECULAR
-			mesh_instance.set_surface_override_material(surface, tinted)
+
+func _add_detail_box(parent: Node3D, size: Vector3, at: Vector3,
+		material: Material) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	instance.mesh = box
+	instance.position = at
+	instance.material_override = material
+	parent.add_child(instance)
+	return instance
 
 
 ## Flat walkable footprint for one piece, used as navmesh source geometry.
@@ -840,7 +843,8 @@ func _add_nav_surface(cell: Vector2i, footprint: Vector2) -> void:
 
 
 func _build_cover() -> void:
-	for entry in COVER:
+	for index in COVER.size():
+		var entry: Dictionary = COVER[index]
 		var instance := _instantiate(CAVE_PATH % "template-detail")
 		if instance == null:
 			continue
@@ -848,13 +852,20 @@ func _build_cover() -> void:
 		instance.position = entry.position
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		instance.scale = Vector3.ONE * entry.scale
-		instance.name = "Cover"
+		# Numbered, because add_child renames a duplicate name to something
+		# generated — and the tools that look for these in the live tree find
+		# them by name. Naming all six "Cover" meant five of them vanished from
+		# tools/audit_placement.gd without the audit noticing it had stopped
+		# checking them.
+		instance.name = "Cover_%d" % index
 		_geometry_root.add_child(instance)
 		_add_cover_collider(instance, entry.scale)
+		_tint_rock(instance, Color.WHITE)
 
 
 func _build_props() -> void:
-	for entry in PROPS:
+	for index in PROPS.size():
+		var entry: Dictionary = PROPS[index]
 		var instance := _instantiate(PROP_PATH % entry.model)
 		if instance == null:
 			continue
@@ -862,9 +873,15 @@ func _build_props() -> void:
 		instance.position = entry.position
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		# Named so tools/audit_placement.gd can find it in the live tree rather
-		# than re-deriving where it ought to be from the table.
-		instance.name = "Prop"
+		# than re-deriving where it ought to be from the table, and numbered so
+		# that all three survive being added — see _build_cover.
+		instance.name = "Prop_%d" % index
 		_geometry_root.add_child(instance)
+
+		# These are shin-high footlockers, so collision turns each one into a
+		# step rather than a wall — the player's step assist clears 0.45m and
+		# these are 0.35m. Without it they were scenery you walked through.
+		MeshCollision.fit(instance)
 
 
 ## Place a resupply cache in each of the chambers that has one.
@@ -896,6 +913,19 @@ func _build_caches() -> void:
 func _build_platforms() -> void:
 	for entry in PLATFORMS:
 		_build_platform(entry)
+		# Work lights keep enemy silhouettes readable on the raised routes.
+		var light := OmniLight3D.new()
+		light.name = "PlatformWorkLight"
+		light.position = Vector3(entry.centre.x, 5.3, entry.centre.y)
+		light.light_color = Color(0.90, 0.94, 1.0)
+		light.light_energy = 1.4
+		light.omni_range = 8.0
+		light.shadow_enabled = false
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = LIGHT_FADE_BEGIN
+		light.distance_fade_length = LIGHT_FADE_LENGTH
+		_geometry_root.add_child(light)
+		_add_lamp_glow(light)
 
 
 func _build_platform(entry: Dictionary) -> void:
@@ -929,12 +959,9 @@ func _build_deck_blocks(centre: Vector2, tiles: Vector2i) -> void:
 			if block == null:
 				return
 			block.position = Vector3(centre.x + offset.x, 0.0, centre.y + offset.y)
-			# Tinted like everything else placed in the cave. These went in
-			# untinted and read as grey concrete slabs dropped into a rock
-			# chamber — the one thing in the arena that looked imported.
-			# Timber rather than stone, so the decks and the stairs that reach
-			# them tell the same story about who built them.
-			_tint_rock(block, DECK_COLOUR)
+			for mesh_instance: MeshInstance3D in _find_mesh_instances(block):
+				mesh_instance.material_override = _timber_material()
+			block.add_to_group(SHELL_BACKED)
 			_geometry_root.add_child(block)
 
 
@@ -1098,68 +1125,38 @@ func _add_landing(edge: Vector2, along_x: bool, direction: float,
 	)
 
 
-## Dress the ramp as a built wooden stair.
-##
-## The slope stays a smooth ramp for collision and navigation — that part is
-## proven and a flight of discrete steps would need step-up logic in the player
-## and would sit badly with the navmesh baker. What changes is only what you
-## see: a run of treads from the kit's own floor tile, which is the difference
-## between a structure someone built and the untextured box this used to be.
-##
-## Visual stairs over ramp collision is the standard trick for exactly this
-## reason, and at low-poly scale the eye reads the treads, not the slide.
+## Horizontal timber treads on narrow stringers; existing ramp collision and
+## navigation links remain the authoritative traversal surface.
 func _add_ramp_visual(transform: Transform3D, size: Vector3, centre: Vector2) -> void:
 	var root := Node3D.new()
 	root.name = "Ramp_%d_%d" % [int(centre.x), int(centre.y)]
-	root.transform = transform
+	root.add_to_group(SHELL_BACKED)
 	_geometry_root.add_child(root)
-
-	# The beam the treads sit on. Replacing the old box ramp with treads alone
-	# left them hanging in mid-air on nothing, which read as a flimsy table
-	# rather than a staircase — the collision ramp underneath is invisible, so
-	# something has to actually be there.
-	var stringer := MeshInstance3D.new()
-	var beam := BoxMesh.new()
-	beam.size = Vector3(size.x, STRINGER_THICKNESS, size.z)
-	stringer.mesh = beam
-	stringer.name = "Stringer"
-
-	var beam_material := StandardMaterial3D.new()
-	beam_material.albedo_color = STRINGER_COLOUR
-	beam_material.roughness = 0.95
-	stringer.material_override = beam_material
-	root.add_child(stringer)
-
-	var run: float = size.x if size.x > size.z else size.z
-	var along_x := size.x > size.z
-	var treads: int = maxi(2, int(run / TREAD_DEPTH))
-	var tread_run := run / float(treads)
-
-	for index in treads:
-		var tile := _instantiate(CAVE_PATH % TREAD_TILE)
-		if tile == null:
-			break
-
-		# Along the slope, each tread is one step further and one step down.
-		# The root is already tilted, so working in its local space means the
-		# treads follow the slope without any trigonometry here.
-		var offset := -run * 0.5 + tread_run * (float(index) + 0.5)
-		tile.position = (
-			Vector3(offset, TREAD_RISE, 0.0) if along_x
-			else Vector3(0.0, TREAD_RISE, offset)
-		)
-
-		# The tile is 4m square and 0.5m thick. Squeeze it to the tread it has
-		# to cover; the tile is a plain slab, so this reads as a shorter plank
-		# rather than as a distorted prop.
-		var width_scale: float = (size.z if along_x else size.x) / TILE_SIZE
-		var depth_scale := tread_run / TILE_SIZE
-		tile.scale = (
-			Vector3(depth_scale, 1.0, width_scale) if along_x
-			else Vector3(width_scale, 1.0, depth_scale)
-		)
-
-		root.add_child(tile)
+	var timber: ShaderMaterial = _timber_material()
+	var along_x: bool = size.x > size.z
+	var slope_length: float = maxf(size.x, size.z)
+	var axis := Vector3.RIGHT if along_x else Vector3.BACK
+	var across := Vector3.BACK if along_x else Vector3.RIGHT
+	var start: Vector3 = transform * (-axis * slope_length * 0.5)
+	var finish: Vector3 = transform * (axis * slope_length * 0.5)
+	var horizontal_run: float = Vector2(finish.x - start.x, finish.z - start.z).length()
+	var count: int = ceili(horizontal_run / TREAD_DEPTH)
+	var depth: float = horizontal_run / float(count)
+	for index in count:
+		var fraction: float = (float(index) + 0.5) / float(count)
+		var at: Vector3 = start.lerp(finish, fraction)
+		at.y += transform.basis.y.y * RAMP_THICKNESS * 0.5 - TREAD_THICKNESS * 0.5
+		var tread_size := Vector3(depth + 0.018, TREAD_THICKNESS, RAMP_WIDTH)
+		if not along_x:
+			tread_size = Vector3(RAMP_WIDTH, TREAD_THICKNESS, depth + 0.018)
+		_add_detail_box(root, tread_size, at, timber)
+	for side in [-1.0, 1.0]:
+		var beam_size := Vector3(slope_length, STRINGER_THICKNESS, 0.16)
+		if not along_x:
+			beam_size = Vector3(0.16, STRINGER_THICKNESS, slope_length)
+		var beam: MeshInstance3D = _add_detail_box(root, beam_size,
+			transform.origin + across * side * (RAMP_WIDTH * 0.5 - 0.18), timber)
+		beam.basis = transform.basis
 
 
 func _add_ramp_collision(transform: Transform3D, size: Vector3, centre: Vector2) -> void:
@@ -1196,72 +1193,73 @@ func _add_nav_surface_transformed(transform: Transform3D, size: Vector2,
 	mesh_instance.add_to_group(NAV_SOURCE_GROUP)
 
 
+## Continuous irregular roof. Shared world-space samples prevent module seams.
+## Its lowest point clears a standing player on the 3m decks.
 func _build_ceiling() -> void:
-	# Reaches past the furthest chamber so no edge is ever visible from inside.
-	var extent := 160.0
+	var noise := FastNoiseLite.new()
+	noise.seed = generation_seed + 81
+	noise.frequency = 0.12
+	noise.fractal_octaves = 3
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var occupied: Dictionary = _occupied_cells()
+	for cell: Vector2i in occupied:
+		var origin: Vector3 = _cell_to_world(cell) - Vector3(CELL * 0.5, 0, CELL * 0.5)
+		for x in 2:
+			for z in 2:
+				var corner: Vector3 = origin + Vector3(x * 2.0, 0, z * 2.0)
+				var a: Vector3 = _roof_point(corner, noise)
+				var b: Vector3 = _roof_point(corner + Vector3(2, 0, 0), noise)
+				var c: Vector3 = _roof_point(corner + Vector3(2, 0, 2), noise)
+				var d: Vector3 = _roof_point(corner + Vector3(0, 0, 2), noise)
+				_add_rock_triangle(surface, a, b, c)
+				_add_rock_triangle(surface, a, c, d)
+		# Rock aprons join the roof into the walls above player headroom.
+		for direction: Vector2i in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+			if occupied.has(cell + direction):
+				continue
+			var normal := Vector3(direction.x, 0, direction.y)
+			var tangent := Vector3(-direction.y, 0, direction.x)
+			var edge: Vector3 = _cell_to_world(cell) + normal * CELL * 0.5
+			for segment in 2:
+				var a: Vector3 = _roof_point(edge + tangent * (float(segment) * 2.0 - 2.0), noise)
+				var b: Vector3 = _roof_point(edge + tangent * float(segment) * 2.0, noise)
+				var c := Vector3(b.x, 2.6, b.z)
+				var d := Vector3(a.x, 2.6, a.z)
+				var mid_a := Vector3(a.x, 4.8 + noise.get_noise_2d(a.x, a.z) * 0.5, a.z)
+				var mid_b := Vector3(b.x, 4.8 + noise.get_noise_2d(b.x, b.z) * 0.5, b.z)
+				# A shallow rock shoulder joins the upper wall into the vault.
+				# It remains behind the existing collision shell's inner face.
+				mid_a -= normal * 0.18
+				mid_b -= normal * 0.18
+				_add_rock_triangle(surface, a, b, mid_b)
+				_add_rock_triangle(surface, a, mid_b, mid_a)
+				_add_rock_triangle(surface, mid_a, mid_b, c)
+				_add_rock_triangle(surface, mid_a, c, d)
+	var roof := MeshInstance3D.new()
+	roof.name = "Ceiling"
+	roof.mesh = surface.commit()
+	roof.material_override = _stone_material(null, ceiling_colour)
+	roof.add_to_group(SHELL_BACKED)
+	add_child(roof)
 
-	# A box rather than a plane. A plane's normals point one way, and a flipped
-	# plane lit from underneath renders as a black void that reads as open sky
-	# — which is exactly what the roof used to look like. A box has correct
-	# outward normals on every face, so its underside is lit like any other
-	# surface and there is nothing to get backwards.
-	var mesh_instance := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(extent, ceiling_thickness, extent)
-	mesh_instance.mesh = box
-	mesh_instance.position = Vector3(
-		0.0, ceiling_height + ceiling_thickness * 0.5, 0.0
-	)
 
-	var material := StandardMaterial3D.new()
-	material.albedo_color = ceiling_colour
-	material.roughness = 1.0
-	mesh_instance.material_override = material
-	mesh_instance.name = "Ceiling"
-	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-	add_child(mesh_instance)
-	_build_stalactites()
+func _roof_point(point: Vector3, noise: FastNoiseLite) -> Vector3:
+	var height: float = ceiling_height + 0.5 + (noise.get_noise_2d(point.x, point.z) + 1.0) * 1.15
+	var x: float = point.x + noise.get_noise_2d(point.x + 117.0, point.z) * 0.65
+	var z: float = point.z + noise.get_noise_2d(point.x, point.z - 83.0) * 0.65
+	return Vector3(x, height, z)
 
 
-## Rock hanging from the roof.
-##
-## A flat ceiling reads as a lid on a box however well it is lit. Breaking the
-## silhouette is what makes the space read as a cave, and it costs a handful of
-## cones. They are kept above head height and away from the centre of chambers
-## so they never obstruct a shot.
-func _build_stalactites() -> void:
-	if stalactite_count <= 0:
-		return
-
-	var material := StandardMaterial3D.new()
-	material.albedo_color = ceiling_colour.darkened(0.15)
-	material.roughness = 1.0
-
-	var root := Node3D.new()
-	root.name = "Stalactites"
-	add_child(root)
-
-	var reach := get_play_radius()
-
-	for index in stalactite_count:
-		var cone := CylinderMesh.new()
-		cone.top_radius = _rng.randf_range(0.22, 0.6)
-		cone.bottom_radius = 0.0
-		cone.height = _rng.randf_range(0.8, 2.3)
-		cone.radial_segments = 6
-		cone.rings = 1
-
-		var instance := MeshInstance3D.new()
-		instance.mesh = cone
-		instance.material_override = material
-		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		instance.position = Vector3(
-			_rng.randf_range(-reach, reach),
-			ceiling_height - cone.height * 0.5,
-			_rng.randf_range(-reach, reach)
-		)
-		root.add_child(instance)
+func _add_rock_triangle(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
+	var normal: Vector3 = (c - a).cross(b - a).normalized()
+	var points: Array[Vector3] = [a, b, c]
+	if normal.y > 0.0:
+		normal = -normal
+		points = [a, c, b]
+	for point: Vector3 in points:
+		surface.set_normal(normal)
+		surface.add_vertex(point)
 
 
 ## Zombies enter from the outer chambers, so pressure arrives from every
@@ -1509,5 +1507,8 @@ func _add_doorway(cell: Vector2i, direction: Vector2i) -> void:
 	if direction.x != 0:
 		beam.rotation.y = deg_to_rad(90.0)
 
+	for mesh_instance: MeshInstance3D in _find_mesh_instances(beam):
+		mesh_instance.material_override = _timber_material()
 	beam.name = "Doorway"
+	beam.add_to_group(SHELL_BACKED)
 	_geometry_root.add_child(beam)

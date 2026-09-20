@@ -69,6 +69,7 @@ run_step "input-map" "$GODOT" --headless --script tests/manual/verify_input_map.
 run_step "arena" "$GODOT" --headless --script tests/manual/verify_arena.gd
 run_step "navmesh" "$GODOT" --headless --script tests/manual/verify_navmesh.gd
 run_step "placement" "$GODOT" --headless --script tools/audit_placement.gd
+run_step "collision" "$GODOT" --headless --script tools/audit_collision.gd
 run_step "spawn-director" "$GODOT" --headless --script tests/manual/verify_spawn_director.gd
 run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_types.gd
 run_step "zombie-scale" "$GODOT" --headless --script tests/manual/verify_zombie_scale.gd

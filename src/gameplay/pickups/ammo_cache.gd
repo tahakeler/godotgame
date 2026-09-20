@@ -96,7 +96,12 @@ func _refresh_glow() -> void:
 func _build() -> void:
 	var scene: PackedScene = load(CRATE_MODEL)
 	if scene != null:
-		add_child(scene.instantiate())
+		var crate: Node3D = scene.instantiate()
+		add_child(crate)
+		# The crate is solid; the trigger below is not. Its cylinder reaches
+		# 1.6m, comfortably past the 0.6m half-length of the crate, so standing
+		# against a cache still counts as standing in it.
+		MeshCollision.fit(crate)
 
 	_light = OmniLight3D.new()
 	_light.position = Vector3(0.0, glow_height, 0.0)
