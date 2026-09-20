@@ -221,7 +221,8 @@ const NAV_HEIGHT := 0.05
 ## height so they break sightlines without turning the arena into a maze — the
 ## concept's anti-pillars rule out anything that makes turtling viable.
 const COVER := [
-	{"position": Vector3(-6.0, 0, -4.5), "rotation": 18, "scale": 0.62},
+	# Moved clear of the south-east ramp, which it was standing 0.4m inside.
+	{"position": Vector3(-7.3, 0, -4.8), "rotation": 18, "scale": 0.62},
 	{"position": Vector3(6.5, 0, 4.0), "rotation": -110, "scale": 0.7},
 	# Moved clear of the raised decks below, which would otherwise have rock
 	# growing up through the floorboards.
@@ -285,6 +286,12 @@ const PLATFORMS := [
 ## Spread across four bearings so no single loop collects them all, and none of
 ## them is in a dead-end alcove: a cache you can only reach down a corridor
 ## with one exit is a trap rather than a decision.
+## Where the crate sits inside its chamber.
+##
+## Checked against SPAWN_SPREAD by tools/audit_placement.gd: it has to clear
+## every spawn point in the chamber, and still fit inside a 9m walkable room.
+const CACHE_OFFSET := Vector3(2.8, 0.0, 0.0)
+
 const CACHE_CELLS := [
 	Vector2i(0, 6),
 	Vector2i(12, 0),
@@ -297,7 +304,8 @@ const CACHE_CELLS := [
 ## Flat weapon cases from the Kenney Blaster Kit (CC0), as floor dressing.
 ## They are 0.23m tall, so they are scenery rather than cover.
 const PROPS := [
-	{"model": "crate-wide", "position": Vector3(3.2, 0, 2.4), "rotation": 24},
+	# Pulled back from the north ramp, whose footprint it was touching.
+	{"model": "crate-wide", "position": Vector3(3.2, 0, 1.2), "rotation": 24},
 	{"model": "crate-medium", "position": Vector3(-3.6, 0, 1.6), "rotation": -52},
 	{"model": "crate-small", "position": Vector3(1.2, 0, -3.4), "rotation": 88},
 ]
@@ -687,6 +695,9 @@ func _build_props() -> void:
 
 		instance.position = entry.position
 		instance.rotation.y = deg_to_rad(entry.rotation)
+		# Named so tools/audit_placement.gd can find it in the live tree rather
+		# than re-deriving where it ought to be from the table.
+		instance.name = "Prop"
 		_geometry_root.add_child(instance)
 
 
@@ -703,9 +714,10 @@ func _build_caches() -> void:
 	for cell in CACHE_CELLS:
 		var cache := AmmoCache.new()
 		cache.name = "AmmoCache_%d_%d" % [cell.x, cell.y]
-		# Offset from the chamber centre so the crate is not standing exactly
-		# where zombies arrive.
-		cache.position = _cell_to_world(cell) + Vector3(2.2, 0.0, -2.2)
+		# Offset from the chamber centre, clear of every point in SPAWN_SPREAD.
+		# The first version sat 0.7m from one of them, so zombies arrived
+		# standing inside the supply crate in all six chambers.
+		cache.position = _cell_to_world(cell) + CACHE_OFFSET
 		add_child(cache)
 		ammo_caches.append(cache)
 
