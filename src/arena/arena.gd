@@ -271,6 +271,9 @@ const TREAD_DEPTH := 1.15
 ## Lifts the treads clear of the slab so they read as separate boards.
 const TREAD_RISE := 0.28
 
+## The kit's doorway lintel. It hangs from 3.25m, clear of head height.
+const DOORWAY_BEAM := "gate-overhang"
+
 const RAMP_NAV_OVERLAP := 0.9
 ## How far the flat landing reaches onto the deck, and out over the ramp.
 const LANDING_INNER := 2.2
@@ -351,6 +354,10 @@ const PROPS := [
 @export var ceiling_colour := Color(0.3, 0.2, 0.19)
 @export var stalactite_count := 90
 
+@export_group("Dressing")
+## Overhead beams where corridors meet chambers.
+@export var doorways_enabled := true
+
 @export_group("Caches")
 ## The menu backdrop has no player to collect anything, so it skips them.
 @export var caches_enabled := true
@@ -391,6 +398,7 @@ func _ready() -> void:
 		_build_ceiling()
 
 	_build_caches()
+	_build_doorways()
 
 	if dust_enabled and quality >= GameSettings.Quality.MEDIUM:
 		_build_dust()
@@ -1397,3 +1405,80 @@ func _bake() -> void:
 
 	# Synchronous — zombies query the mesh on their first frame.
 	bake_navigation_mesh(false)
+
+
+## Frame every corridor mouth with an overhead beam.
+##
+## The cave read as tunnels bored through rock with nothing to say who bored
+## them. A lintel where a corridor meets a chamber does two jobs at once: it
+## makes the place look worked rather than natural, and it gives the eye a
+## frame that marks a threshold — which matters in a game where knowing which
+## opening something is about to come through is the whole problem.
+##
+## Derived from the layout rather than hand-placed. A hand-placed list would
+## drift the moment the network changed, and this network has already been
+## rebuilt once.
+func _build_doorways() -> void:
+	if not doorways_enabled:
+		return
+
+	var rooms := _room_cells()
+	var placed := {}
+
+	for entry in LAYOUT:
+		if CELL_EXTENTS.get(entry.model, Vector2i.ZERO) != Vector2i.ZERO:
+			continue
+
+		for direction in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.UP, Vector2i.DOWN]:
+			var neighbour: Vector2i = entry.cell + direction
+			if not rooms.has(neighbour):
+				continue
+
+			# Key on the pair so a corridor between two chambers does not get
+			# two beams stacked in the same doorway.
+			var key := "%s|%s" % [entry.cell, neighbour]
+			if placed.has(key):
+				continue
+			placed[key] = true
+
+			_add_doorway(entry.cell, direction)
+
+
+## Cells belonging to a piece large enough to be a chamber.
+func _room_cells() -> Dictionary:
+	var cells := {}
+
+	for entry in LAYOUT:
+		var extent: Vector2i = CELL_EXTENTS.get(entry.model, Vector2i.ZERO)
+		if extent == Vector2i.ZERO:
+			continue
+
+		if is_equal_approx(fposmod(float(entry.rotation), 180.0), 90.0):
+			extent = Vector2i(extent.y, extent.x)
+
+		for x in range(entry.cell.x - extent.x, entry.cell.x + extent.x + 1):
+			for y in range(entry.cell.y - extent.y, entry.cell.y + extent.y + 1):
+				cells[Vector2i(x, y)] = true
+
+	return cells
+
+
+func _add_doorway(cell: Vector2i, direction: Vector2i) -> void:
+	var beam := _instantiate(CAVE_PATH % DOORWAY_BEAM)
+	if beam == null:
+		return
+
+	# Sits on the boundary between the two cells rather than in either of them,
+	# so it frames the gap instead of hanging over one side of it.
+	var edge := Vector3(
+		float(direction.x) * CELL * 0.5, 0.0, float(direction.y) * CELL * 0.5
+	)
+	beam.position = _cell_to_world(cell) + edge
+
+	# The beam spans X unrotated, so a doorway facing along Z needs a quarter
+	# turn to lie across the opening rather than along it.
+	if direction.x != 0:
+		beam.rotation.y = deg_to_rad(90.0)
+
+	beam.name = "Doorway"
+	_geometry_root.add_child(beam)
