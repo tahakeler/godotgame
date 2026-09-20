@@ -18,6 +18,9 @@ const GAME_SCENE := "res://src/core/game.tscn"
 @onready var _main_panel: Control = %MainPanel
 @onready var _settings_panel: SettingsPanel = %SettingsPanel
 @onready var _credits_panel: CreditsPanel = %CreditsPanel
+@onready var _controls_panel: ControlsPanel = %ControlsPanel
+@onready var _controls_button: Button = %ControlsButton
+@onready var _controls_hint: Label = %ControlsHint
 @onready var _credits_button: Button = %CreditsButton
 @onready var _play_button: Button = %PlayButton
 @onready var _settings_button: Button = %SettingsButton
@@ -43,11 +46,15 @@ func _ready() -> void:
 	_settings_panel.closed.connect(_on_settings_closed)
 	_credits_button.pressed.connect(_on_credits_pressed)
 	_credits_panel.closed.connect(_on_credits_closed)
+	_controls_button.pressed.connect(_on_controls_pressed)
+	_controls_panel.closed.connect(_on_controls_closed)
 	_mode_button.pressed.connect(_on_mode_pressed)
 
 	_settings_panel.visible = false
 	_credits_panel.visible = false
+	_controls_panel.visible = false
 	_play_button.grab_focus()
+	_refresh_controls_hint()
 	_refresh_difficulty_hint()
 	_refresh_mode()
 	_fade_in()
@@ -91,6 +98,40 @@ func _on_credits_closed() -> void:
 	_credits_panel.visible = false
 	_main_panel.visible = true
 	_credits_button.grab_focus()
+
+
+## The full control list gets its own screen. What stays on the front page is a
+## single line naming the two or three controls a new player needs before they
+## can look anything up — and even that is read from the InputMap rather than
+## typed, because the line it replaced was typed and went wrong twice.
+func _refresh_controls_hint() -> void:
+	var highlights := ["move_forward", "fire", "reload", "pause"]
+	var parts: Array[String] = []
+
+	for action in highlights:
+		if not InputMap.has_action(action):
+			continue
+		parts.append("%s  %s" % [
+			ControlsPanel.keyboard_binding(action).to_upper(),
+			ControlsPanel.label_for(action).to_upper(),
+		])
+
+	_controls_hint.text = "     ".join(parts)
+
+
+func _on_controls_pressed() -> void:
+	_main_panel.visible = false
+	_controls_panel.visible = true
+	# Rebuilt on open rather than trusted from _ready, so a binding changed
+	# elsewhere in this session cannot leave a stale row on screen.
+	_controls_panel.rebuild()
+	_controls_panel.focus_first_control()
+
+
+func _on_controls_closed() -> void:
+	_controls_panel.visible = false
+	_main_panel.visible = true
+	_controls_button.grab_focus()
 
 
 func _on_settings_pressed() -> void:

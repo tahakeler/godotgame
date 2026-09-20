@@ -78,6 +78,9 @@ func _ready() -> void:
 	spawner.zombie_died.connect(_on_zombie_died)
 	player.died.connect(_on_player_died)
 	pause_menu.resumed.connect(_on_resumed)
+	# The menu asks; the round state stays here. Same entry point the restart
+	# control uses, so both routes produce an identical round.
+	pause_menu.restart_requested.connect(start_round)
 	progression.levelled_up.connect(_on_levelled_up)
 	upgrade_menu.chosen.connect(_apply_upgrade)
 	_settings = GameSettings.instance(self)
