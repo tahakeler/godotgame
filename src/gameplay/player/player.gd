@@ -19,11 +19,23 @@ signal look_sensitivity_changed(value: float)
 signal damage_taken(amount: float, direction_angle: float)
 signal died()
 signal footstep_taken()
+## Carries a Stance value. Typed as int because the enum is declared below the
+## signals, and GDScript resolves a signal's argument types at parse time.
+signal stance_changed(stance: int)
 ## Relative mouse movement, so the viewmodel can lag behind the look.
 signal look_moved(relative: Vector2)
 
+## How the player is carrying themselves. Not a modifier on speed but a choice
+## with three consequences at once — how fast you are, how loud you are, and how
+## tall you are — which is what makes it a decision rather than a comfort key.
+enum Stance { WALKING, SPRINTING, CROUCHING }
+
 @export_group("Movement")
-@export var move_speed := 6.5
+## Base walking speed. Every other stance is a multiple of this, so the
+## progression perk that raises it raises all three together.
+@export var move_speed := 4.6
+@export var sprint_multiplier := 1.55
+@export var crouch_multiplier := 0.48
 @export var acceleration := 60.0
 @export var friction := 70.0
 @export var jump_velocity := 6.5
@@ -31,6 +43,23 @@ signal look_moved(relative: Vector2)
 @export_range(0.0, 1.0) var air_control := 0.25
 ## Distance travelled between footstep sounds.
 @export var footstep_distance := 2.1
+## Tallest lip the player walks over instead of stopping dead against.
+@export var step_height := 0.45
+
+@export_group("Stance")
+@export var stand_height := 1.8
+@export var crouch_height := 1.15
+@export var stand_eye_height := 1.6
+@export var crouch_eye_height := 1.05
+## How quickly the view drops and rises between stances, in metres per second.
+@export var stance_ease_speed := 7.0
+## Noise made per footstep, relative to a walk. Crouching is the quietest thing
+## a player can do while still moving; sprinting is close to a gunshot.
+@export var crouch_noise_scale := 0.3
+@export var sprint_noise_scale := 2.0
+## Sprinting widens the view a little. Nothing else in the game changes FOV, so
+## this reads purely as speed rather than as a competing effect.
+@export var sprint_fov_bonus := 7.0
 
 @export_group("Look")
 @export var mouse_sensitivity := 0.0022
@@ -63,6 +92,8 @@ var shake_scale := 1.0
 @onready var camera: Camera3D = $Head/Camera
 @onready var health: Health = $Health
 @onready var flashlight: Flashlight = $Head/Camera/Flashlight
+@onready var _collider: CollisionShape3D = $CollisionShape3D
+@onready var _body_mesh: MeshInstance3D = $Body
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _look_enabled := true
@@ -72,10 +103,19 @@ var _distance_since_footstep := 0.0
 ## means small knocks stay subtle while a burst of hits reads as violent.
 var _trauma := 0.0
 var _shake_time := 0.0
+var _stance: int = Stance.WALKING
+## Eye height is eased rather than snapped, so dropping into a crouch reads as
+## the body moving instead of the camera teleporting.
+var _eye_height := 0.0
+var _base_fov := 0.0
 
 
 func _ready() -> void:
 	_spawn_transform = global_transform
+	_base_fov = camera.fov
+	_eye_height = stand_eye_height
+	head.position.y = stand_eye_height
+	_apply_collider_height(stand_height)
 	health.died.connect(func() -> void: died.emit())
 	capture_mouse()
 
@@ -179,14 +219,20 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if not is_on_floor():
-		velocity.y -= _gravity * delta
-	elif Input.is_action_just_pressed("jump"):
-		velocity.y = jump_velocity
-
 	var input_vector := Input.get_vector(
 		"move_left", "move_right", "move_forward", "move_back"
 	)
+	_tick_stance(input_vector, delta)
+
+	if not is_on_floor():
+		velocity.y -= _gravity * delta
+	elif Input.is_action_just_pressed("jump") and _stance != Stance.CROUCHING:
+		# A crouched player cannot jump. Allowing it would mean either popping
+		# up into a ceiling or springing out of the one stance that exists to
+		# keep you unnoticed — and since crouch is held rather than toggled,
+		# letting go and jumping is already a single motion.
+		velocity.y = jump_velocity
+
 	var direction := (transform.basis * Vector3(input_vector.x, 0.0, input_vector.y)).normalized()
 
 	var control := 1.0 if is_on_floor() else air_control
@@ -196,12 +242,13 @@ func _physics_process(delta: float) -> void:
 		horizontal = horizontal.move_toward(Vector3.ZERO, friction * control * delta)
 	else:
 		horizontal = horizontal.move_toward(
-			direction * move_speed, acceleration * control * delta
+			direction * current_speed(), acceleration * control * delta
 		)
 
 	velocity.x = horizontal.x
 	velocity.z = horizontal.z
 
+	_try_step_up(delta)
 	move_and_slide()
 	_tick_footsteps(delta)
 	_tick_shake(delta)
@@ -309,4 +356,180 @@ func reset_to_spawn() -> void:
 	global_transform = _spawn_transform
 	head.rotation = Vector3.ZERO
 	camera.rotation = Vector3.ZERO
+	camera.fov = _base_fov
+	_eye_height = stand_eye_height
+	head.position.y = stand_eye_height
+	_set_stance(Stance.WALKING)
 	health.reset()
+
+
+## --- Stance -----------------------------------------------------------------
+
+
+## The stance the player is currently in, as a Stance value.
+func stance() -> int:
+	return _stance
+
+
+## Movement speed for the current stance.
+##
+## The ladder this produces is the point of the whole system. A Brute moves at
+## 2.0 and a crouch at 2.2; a Walker at 3.2 and a walk at 4.6; a Runner at 5.8
+## and a sprint at 7.1. Every stance outruns something and is outrun by
+## something, so choosing one is a read on what is actually chasing you rather
+## than a preference. Holding sprint everywhere is not free either — see
+## stance_noise_scale.
+func current_speed() -> float:
+	match _stance:
+		Stance.SPRINTING:
+			return move_speed * sprint_multiplier
+		Stance.CROUCHING:
+			return move_speed * crouch_multiplier
+	return move_speed
+
+
+## Footstep loudness for the current stance, as a multiple of a walking step.
+##
+## This is the other half of the choice. Zombies hunt by sound, so a sprint
+## across an open chamber buys distance by spending position, and a crouch buys
+## silence by spending the ability to get away from anything quick.
+func stance_noise_scale() -> float:
+	match _stance:
+		Stance.SPRINTING:
+			return sprint_noise_scale
+		Stance.CROUCHING:
+			return crouch_noise_scale
+	return 1.0
+
+
+## Pick the stance the held keys are asking for, then ease the view into it.
+##
+## Sprint needs a forward lean as well as the key: sprinting sideways and
+## backwards at full speed turns every retreat into a free escape, and the
+## danger of turning your back is most of what makes a retreat a decision.
+func _tick_stance(input_vector: Vector2, delta: float) -> void:
+	var wants_crouch := Input.is_action_pressed("crouch")
+	var wants_sprint := (
+		Input.is_action_pressed("sprint")
+		and is_on_floor()
+		and input_vector.y < -0.1
+	)
+
+	var next := Stance.WALKING
+	if wants_crouch or (_stance == Stance.CROUCHING and not _has_room_to_stand()):
+		# Releasing crouch under a low ceiling keeps you crouched rather than
+		# pushing your head through the rock.
+		next = Stance.CROUCHING
+	elif wants_sprint:
+		next = Stance.SPRINTING
+
+	if next != _stance:
+		_set_stance(next)
+
+	_tick_eye_height(delta)
+
+
+func _set_stance(next: int) -> void:
+	_stance = next
+	_apply_collider_height(
+		crouch_height if next == Stance.CROUCHING else stand_height
+	)
+	stance_changed.emit(next)
+
+
+## Resize the capsule about the player's feet rather than about its centre, so
+## crouching lowers the head instead of sinking the body halfway into the floor.
+func _apply_collider_height(height: float) -> void:
+	var shape := _collider.shape as CapsuleShape3D
+	if shape != null:
+		shape.height = height
+		_collider.position.y = height * 0.5
+
+	var mesh := _body_mesh.mesh as CapsuleMesh
+	if mesh != null:
+		mesh.height = height
+		_body_mesh.position.y = height * 0.5
+
+
+## Whether the standing capsule would fit where the crouched one is.
+##
+## Sweeping the crouched capsule upward by the height difference traces exactly
+## the volume a standing capsule occupies — the union of where it starts and
+## where it ends is the full standing height — so this is an exact answer rather
+## than a ray that could thread a gap in an uneven rock ceiling.
+func _has_room_to_stand() -> bool:
+	var rise := stand_height - crouch_height
+	if rise <= 0.0:
+		return true
+
+	return not test_move(global_transform, Vector3.UP * rise)
+
+
+## Ease the camera between stance heights and widen it while sprinting.
+func _tick_eye_height(delta: float) -> void:
+	var target := (
+		crouch_eye_height if _stance == Stance.CROUCHING else stand_eye_height
+	)
+	_eye_height = move_toward(_eye_height, target, stance_ease_speed * delta)
+	head.position.y = _eye_height
+
+	var fov_target := (
+		_base_fov + sprint_fov_bonus if _stance == Stance.SPRINTING else _base_fov
+	)
+	camera.fov = move_toward(camera.fov, fov_target, sprint_fov_bonus * 4.0 * delta)
+
+
+## Walk over a low lip instead of stopping dead against it.
+##
+## CharacterBody3D has no step height of its own: anything taller than the
+## collision margin is a wall to it. A cave assembled from kit tiles has seams,
+## thresholds and loose rock everywhere, and being stopped by a two-centimetre
+## edge reads as the level being broken rather than as an obstacle.
+##
+## Runs before move_and_slide and only ever moves the body vertically. The
+## horizontal half of the step is left to move_and_slide, which is what stops a
+## successful step from also handing the player a free extra frame of travel.
+func _try_step_up(delta: float) -> void:
+	if not is_on_floor():
+		return
+
+	var motion := Vector3(velocity.x, 0.0, velocity.z) * delta
+	var ahead := KinematicCollision3D.new()
+	if motion.is_zero_approx() or not test_move(global_transform, motion, ahead):
+		return
+
+	# A walkable slope is not a step. test_move reports a hit against a ramp
+	# just as readily as against a wall, so without this the assist fires on
+	# every staircase in the game and adds a climb move_and_slide is already
+	# making.
+	#
+	# Today that extra lift is small enough to be swallowed by floor snapping,
+	# so removing this line changes nothing you can see — the cost is three
+	# wasted shape casts per frame on every slope. It stops being invisible as
+	# soon as the lift exceeds floor_snap_length, which a faster stance or a
+	# steeper staircase would do, and then the player is thrown off the top.
+	if ahead.get_normal().angle_to(Vector3.UP) <= floor_max_angle:
+		return
+
+	var lift := Vector3.UP * step_height
+	if test_move(global_transform, lift):
+		return  # nothing to rise into
+
+	var raised := global_transform.translated(lift)
+	if test_move(raised, motion):
+		return  # still blocked a step up, so it is a wall and not a step
+
+	# Something has to be underneath, or this is a ledge over a hole.
+	var landing := KinematicCollision3D.new()
+	if not test_move(raised.translated(motion), -lift, landing):
+		return
+
+	if landing.get_normal().angle_to(Vector3.UP) > floor_max_angle:
+		return  # the top of the step is too steep to have stood on anyway
+
+	var climb := step_height - landing.get_travel().length()
+	if climb <= 0.001:
+		return
+
+	global_position.y += climb
+	velocity.y = maxf(velocity.y, 0.0)

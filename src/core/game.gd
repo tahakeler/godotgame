@@ -181,8 +181,14 @@ func _wire_noise() -> void:
 	weapon.reload_started.connect(func(_duration: float) -> void:
 		_make_noise(player.global_position, RELOAD_LOUDNESS)
 	)
+	# Scaled by stance, which is what turns crouch and sprint from speed
+	# settings into the two ends of a trade: a sprint buys distance by spending
+	# position, a crouch buys silence by spending the ability to run.
 	player.footstep_taken.connect(func() -> void:
-		_make_noise(player.global_position, FOOTSTEP_LOUDNESS)
+		_make_noise(
+			player.global_position,
+			FOOTSTEP_LOUDNESS * player.stance_noise_scale()
+		)
 	)
 
 	# The throw is silent; only the landing speaks. That is the whole reason a
