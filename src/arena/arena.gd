@@ -175,14 +175,87 @@ const LAYOUT := [
 	# ---- The long halls ----------------------------------------------------
 	# Deliberately uneven: the east run is one cell longer than the west, so
 	# the two sides of the map never feel like reflections of each other.
-	{"model": CORRIDOR, "cell": Vector2i(7, 0), "rotation": 0},
+	{"model": CROSS, "cell": Vector2i(7, 0), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(8, 0), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(9, 0), "rotation": 0},
 	{"model": WIDE_ROOM, "cell": Vector2i(12, 0), "rotation": 0},
 
-	{"model": CORRIDOR, "cell": Vector2i(-7, 0), "rotation": 0},
+	{"model": CROSS, "cell": Vector2i(-7, 0), "rotation": 0},
 	{"model": CORRIDOR, "cell": Vector2i(-8, 0), "rotation": 0},
 	{"model": WIDE_ROOM, "cell": Vector2i(-11, 0), "rotation": 0},
+
+
+	# ---- The outer ring ----------------------------------------------------
+	# The map used to be a plus: four arms off a centre, each of which had to be
+	# walked back down. Being followed was therefore a problem with exactly one
+	# answer, because every route between two arms passed through the middle.
+	#
+	# This ring joins the four arms at their midpoints, one cell outside the
+	# chambers they already pass through. It is what turns the arms into routes:
+	# you can run the long way round, come back at something from behind, or
+	# reach the east arm without ever entering the centre. The arm TIPS are
+	# still terminal, deliberately — those are the deep rooms worth the walk,
+	# and a map with no ends has nowhere to hide anything.
+	#
+	# It sits at radius 7 rather than further out because the ring has to be
+	# walkable under pressure. A perimeter around the arm tips would be roughly
+	# a hundred cells, which is a lap nobody would ever choose to run.
+	{"model": CORRIDOR, "cell": Vector2i(-6, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-5, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-4, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-3, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-2, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(2, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(4, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(5, 7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(6, 7), "rotation": 0},
+
+	{"model": CORRIDOR, "cell": Vector2i(-6, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-5, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-4, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-3, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(-2, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(2, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(3, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(4, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(5, -7), "rotation": 0},
+	{"model": CORRIDOR, "cell": Vector2i(6, -7), "rotation": 0},
+
+	{"model": CORRIDOR, "cell": Vector2i(7, -6), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, -5), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, -4), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, -3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, -2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, -1), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, 1), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, 2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, 3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, 4), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, 5), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(7, 6), "rotation": 90},
+
+	{"model": CORRIDOR, "cell": Vector2i(-7, -6), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, -5), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, -4), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, -3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, -2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, -1), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 1), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 2), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 3), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 4), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 5), "rotation": 90},
+	{"model": CORRIDOR, "cell": Vector2i(-7, 6), "rotation": 90},
+
+	# The ring's corners. corridor-corner is unusable — the probe reports it
+	# walled on all four sides — so the four-way piece stands in, with two of
+	# its mouths facing rock. The collision shell seals those, because it walls
+	# any cell edge whose neighbour is not walkable.
+	{"model": CROSS, "cell": Vector2i(7, 7), "rotation": 0},
+	{"model": CROSS, "cell": Vector2i(7, -7), "rotation": 0},
+	{"model": CROSS, "cell": Vector2i(-7, 7), "rotation": 0},
+	{"model": CROSS, "cell": Vector2i(-7, -7), "rotation": 0},
 
 	# ---- Alcoves -----------------------------------------------------------
 	# Stubs that go nowhere, so not every passage is a route. A network where
@@ -328,6 +401,16 @@ const CACHE_CELLS := [
 	Vector2i(0, -8),
 	Vector2i(-4, -4),
 	Vector2i(12, 0),
+	# The two deep chambers at the ends of the north and west arms.
+	#
+	# Four of the caches above now sit on the ring, which is the right place for
+	# a contested resupply but is no longer a reward for going anywhere. These
+	# two are: both are terminal, both are a long walk from the loop, and the
+	# walk back is the price. A dead end with nothing at the end of it is a
+	# mistake the player only makes once and resents; a dead end with a crate in
+	# it is a decision about whether the detour is worth being followed down.
+	Vector2i(0, 12),
+	Vector2i(-11, 0),
 ]
 
 ## Flat weapon cases from the Kenney Blaster Kit (CC0), as floor dressing.

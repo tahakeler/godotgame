@@ -142,11 +142,17 @@ func test_weapon_reload_refills_magazine_from_reserve() -> void:
 	var did_reload: bool = weapon.try_reload()
 	weapon._tick_reload(weapon.reload_duration + 0.1)
 
-	# Assert — 5 rounds move from reserve to magazine
+	# Assert — the magazine fills to capacity and the reserve pays for it.
+	# Read from the weapon rather than written out, because magazine size is a
+	# per-weapon figure now and a literal here would only ever be right for
+	# whichever gun happened to be in hand when it was typed.
+	var expected_moved: int = weapon.magazine_size - 3
 	_check(
 		"weapon_reload_refills_magazine_from_reserve",
 		"NORMAL",
-		"reload=true, magazine=8, reserve=19",
+		"reload=true, magazine=%d, reserve=%d" % [
+			weapon.magazine_size, 24 - expected_moved
+		],
 		"reload=%s, magazine=%d, reserve=%d" % [
 			str(did_reload).to_lower(), weapon.magazine_ammo, weapon.reserve_ammo
 		]
