@@ -24,6 +24,7 @@ func _initialize() -> void:
 	_write("gunshot", _build_gunshot())
 	_write("brute_growl", _build_brute_growl())
 	_write("decoy_land", _build_decoy_land())
+	_write("zombie_alerted", _build_zombie_alerted())
 
 	quit(0)
 
@@ -60,6 +61,43 @@ func _build_gunshot() -> PackedFloat32Array:
 		var tail: float = previous * exp(-t * 9.0) * 0.22
 
 		samples[index] = clampf(crack * 0.85 + body * 0.75 + tail, -1.0, 1.0)
+
+	return samples
+
+
+## The rasp a zombie makes the instant it notices you.
+##
+## Deliberately unlike anything else in the mix: rising rather than falling,
+## and harsh rather than wet. It has to be recognisable through a firefight,
+## because it is the one sound that means something changed about you rather
+## than about them.
+func _build_zombie_alerted() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5150
+
+	var duration := 0.55
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var previous := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+		var envelope: float = minf(t / 0.04, 1.0) * exp(-t * 4.2)
+
+		# Rising pitch is the tell. Everything else the zombies do falls away;
+		# this climbs, which reads as alarm rather than as idling.
+		var pitch := lerpf(120.0, 260.0, minf(t / 0.35, 1.0))
+		var tone: float = sin(TAU * pitch * t)
+
+		# Squared up into a rasp. A clean sine reads as a machine.
+		tone = signf(tone) * pow(absf(tone), 0.45)
+
+		var noise := rng.randf_range(-1.0, 1.0)
+		previous = lerpf(previous, noise, 0.25)
+
+		samples[index] = clampf((tone * 0.55 + previous * 0.45) * envelope, -1.0, 1.0)
 
 	return samples
 

@@ -54,6 +54,10 @@ var _model: Node3D
 ## model's raw 3.7m.
 var _kind_scale := 2.0 / NATIVE_HEIGHT
 var _flash_remaining := 0.0
+## Remembered so a hit flash, which swaps the material out entirely, does not
+## permanently clear the awareness tell when it swaps back.
+var _glow_colour := Color.BLACK
+var _glow_energy := 0.0
 
 
 func _ready() -> void:
@@ -91,6 +95,27 @@ func apply_kind(target_height: float, tint: Color) -> void:
 ## keep the collision capsule the same size as what is actually drawn.
 func get_body_scale() -> float:
 	return _kind_scale
+
+
+## Make the body glow, to show what this zombie knows.
+##
+## Emission rather than albedo, because the tell has to survive the thing it
+## exists for: reading a shape at the far end of an unlit corridor. Albedo
+## needs light to show a colour, and the corridors deliberately have very
+## little. The zombie decides the colour; this only paints it.
+##
+## Stored on the material and reapplied after a hit flash, since flashing swaps
+## the whole material out and would otherwise clear the state permanently.
+func apply_glow(colour: Color, energy: float) -> void:
+	_glow_colour = colour
+	_glow_energy = energy
+
+	if _skin_material == null:
+		return
+
+	_skin_material.emission_enabled = energy > 0.0
+	_skin_material.emission = colour
+	_skin_material.emission_energy_multiplier = energy
 
 
 ## Cut the body loose as a corpse that collapses and fades.
@@ -205,6 +230,9 @@ func _build_materials() -> void:
 	# The pack's skins are flat colour atlases; filtering them softens the
 	# intended low-poly look and bleeds neighbouring patches into each other.
 	_skin_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+
+	# A kind may already have been applied before the materials existed.
+	apply_glow(_glow_colour, _glow_energy)
 
 	_flash_material = StandardMaterial3D.new()
 	_flash_material.albedo_color = Color(1.0, 0.72, 0.68)
