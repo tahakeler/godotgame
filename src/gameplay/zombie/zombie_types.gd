@@ -40,6 +40,14 @@ const DEFINITIONS := {
 		"unlock": 0.0,
 		## Relative spawn frequency once unlocked.
 		"weight": 10.0,
+		# Baseline weight: not twitchy, not sluggish. Runner and Brute are
+		# deliberately lopsided away from this in opposite directions, which
+		# is what makes the three kinds move recognisably differently at a
+		# glance rather than only differing in a health bar.
+		"acceleration": 6.0,
+		"turn_speed": 5.5,
+		"attack_windup": 0.4,
+		"lunge_speed": 4.6,
 	},
 	Kind.RUNNER: {
 		"name": "Runner",
@@ -55,6 +63,12 @@ const DEFINITIONS := {
 		"hearing": 32.0,
 		"unlock": 25.0,
 		"weight": 6.0,
+		# Twitchy: spins up to full speed and changes facing almost at once,
+		# and its lunge is a quick jab rather than a committed charge.
+		"acceleration": 18.0,
+		"turn_speed": 12.0,
+		"attack_windup": 0.16,
+		"lunge_speed": 8.0,
 	},
 	Kind.BRUTE: {
 		"name": "Brute",
@@ -70,6 +84,14 @@ const DEFINITIONS := {
 		"hearing": 42.0,
 		"unlock": 70.0,
 		"weight": 2.5,
+		# Heavy: slow to get moving and slow to turn away from, which is what
+		# makes circling one actually work as a tactic. Its telegraph is long
+		# enough to see coming, but the lunge itself closes ground fast, so
+		# standing at the edge of its reach while it winds up is not safe.
+		"acceleration": 3.2,
+		"turn_speed": 2.0,
+		"attack_windup": 0.65,
+		"lunge_speed": 6.5,
 	},
 }
 

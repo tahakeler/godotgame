@@ -58,6 +58,11 @@ var _flash_remaining := 0.0
 ## permanently clear the awareness tell when it swaps back.
 var _glow_colour := Color.BLACK
 var _glow_energy := 0.0
+## Per-instance fraction into the loop a run/idle cycle starts at, so a crowd
+## playing the same clip does not animate in lockstep. Set once by the zombie
+## from its own RNG; applied only when an animation (re)starts, so it costs
+## nothing per frame.
+var _gait_offset := 0.0
 
 
 func _ready() -> void:
@@ -95,6 +100,15 @@ func apply_kind(target_height: float, tint: Color) -> void:
 ## keep the collision capsule the same size as what is actually drawn.
 func get_body_scale() -> float:
 	return _kind_scale
+
+
+## Set this instance's gait phase, as a fraction (0-1) into the animation loop.
+##
+## Called once by the zombie from its own RNG. Without it every zombie of a
+## kind that starts running in the same frame steps in perfect unison, which
+## reads as one animated crowd rather than several individuals.
+func set_gait_offset(fraction: float) -> void:
+	_gait_offset = clampf(fraction, 0.0, 1.0)
 
 
 ## Make the body glow, to show what this zombie knows.
@@ -186,6 +200,12 @@ func play_animation(name: String) -> void:
 
 	_current_animation = name
 	_animation_player.play(name)
+
+	# Only runs on the (rare) frame an animation starts, not per frame, so the
+	# per-instance offset costs nothing in the steady state.
+	var length := _animation_player.current_animation_length
+	if length > 0.0:
+		_animation_player.seek(_gait_offset * length, true)
 
 
 ## Briefly tint the body so a hit registers visually.

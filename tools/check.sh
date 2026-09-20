@@ -73,6 +73,7 @@ run_step "spawn-director" "$GODOT" --headless --script tests/manual/verify_spawn
 run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_types.gd
 run_step "zombie-scale" "$GODOT" --headless --script tests/manual/verify_zombie_scale.gd
 run_step "zombies" "$GODOT" --headless --script tests/manual/verify_zombies.gd
+run_step "zombie-movement" "$GODOT" --headless --script tests/manual/verify_zombie_movement.gd
 run_step "noise" "$GODOT" --headless --script tests/manual/verify_noise.gd
 run_step "caches" "$GODOT" --headless --script tests/manual/verify_caches.gd
 run_step "decoy" "$GODOT" --headless --script tests/manual/verify_decoy.gd
