@@ -124,11 +124,19 @@ func threat_level(from: Vector3) -> float:
 ## Straight-line range on purpose, unlike hearing. This is a crowd noticing
 ## which way the one next to it is going, not a sound carrying down a corridor,
 ## and it should not reach through a wall into the next chamber.
+## The radius is the raiser's own rather than the spawner's flat one, because
+## how far a zombie's voice carries is a property of the zombie. A Screamer
+## reaches most of a chamber complex; a Stalker reaches nobody at all. Both are
+## still expressed as multiples of alert_radius, so this stays the one knob
+## that governs how quickly a crowd converges.
 func _on_alarm_raised(raiser: Zombie, believed_position: Vector3) -> void:
+	if raiser.alarm_radius <= 0.0:
+		return
+
 	for zombie in _alive:
 		if not is_instance_valid(zombie) or zombie == raiser:
 			continue
-		if zombie.global_position.distance_to(raiser.global_position) > alert_radius:
+		if zombie.global_position.distance_to(raiser.global_position) > raiser.alarm_radius:
 			continue
 
 		zombie.receive_alert(believed_position)
@@ -221,7 +229,14 @@ func _spawn_one() -> void:
 
 	# Configure before positioning: the kind resizes the capsule, and a Brute
 	# placed first would spend its first frame half inside the floor.
-	zombie.configure(ZombieTypes.pick(_elapsed, _rng))
+	var kind := ZombieTypes.pick(_elapsed, _rng)
+	zombie.configure(kind)
+
+	# How far this one's shout carries. Kept here rather than in configure()
+	# because it is a multiple of the crowd's alert radius, which belongs to
+	# the spawner — a zombie has no business knowing how the horde is tuned.
+	zombie.alarm_radius = alert_radius * ZombieTypes.definition(kind).alarm_radius_scale
+
 	zombie.global_position = spawn_position + Vector3.UP * 0.1
 	zombie.contact_damage *= damage_scale
 	zombie.set_target(_target)

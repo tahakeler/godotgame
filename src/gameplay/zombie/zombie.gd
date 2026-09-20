@@ -1249,7 +1249,10 @@ func _tick_groan(delta: float) -> void:
 	# A zombie that has eyes on the player does not groan quietly to itself.
 	# This is the third channel information travels down, after sight and
 	# sound, and it is the one that makes a crowd behave like a crowd.
-	if awareness == Awareness.HUNTING:
+	# A Stalker's alarm_radius is zero, so it never does this. It is the only
+	# thing in the cave that keeps what it knows to itself, and a chamber with
+	# one in it is a chamber that sounds empty.
+	if awareness == Awareness.HUNTING and alarm_radius > 0.0:
 		raised_alarm.emit(self, last_known_position)
 
 
@@ -1257,8 +1260,33 @@ func _tick_groan(delta: float) -> void:
 func _on_damaged(_amount: float, _current: float, _maximum: float) -> void:
 	_visual.flash()
 
+	_stagger()
+
 	if awareness != Awareness.HUNTING and _target != null:
 		_believe(_target.global_position)
+
+
+## Flinch, and drop whatever attack was being wound up.
+##
+## This is what makes shooting a zombie that is already on top of you worth
+## doing even when the shot will not kill it: the hit buys the attack back.
+## A Brute's zero-length stagger removes that answer entirely — you cannot
+## shoot your way out of a Brute's wind-up, you have to move — and a kind that
+## cannot be interrupted is a far more legible difference than any number on
+## the stat sheet.
+##
+## A lunge already in flight is never interrupted, for anyone. Once a zombie
+## has committed to a direction it is committed, which is the contract that
+## makes stepping aside work.
+func _stagger() -> void:
+	if stagger_duration <= 0.0 or _attack_state == AttackState.LUNGING:
+		return
+
+	_stagger_remaining = stagger_duration
+
+	if _attack_state == AttackState.WINDING_UP:
+		_attack_state = AttackState.READY
+		_attack_remaining = attack_cooldown
 
 
 func _on_died() -> void:
