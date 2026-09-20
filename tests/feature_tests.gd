@@ -20,6 +20,10 @@ var _results: Array[Dictionary] = []
 ## before the tree starts running do not get _ready() called yet, so exported
 ## defaults would read as zero.
 func _process(_delta: float) -> bool:
+	# Godot 4.7 loads autoloads under --script, so without this the assignment
+	# checks inherit whatever the player last chose in the menus.
+	DeterministicSettings.apply(root)
+
 	_run_health_tests()
 	_run_weapon_tests()
 	_report()

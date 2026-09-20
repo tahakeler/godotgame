@@ -31,6 +31,11 @@ func _process(delta: float) -> bool:
 
 	if not _started:
 		_started = true
+		# Godot 4.7 loads autoloads under --script, and they do not exist until
+		# after _initialize. Pinning here, then restarting the round, is what
+		# keeps the test from inheriting the menu choices saved on this machine.
+		DeterministicSettings.apply(root)
+		_game.start_round()
 		_magazine_at_start = _game.weapon.magazine_ammo
 		_reserve_at_start = _game.weapon.reserve_ammo
 		_game.weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:

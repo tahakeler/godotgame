@@ -25,6 +25,11 @@ func _process(_delta: float) -> bool:
 	# @onready vars are not assigned until _ready() runs on the first frame.
 	if not _started:
 		_started = true
+		# Godot 4.7 loads autoloads under --script, and they do not exist until
+		# after _initialize. Pinning here, then restarting the round, is what
+		# keeps the test from inheriting the menu choices saved on this machine.
+		DeterministicSettings.apply(root)
+		_game.start_round()
 		return false
 
 	_test_kill_shortens_extraction()

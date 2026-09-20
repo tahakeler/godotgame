@@ -20,6 +20,9 @@ func _process(_delta: float) -> bool:
 	# @onready vars are not assigned until _ready() runs on the first frame.
 	if not _started:
 		_started = true
+		# Godot 4.7 loads autoloads under --script, so without this the test
+		# inherits whatever the player last chose in the menus.
+		DeterministicSettings.apply(root)
 		return false
 
 	test_weapon_empty_magazine_reloads_itself()
