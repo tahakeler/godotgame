@@ -1,5 +1,5 @@
 class_name AmmoCache
-extends Node3D
+extends Interactable
 
 ## A fixed resupply point that refills slowly after it is emptied.
 ##
@@ -23,6 +23,13 @@ signal collected(rounds: int)
 @export var recharge_seconds := 55.0
 ## Height of the light above the crate.
 @export var glow_height := 1.4
+## Seconds of holding the interact key to empty a crate.
+##
+## Shorter than a medkit's: ammunition is what the game is about, and making
+## the player pay two seconds for the resource they came for would turn every
+## resupply into a chore rather than a gamble. Long enough that arriving with
+## something already chasing you is a problem.
+@export var resupply_hold_seconds := 1.2
 
 const CRATE_MODEL := "res://assets/models/weapons/crate-medium.glb"
 const CHARGED_COLOUR := Color(1.0, 0.76, 0.32)
@@ -37,7 +44,13 @@ var _area: Area3D
 
 
 func _ready() -> void:
+	super()
 	_stock = capacity
+	interaction_hold_seconds = resupply_hold_seconds
+	# Reached from further than a medkit on the floor, because the crate is
+	# solid and the player is stopped by it before they are standing on it.
+	interaction_reach_metres = 3.2
+	interaction_focus_height = glow_height
 	_build()
 	_refresh_glow()
 
@@ -49,12 +62,41 @@ func _process(delta: float) -> void:
 			_stock = capacity
 			_refresh_glow()
 
-	# Checked per frame rather than only on entry, so a player standing on a
-	# cache when it refills is served without having to step off and back on.
-	# Camping is not the risk it sounds like: the recharge is long enough that
-	# waiting it out in the open is its own punishment.
-	if _player_inside and _stock > 0:
-		_collect()
+
+## Whether the player is standing in the trigger volume.
+##
+## The trigger no longer collects anything — that is the interaction system's
+## job now, and a crate that emptied itself the moment you brushed past it was
+## the reason the game had two different rules for using things. It is kept
+## because "is the player at this cache" is still worth knowing cheaply, and
+## because the recharge readout wants it.
+func has_player_inside() -> bool:
+	return _player_inside
+
+
+## --- Interaction contract ---------------------------------------------------
+##
+## See src/gameplay/interaction/interactable.gd. Resupply is a hold rather than
+## a press for the same reason it used to be a walk-over and should not have
+## been: a cache is the place you least want to be standing still, and that
+## tension is the whole reason caches were put out in the map.
+
+
+func can_interact(_player: Node) -> bool:
+	return has_stock()
+
+
+func interaction_prompt(_player: Node) -> String:
+	return "Resupply"
+
+
+func interact(player: Node) -> bool:
+	if not has_stock():
+		return false
+
+	_collect()
+	interacted.emit(player)
+	return true
 
 
 ## True when there is anything to take. Used by tests and by the HUD prompt.
