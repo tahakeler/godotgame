@@ -18,6 +18,10 @@ signal raised_alarm(zombie: Zombie, believed_position: Vector3)
 ## The instant this zombie starts hunting. The most important event in a round,
 ## and it used to happen silently.
 signal noticed_player(at: Vector3, kind: ZombieTypes.Kind)
+## The instant a zombie commits to a lunge, before it can possibly land. A
+## straight cooldown-gated hit at range had nothing to hang a tell off; this is
+## the hook a telegraph animation or sound cue would attach to.
+signal attack_telegraphed(zombie: Zombie, at: Vector3)
 
 ## What a zombie knows about the player right now.
 enum Awareness {
@@ -34,16 +38,60 @@ enum Awareness {
 @export_group("Movement")
 @export var move_speed := 3.2
 @export var turn_speed := 9.0
+## Metres per second squared the horizontal velocity is allowed to change by.
+## Velocity used to be assigned outright every physics frame, which made every
+## zombie feel like a cursor sliding along the path rather than a body with
+## momentum. Set per kind by configure() — a Brute's low value is what makes it
+## feel heavy to get moving and slow to turn away from once committed.
+@export var acceleration := 7.0
 ## How often the navigation target is refreshed. Every frame is wasteful and
 ## produces no visible improvement at this speed.
 @export var repath_interval := 0.15
 ## Steepest surface a zombie will walk up rather than treat as a wall.
 @export var floor_climb_angle_degrees := 80.0
 
+@export_group("Individuality")
+## Fractional per-zombie jitter applied to move_speed, so two Shamblers spawned
+## a second apart are not visibly running in lockstep. Drawn once from this
+## zombie's own RNG (see _rng below), not the shared global one.
+@export_range(0.0, 0.4) var speed_variation := 0.12
+## Same idea, applied to turn_speed.
+@export_range(0.0, 0.4) var turn_variation := 0.18
+## Chance, rolled once per repath tick while not actively hunting, that this
+## zombie pauses instead of immediately continuing. A crowd that never
+## hesitates reads as one mind operating several bodies; this puts a little
+## uncertainty back into individuals without touching the belief system that
+## actually drives where they are trying to go.
+@export_range(0.0, 0.5) var hesitation_chance := 0.08
+@export var hesitation_duration := Vector2(0.15, 0.4)
+
+@export_group("Separation")
+## Extra gap beyond the two capsules' own radii at which zombies start
+## pushing apart. Small on purpose — this stops bodies overlapping in a
+## crowd, it is not a formation-keeping force, and a generous radius would
+## read as an invisible fence around every zombie.
+@export var separation_margin := 0.6
+## Push strength as a fraction of move_speed. Kept below 1 so separation can
+## nudge a zombie sideways but can never be the reason it fails to close on
+## the player.
+@export_range(0.0, 1.0) var separation_strength := 0.5
+
 @export_group("Combat")
 @export var contact_damage := 12.0
 @export var attack_range := 1.9
 @export var attack_cooldown := 1.1
+## Seconds a zombie holds still (but keeps turning to face the target) before
+## a lunge fires. Long enough to read and step out of, short enough that
+## standing still is not a safe answer to it. Set per kind by configure().
+@export var attack_windup := 0.35
+## How long the lunge itself lasts once it fires. The zombie is committed to
+## the direction it was facing when the windup ended for this whole window —
+## it cannot re-aim mid-lunge, which is what makes stepping aside work.
+@export var attack_commit_duration := 0.25
+## Forward speed during the lunge itself, independent of move_speed. Set per
+## kind by configure() — a Brute is slow to start but closes fast once it
+## commits, which punishes standing at the edge of its reach.
+@export var lunge_speed := 5.5
 
 @export_group("Hearing")
 ## How far this zombie can hear a noise of loudness 1.0, measured along the
@@ -79,11 +127,45 @@ enum Awareness {
 @export var groan_interval := Vector2(3.5, 9.0)
 @export var corpse_collapse_time := 0.9
 
+## What a zombie is doing about the player it is in range of.
+enum AttackState {
+	## Not attacking. Free to move normally.
+	READY,
+	## Holding still and turning to face the target. Readable, and the window
+	## in which backing off avoids the hit entirely.
+	WINDING_UP,
+	## Committed to the direction faced when the windup ended. Cannot re-aim.
+	LUNGING,
+}
+
 var _target: Node3D
 var _attack_remaining := 0.0
+var _attack_state: AttackState = AttackState.READY
+var _attack_state_remaining := 0.0
+var _attack_landed := false
+var _lunge_direction := Vector3.ZERO
 var _repath_remaining := 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 20.0)
 var _groan_remaining := 0.0
+
+## This zombie's own random stream, seeded independently of the shared global
+## one. Everything individual — speed, turn rate, gait phase, hesitation — is
+## drawn from this, so a crowd's jitter can never disturb something unrelated
+## that happens to call randf() the same frame (the spawner's kind roll, for
+## one).
+var _rng := RandomNumberGenerator.new()
+## Multiplier on move_speed, drawn once in _ready(). See speed_variation.
+var _speed_scale := 1.0
+## Multiplier on turn_speed, drawn once in _ready(). See turn_variation.
+var _turn_scale := 1.0
+var _hesitate_remaining := 0.0
+## Capsule radius, cached by configure() so separation does not need to reach
+## into a sibling's collider every tick to read its shape.
+var _body_radius := 0.4
+## Recomputed on the repath cadence, not every physics frame — see
+## _compute_separation(). Applied every frame regardless, since adding a
+## cached vector costs nothing.
+var _separation_push := Vector3.ZERO
 
 ## What this zombie currently believes about the player.
 ##
@@ -148,6 +230,11 @@ func _ready() -> void:
 	# them while still being blocked by the near-vertical walls themselves.
 	floor_max_angle = deg_to_rad(floor_climb_angle_degrees)
 
+	_rng.randomize()
+	_speed_scale = 1.0 + _rng.randf_range(-speed_variation, speed_variation)
+	_turn_scale = 1.0 + _rng.randf_range(-turn_variation, turn_variation)
+	_visual.set_gait_offset(_rng.randf())
+
 
 func _physics_process(delta: float) -> void:
 	_attack_remaining = maxf(0.0, _attack_remaining - delta)
@@ -166,8 +253,12 @@ func _physics_process(delta: float) -> void:
 	_tick_senses(delta)
 	_tick_awareness(delta)
 	_tick_repath(delta)
-	_move_toward_target(delta)
-	_try_attack()
+
+	# An attack in progress owns velocity outright — winding up holds the body
+	# still and lunging commits it to a straight line, neither of which the
+	# normal path-following steering should be allowed to override.
+	if not _tick_attack(delta):
+		_move_toward_target(delta)
 
 	move_and_slide()
 
@@ -183,6 +274,10 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	experience_value = definition.experience
 	ammo_value = definition.ammo
 	hearing_range = definition.hearing
+	acceleration = definition.acceleration
+	turn_speed = definition.turn_speed
+	attack_windup = definition.attack_windup
+	lunge_speed = definition.lunge_speed
 
 	health.max_health = definition.health
 	health.current_health = definition.health
@@ -199,6 +294,7 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	_collider.shape.height = height
 	_collider.shape.radius = height * BODY_RADIUS_RATIO
 	_collider.position.y = height * 0.5
+	_body_radius = _collider.shape.radius
 
 	# A Brute is wider as well as taller, and reach has to grow with the body
 	# or it cannot land a blow its arms clearly reach.
@@ -455,6 +551,14 @@ func _begin_search() -> void:
 	)
 
 
+## Refresh the nav target and the things that only need to change this often:
+## the separation push and whether this zombie hesitates for a beat.
+##
+## Both are recomputed on the existing repath cadence rather than every
+## physics frame. Crowding cannot change meaningfully in under 150ms at
+## walking pace, so amortising an O(neighbours) scan this way — instead of
+## running it 60 times a second per zombie — is most of the cost of separation
+## for none of the responsiveness lost.
 func _tick_repath(delta: float) -> void:
 	_repath_remaining -= delta
 	if _repath_remaining > 0.0:
@@ -462,37 +566,185 @@ func _tick_repath(delta: float) -> void:
 
 	_repath_remaining = repath_interval
 	_agent.target_position = _move_goal()
+	_separation_push = _compute_separation()
+
+	# A hunting zombie never hesitates — something with eyes on you does not
+	# pause to think about it. Reserved for the states where a beat of
+	# stillness reads as noticing or reconsidering rather than a hitch in
+	# something that is supposed to be relentless.
+	if awareness != Awareness.HUNTING and _rng.randf() < hesitation_chance:
+		_hesitate_remaining = _rng.randf_range(hesitation_duration.x, hesitation_duration.y)
 
 
 func _move_toward_target(delta: float) -> void:
+	if _hesitate_remaining > 0.0:
+		_hesitate_remaining -= delta
+		_accelerate_toward(Vector3.ZERO, delta)
+		return
+
 	var next_position := _agent.get_next_path_position()
 	var to_next := next_position - global_position
 	to_next.y = 0.0
 
-	if to_next.length() < 0.05:
-		velocity.x = 0.0
-		velocity.z = 0.0
+	var goal_velocity := Vector3.ZERO
+	if to_next.length() >= 0.05:
+		goal_velocity = to_next.normalized() * (move_speed * _speed_scale)
+
+	# Separation is added to the goal rather than resolved separately, so a
+	# zombie that has arrived but is still overlapping a neighbour keeps
+	# getting nudged apart instead of the push being dropped the instant
+	# get_next_path_position() reports "close enough".
+	var desired_velocity := goal_velocity + _separation_push
+
+	if desired_velocity.length_squared() < 0.0001:
+		_accelerate_toward(Vector3.ZERO, delta)
 		return
 
-	var direction := to_next.normalized()
-	velocity.x = direction.x * move_speed
-	velocity.z = direction.z * move_speed
+	_accelerate_toward(desired_velocity, delta)
 
 	# Face travel direction. Interpolated so zombies do not snap around when
 	# the path bends around a crate.
-	var desired_yaw := atan2(direction.x, direction.z)
-	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * delta)
+	var desired_yaw := atan2(desired_velocity.x, desired_velocity.z)
+	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * _turn_scale * delta)
 
 
-func _try_attack() -> void:
-	if _attack_remaining > 0.0:
+## Move the horizontal velocity toward a desired velocity at this zombie's
+## acceleration, rather than snapping straight to it.
+##
+## This one function is the entire "weight" of a zombie's movement: a Brute's
+## low acceleration is what makes it feel heavy to get moving, and the same
+## call handles slowing to a stop, so a Brute is exactly as sluggish about
+## stopping as it is about starting.
+func _accelerate_toward(desired_velocity: Vector3, delta: float) -> void:
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	horizontal = horizontal.move_toward(desired_velocity, acceleration * delta)
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
+
+
+## How hard, and in which direction, this zombie should push away from bodies
+## it is overlapping.
+##
+## Zombies deliberately do not collide with each other (see the class comment)
+## so this is the only thing standing between a crowd and a single stack of
+## bodies occupying one point in space. It is a steering nudge, not a physics
+## response — nothing here can push a zombie backward off its goal, only
+## sideways off another zombie, which is what keeps this from being able to
+## stall a pursuit.
+func _compute_separation() -> Vector3:
+	var push := Vector3.ZERO
+	var parent := get_parent()
+	if parent == null:
+		return push
+
+	for sibling in parent.get_children():
+		if sibling == self:
+			continue
+
+		var other := sibling as Zombie
+		if other == null or not is_instance_valid(other) or other.health.is_dead:
+			continue
+
+		var offset := global_position - other.global_position
+		offset.y = 0.0
+		var distance := offset.length()
+		var combined_radius: float = _body_radius + other._body_radius + separation_margin
+
+		if distance >= combined_radius or distance < 0.001:
+			continue
+
+		# Push harder the more two bodies overlap, so a graze is a nudge and a
+		# dead-on stack is a shove.
+		var overlap := (combined_radius - distance) / combined_radius
+		push += (offset / distance) * overlap
+
+	if push.length_squared() > 1.0:
+		push = push.normalized()
+
+	return push * move_speed * separation_strength
+
+
+## Wind up, commit, and land — or whiff — a bite.
+##
+## Returns true while an attack owns velocity, so _physics_process knows to
+## skip the normal path-following steering for this frame.
+##
+## A straight cooldown-gated hit at range was an invisible damage tick: there
+## was nothing to see or react to before it landed. Splitting it into a
+## wind-up the zombie holds through, then a short lunge it cannot steer out
+## of, turns the same damage into something the player can read coming and
+## step away from — at the cost of the zombie being unable to correct if they
+## do.
+func _tick_attack(delta: float) -> bool:
+	match _attack_state:
+		AttackState.WINDING_UP:
+			_hold_still_and_track(delta)
+			_attack_state_remaining -= delta
+			if _attack_state_remaining <= 0.0:
+				_begin_lunge()
+			return true
+
+		AttackState.LUNGING:
+			velocity.x = _lunge_direction.x * lunge_speed
+			velocity.z = _lunge_direction.z * lunge_speed
+			_try_land_hit()
+			_attack_state_remaining -= delta
+			if _attack_state_remaining <= 0.0:
+				_attack_state = AttackState.READY
+				_attack_remaining = attack_cooldown
+			return true
+
+		_:
+			if _attack_remaining > 0.0:
+				return false
+
+			var distance := global_position.distance_to(_target.global_position)
+			if distance > attack_range:
+				return false
+
+			_begin_windup()
+			return true
+
+
+func _begin_windup() -> void:
+	_attack_state = AttackState.WINDING_UP
+	_attack_state_remaining = attack_windup
+	_attack_landed = false
+	attack_telegraphed.emit(self, global_position)
+
+
+func _begin_lunge() -> void:
+	_attack_state = AttackState.LUNGING
+	_attack_state_remaining = attack_commit_duration
+	# Locked in at the moment the lunge starts. Committing to the direction
+	# faced right now, rather than continuing to track the target, is what
+	# makes stepping aside during the lunge actually work.
+	_lunge_direction = -global_transform.basis.z
+
+
+func _hold_still_and_track(delta: float) -> void:
+	_accelerate_toward(Vector3.ZERO, delta)
+
+	if _target == null:
 		return
 
-	var distance := global_position.distance_to(_target.global_position)
-	if distance > attack_range:
+	var to_target := _target.global_position - global_position
+	to_target.y = 0.0
+	if to_target.length() <= 0.01:
 		return
 
-	_attack_remaining = attack_cooldown
+	var desired_yaw := atan2(to_target.x, to_target.z)
+	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * _turn_scale * delta)
+
+
+func _try_land_hit() -> void:
+	if _attack_landed or _target == null:
+		return
+
+	if global_position.distance_to(_target.global_position) > attack_range:
+		return
+
+	_attack_landed = true
 	hit_player.emit(contact_damage, global_position)
 
 	if _target.has_method("take_damage"):
