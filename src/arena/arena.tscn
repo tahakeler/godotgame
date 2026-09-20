@@ -7,7 +7,14 @@ background_mode = 1
 background_color = Color(0.016, 0.013, 0.018, 1)
 ambient_light_source = 3
 ambient_light_color = Color(0.2, 0.22, 0.34, 1)
-ambient_light_energy = 0.15
+# Was 0.15. The per-chamber light colours are the whole point now, and a
+# brighter blue ambient fill was tinting every dark gap the same cold hue
+# regardless of which chambers it sat between, softening the falloff into
+# corridors. Lower still leaves every room and lit corridor cell comfortably
+# playable — their own lights are an order of magnitude stronger than this
+# fill — while letting the unlit stretches between them read as genuinely
+# dark rather than uniformly dim-blue.
+ambient_light_energy = 0.1
 tonemap_mode = 3
 tonemap_white = 3.0
 ssao_enabled = true
@@ -30,7 +37,11 @@ glow_blend_mode = 1
 glow_hdr_threshold = 0.85
 adjustment_enabled = true
 adjustment_brightness = 0.98
-adjustment_contrast = 1.26
+# Was 1.26. A small bump pulls lit pools and dark stretches further apart in
+# the final image at zero runtime cost — this is a post-process curve, not
+# another light — which is the cheapest lever available for the brief's
+# contrast ask given lights are already the frame's main expense.
+adjustment_contrast = 1.32
 adjustment_saturation = 1.06
 
 [sub_resource type="CameraAttributesPractical" id="CameraAttributes_arena"]
