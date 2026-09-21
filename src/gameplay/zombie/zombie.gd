@@ -22,6 +22,11 @@ signal noticed_player(at: Vector3, kind: ZombieTypes.Kind)
 ## straight cooldown-gated hit at range had nothing to hang a tell off; this is
 ## the hook a telegraph animation or sound cue would attach to.
 signal attack_telegraphed(zombie: Zombie, at: Vector3)
+## A Screamer has noticed the player and drawn breath. Fires alarm_windup
+## seconds before the alarm itself, and is the only warning the player gets
+## that the room is about to fill up. The hook a dedicated inhale sound
+## attaches to.
+signal alarm_winding_up(zombie: Zombie, at: Vector3)
 
 ## What a zombie knows about the player right now.
 enum Awareness {
@@ -209,6 +214,18 @@ enum Awareness {
 ## Seconds between deliberate alarms while hunting. Zero means this kind only
 ## alerts others when it happens to groan.
 @export var alarm_interval := 0.0
+## Seconds a Screamer spends drawing breath before its first alarm of a hunt.
+##
+## 1.6s is costed from what the player has to actually do in it: register the
+## cue (~0.7s), turn and pick the Screamer out of the crowd (~0.5s), and land
+## the two pistol rounds its 34 health takes (~0.4s). Anything shorter and the
+## window is decorative; much longer and a Screamer you decide to ignore stops
+## punishing you for it, which is the other half of the decision.
+##
+## It is also exactly one alarm_interval, so the inhale costs a Screamer one
+## scream's worth of time — the telegraph is paid for out of its own output
+## rather than bolted on beside it.
+@export var alarm_windup := 1.6
 ## How far this zombie's shout reaches. Set by the spawner from its own alert
 ## radius and the kind's multiplier, so one tuning knob still governs the crowd
 ## and a Screamer is expressed as a multiple of it rather than a second number
@@ -314,6 +331,9 @@ var _retreat_position := Vector3.ZERO
 var _retreat_heading := Vector3.ZERO
 var _retreat_remaining := 0.0
 var _alarm_remaining := 0.0
+## True while a Screamer is drawing breath but has not yet let it out. The
+## window in which killing it prevents the pull entirely.
+var _inhaling := false
 ## Nearest living neighbour, refreshed by the neighbour scan on the repath
 ## cadence. Free, since that scan already visits every sibling — and it is what
 ## a Screamer runs toward instead of at the player.
@@ -371,6 +391,15 @@ const INVESTIGATING_GLOW_ENERGY := 0.09
 const HUNTING_GLOW_ENERGY := 0.32
 const SEARCHING_GLOW_ENERGY := 0.06
 const RETREATING_GLOW_ENERGY := 0.04
+## What a Screamer turns while drawing breath. A cold white against its own
+## sickly yellow, so the change reads as a change rather than as the same
+## shape getting brighter — the player has to be able to tell "there is a
+## Screamer" from "the Screamer is about to go off" at a glance.
+const INHALE_GLOW := Color(0.85, 0.95, 1.0)
+## Brightest thing the game ever puts on a body, before glow_scale multiplies
+## it again. This is the one moment the design actively wants the player to
+## look away from whatever else is happening.
+const INHALE_GLOW_ENERGY := 0.55
 
 var base_attack_range := 1.9
 ## The unmodified sight memory the per-kind multiplier is applied to. Mirrors
@@ -459,6 +488,7 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	flank_distance = definition.flank_distance
 	breaks_off_when_watched = definition.breaks_off_when_watched
 	alarm_interval = definition.alarm_interval
+	alarm_windup = definition.alarm_windup
 	flees_to_allies = definition.flees_to_allies
 	glow_scale = definition.glow_scale
 	groan_interval = definition.groan_interval
@@ -650,6 +680,13 @@ func _set_awareness(next: Awareness) -> void:
 	# thing that happens in a round, and it used to happen in silence.
 	if next == Awareness.HUNTING and previous != Awareness.HUNTING:
 		noticed_player.emit(global_position, kind)
+		# Notice, then inhale, then scream. A Screamer that loses the player and
+		# finds them again pays the full wind-up a second time, so breaking its
+		# line of sight is a real answer and not merely a delay.
+		_begin_inhale()
+
+	if previous == Awareness.HUNTING and next != Awareness.HUNTING:
+		_inhaling = false
 
 
 ## Colour a zombie by what it knows.
@@ -1048,7 +1085,59 @@ func _tick_alarm(delta: float) -> void:
 	if _alarm_remaining > 0.0:
 		return
 
+	_inhaling = false
 	_alarm_remaining = alarm_interval
+	_scream()
+
+
+## Draw breath. The window in which killing a Screamer actually prevents
+## something.
+##
+## Without this the alarm was instantaneous on noticing, and measurement showed
+## what that meant: one Screamer recruited 8 of 8 sleepers in a single tick at
+## 4.1 seconds. The design promise is "kill it first and fast", but there was no
+## interval in which being fast helped — the player cannot pick one shape out of
+## a crowd at 17m in an unlit cave before a scream that costs nothing to make
+## has already landed.
+##
+## A wider or narrower alarm radius cannot create that interval; only time can.
+## Measured directly: dropping alarm_radius_scale from 2.6 to 1.8 changed the
+## recruit count not at all, because the horde is clustered well inside either
+## radius.
+##
+## Modelled on the attack wind-up rather than invented, so it reads the way
+## every other telegraph in this project reads: a thing visibly commits, and
+## for a moment it is committed and you are not.
+func _begin_inhale() -> void:
+	if alarm_interval <= 0.0:
+		return
+
+	_inhaling = true
+	_alarm_remaining = alarm_windup
+
+	# Two channels, because the player will meet this down a corridor in the
+	# dark while already shooting at something else.
+	#
+	# The glow is the Screamer's own tell at its own brightness — it is already
+	# the most luminous thing in the cave by a factor of two and a half, and
+	# this is a distinct colour on top of that, so "the yellow one just changed"
+	# reads at range.
+	if _visual != null:
+		_visual.apply_glow(INHALE_GLOW, INHALE_GLOW_ENERGY * glow_scale)
+
+	# Sound does the heavier lifting: light needs line of sight and a corridor
+	# denies it. groaned is emitted deliberately rather than only the new
+	# signal, because the spawner already relays groans to the audio system and
+	# that gives an immediate positional cue with no change outside this class.
+	# alarm_winding_up is the hook for a dedicated inhale sound to replace it.
+	alarm_winding_up.emit(self, global_position)
+	groaned.emit(global_position)
+
+
+## Let it out, and go back to looking like an ordinary hunter.
+func _scream() -> void:
+	_apply_awareness_tell()
+
 	if alarm_radius > 0.0:
 		raised_alarm.emit(self, last_known_position)
 
@@ -1472,6 +1561,15 @@ func _stagger() -> void:
 		return
 
 	_stagger_remaining = stagger_duration
+
+	# A hit knocks the breath out of it. The archetype table has claimed since
+	# the Screamer landed that "any hit at all buys a pause in the screaming
+	# even when it does not kill" — until the inhale existed there was nothing
+	# for that to be true of. Now a single round that fails to kill still costs
+	# the Screamer its whole wind-up and starts it again, which is what makes
+	# shooting the weakest thing in the room worth a magazine.
+	if _inhaling:
+		_begin_inhale()
 
 	if _attack_state == AttackState.WINDING_UP:
 		_attack_state = AttackState.READY

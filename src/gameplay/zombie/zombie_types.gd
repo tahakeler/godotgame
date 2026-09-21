@@ -90,6 +90,7 @@ const DEFINITIONS := {
 		## Seconds between deliberate alarms while hunting. 0.0 means this kind
 		## only alerts others incidentally, when it happens to groan.
 		"alarm_interval": 0.0,
+		"alarm_windup": 0.0,
 		## Whether hunting means running toward other zombies rather than at
 		## the player.
 		"flees_to_allies": false,
@@ -132,6 +133,7 @@ const DEFINITIONS := {
 		"breaks_off_when_watched": false,
 		"alarm_radius_scale": 1.0,
 		"alarm_interval": 0.0,
+		"alarm_windup": 0.0,
 		"flees_to_allies": false,
 		"glow_scale": 1.0,
 		"groan_interval": Vector2(2.5, 6.0),
@@ -175,6 +177,7 @@ const DEFINITIONS := {
 		"breaks_off_when_watched": false,
 		"alarm_radius_scale": 1.0,
 		"alarm_interval": 0.0,
+		"alarm_windup": 0.0,
 		"flees_to_allies": false,
 		"glow_scale": 1.0,
 		"groan_interval": Vector2(4.0, 8.0),
@@ -214,6 +217,7 @@ const DEFINITIONS := {
 		"breaks_off_when_watched": true,
 		"alarm_radius_scale": 0.0,
 		"alarm_interval": 0.0,
+		"alarm_windup": 0.0,
 		"flees_to_allies": false,
 		# Dimmer even than the baseline tell: the one enemy allowed to be hard
 		# to see, because seeing it at all is most of the win against it.
@@ -260,6 +264,10 @@ const DEFINITIONS := {
 		# empties a large part of the map in your direction.
 		"alarm_radius_scale": 2.6,
 		"alarm_interval": 1.6,
+		## Notice, inhale, scream. The window in which killing it prevents the
+		## pull rather than merely stopping the next one — see Zombie.alarm_windup
+		## for how the 1.6s is costed.
+		"alarm_windup": 1.6,
 		# And it will not come to you. It runs to the nearest zombie it can
 		# find and screams from behind it, so shooting it is a positioning
 		# problem rather than only an aiming problem.

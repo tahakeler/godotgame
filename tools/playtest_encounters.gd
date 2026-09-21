@@ -275,8 +275,32 @@ func _sample() -> void:
 	if _queue[0] == "sight":
 		_sample_sight(player_position)
 
+	# A player who never turns their head can never look at a Stalker, and a
+	# Stalker that is never looked at never breaks off. Two rounds of
+	# measurement reported "break-offs: 0" and both times that was the fixture
+	# standing still, not the behaviour failing. Tracking it is the only way the
+	# retreat gets exercised in play rather than by unit assertion.
+	if _queue[0] == "stalker_watch" and _stalker != null and is_instance_valid(_stalker):
+		_stare_at(player, _stalker.global_position)
+
 	if _stalker != null and is_instance_valid(_stalker):
 		_sample_stalker(player)
+
+
+## Point the player's body at a spot, the way a player who has noticed
+## something keeps it on screen.
+##
+## Yaw only. The Stalker's watched-check reads the body's facing on the
+## horizontal plane, and the camera's pitch lives on a separate node, so
+## rolling the whole body to look down at a thing 2m away would be both wrong
+## and untrue to how the player actually moves.
+func _stare_at(player: Node3D, at: Vector3) -> void:
+	var to_target := at - player.global_position
+	to_target.y = 0.0
+	if to_target.length_squared() < 0.0001:
+		return
+
+	player.global_rotation.y = atan2(-to_target.x, -to_target.z)
 
 
 ## Break _can_see_target() into its three gates and report which one is
