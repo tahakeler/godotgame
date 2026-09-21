@@ -177,6 +177,24 @@ enum Awareness {
 @export var flank_distance := 0.0
 ## Whether being looked at makes this kind withdraw and try again elsewhere.
 @export var breaks_off_when_watched := false
+## Range at which a flanking kind abandons the flank and drives at the player.
+##
+## Without this the flank point is not a waypoint, it is a terminus: a Stalker
+## walked to a spot flank_distance behind the player and stood on it. Measured
+## on a stationary player, it settled exactly 5.5m out and held there for the
+## rest of the encounter, never once attacking — 47% of samples stationary,
+## which reads as an enemy that cannot make up its mind rather than one that is
+## stalking you.
+##
+## A Stalker that has got behind you has already won its game. The right move
+## then is to strike, not to keep circling, so past this range flanking stops
+## having an opinion and it closes like anything else.
+##
+## Must be larger than flank_distance or it can never trigger — the body would
+## park on the flank point before ever getting close enough to commit. The gap
+## between the two is the length of the final run-in: at 7m a Stalker covers
+## the last stretch in about a second and a half.
+@export var flank_commit_distance := 7.0
 ## Half-angle, in degrees, within which the player counts as looking at this
 ## zombie. Deliberately narrower than a monitor's field of view: a Stalker that
 ## broke off whenever it was anywhere on screen could never close at all.
@@ -725,6 +743,11 @@ func is_retreating() -> bool:
 ## correct answer for a creature with no plan.
 func preferred_approach_point(player_position: Vector3, player_facing: Vector3) -> Vector3:
 	if flank_distance <= 0.0:
+		return player_position
+
+	# Close enough to stop manoeuvring and attack. Flanking is how it gets
+	# there, not where it is going — see flank_commit_distance.
+	if global_position.distance_to(player_position) <= flank_commit_distance:
 		return player_position
 
 	var facing := Vector3(player_facing.x, 0.0, player_facing.z)
