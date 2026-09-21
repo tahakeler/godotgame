@@ -357,6 +357,18 @@ func set_look_enabled(enabled: bool) -> void:
 		release_mouse()
 
 
+## Set the resting field of view in degrees.
+##
+## Sprint widens the view from this figure rather than from a constant, so the
+## sprint bonus keeps working at any player-chosen FOV. Applied to the camera
+## immediately unless the sprint stretch is mid-flight, in which case the next
+## frame's ease carries it there instead of snapping.
+func set_base_fov(degrees: float) -> void:
+	_base_fov = degrees
+	if _stance != Stance.SPRINTING:
+		camera.fov = degrees
+
+
 func set_mouse_sensitivity(value: float) -> void:
 	mouse_sensitivity = value
 	look_sensitivity_changed.emit(value)

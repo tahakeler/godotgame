@@ -21,9 +21,17 @@ const PAD_SENSITIVITY_MAX := 4.6
 @onready var _sensitivity_value: Label = %SensitivityValue
 @onready var _pad_sensitivity_slider: HSlider = %PadSensitivitySlider
 @onready var _pad_sensitivity_value: Label = %PadSensitivityValue
+@onready var _deadzone_slider: HSlider = %DeadzoneSlider
+@onready var _deadzone_value: Label = %DeadzoneValue
 @onready var _invert_check: Button = %InvertCheck
 @onready var _volume_slider: HSlider = %VolumeSlider
 @onready var _volume_value: Label = %VolumeValue
+@onready var _music_slider: HSlider = %MusicSlider
+@onready var _music_value: Label = %MusicValue
+@onready var _sfx_slider: HSlider = %SfxSlider
+@onready var _sfx_value: Label = %SfxValue
+@onready var _fov_slider: HSlider = %FovSlider
+@onready var _fov_value: Label = %FovValue
 @onready var _fullscreen_check: Button = %FullscreenCheck
 @onready var _difficulty_options: OptionButton = %DifficultyOptions
 @onready var _quality_options: OptionButton = %QualityOptions
@@ -55,8 +63,12 @@ func _ready() -> void:
 
 	_sensitivity_slider.value_changed.connect(_on_sensitivity_changed)
 	_pad_sensitivity_slider.value_changed.connect(_on_pad_sensitivity_changed)
+	_deadzone_slider.value_changed.connect(_on_deadzone_changed)
 	_invert_check.toggled.connect(_on_invert_toggled)
 	_volume_slider.value_changed.connect(_on_volume_changed)
+	_music_slider.value_changed.connect(_on_music_changed)
+	_sfx_slider.value_changed.connect(_on_sfx_changed)
+	_fov_slider.value_changed.connect(_on_fov_changed)
 	_fullscreen_check.toggled.connect(_on_fullscreen_toggled)
 	_difficulty_options.item_selected.connect(_on_difficulty_selected)
 	_quality_options.item_selected.connect(_on_quality_selected)
@@ -135,10 +147,19 @@ func _load_from_settings() -> void:
 	_pad_sensitivity_slider.value = clampf(pad_fraction, 0.0, 1.0) * 9.0 + 1.0
 	_update_pad_sensitivity_label()
 
+	_deadzone_slider.value = _settings.gamepad_deadzone * 100.0
+	_deadzone_value.text = "%d%%" % roundi(_deadzone_slider.value)
+
 	_invert_check.button_pressed = _settings.invert_look_y
 	_invert_check.text = "ON" if _settings.invert_look_y else "OFF"
 	_volume_slider.value = _settings.master_volume * 100.0
 	_update_volume_label()
+	_music_slider.value = _settings.music_volume * 100.0
+	_music_value.text = "%d%%" % roundi(_music_slider.value)
+	_sfx_slider.value = _settings.sfx_volume * 100.0
+	_sfx_value.text = "%d%%" % roundi(_sfx_slider.value)
+	_fov_slider.value = _settings.field_of_view
+	_fov_value.text = "%d" % roundi(_fov_slider.value)
 	_fullscreen_check.button_pressed = _settings.fullscreen
 	_fullscreen_check.text = "ON" if _settings.fullscreen else "OFF"
 	_colour_mode_options.select(
@@ -171,6 +192,40 @@ func _on_pad_sensitivity_changed(value: float) -> void:
 		PAD_SENSITIVITY_MIN, PAD_SENSITIVITY_MAX, (value - 1.0) / 9.0
 	)
 	_update_pad_sensitivity_label()
+	_settings.save_settings()
+
+
+## Deadzone applies to the live InputMap the moment it moves. A player opening
+## this slider almost always has a stick that is drifting right now, and the
+## only way to find the figure that stops it is to feel the stick go still.
+func _on_deadzone_changed(value: float) -> void:
+	_settings.gamepad_deadzone = value / 100.0
+	_deadzone_value.text = "%d%%" % roundi(value)
+	_settings.apply_deadzone()
+	_settings.save_settings()
+
+
+func _on_music_changed(value: float) -> void:
+	_settings.music_volume = value / 100.0
+	_music_value.text = "%d%%" % roundi(value)
+	_settings.apply_audio()
+	_settings.save_settings()
+
+
+func _on_sfx_changed(value: float) -> void:
+	_settings.sfx_volume = value / 100.0
+	_sfx_value.text = "%d%%" % roundi(value)
+	_settings.apply_audio()
+	_settings.save_settings()
+
+
+## FOV reaches the camera through the settings `changed` signal, which Game
+## listens to — the panel never touches the player itself. Wide FOV is a
+## motion-sickness remedy, so it has to be adjustable mid-round and visible
+## while being adjusted, not on the next restart.
+func _on_fov_changed(value: float) -> void:
+	_settings.field_of_view = value
+	_fov_value.text = "%d" % roundi(value)
 	_settings.save_settings()
 
 
