@@ -93,6 +93,7 @@ var _weapon: Weapon
 @onready var _crosshair: Control = $Crosshair
 @onready var _top_bar: Control = $TopBar
 @onready var _objective_block: Control = $ObjectiveBlock
+@onready var _objective_label: Label = %ObjectiveLabel
 @onready var _vitals_block: Control = $VitalsBlock
 @onready var _ammo_block: Control = $AmmoBlock
 @onready var _noise_ring: Control = %NoiseRing
@@ -108,6 +109,9 @@ var _weapon: Weapon
 @onready var _crosshair_right: ColorRect = $Crosshair/Right
 
 var _damage_markers: Array[Dictionary] = []
+## Where the objective chevron points, in world space, and whether to draw it.
+var _objective_bearing := Vector3.ZERO
+var _objective_has_bearing := false
 var _flash_remaining := 0.0
 var _hitmarker_remaining := 0.0
 var _hurt_pulse := 0.0
@@ -839,6 +843,25 @@ func _draw_health_delta() -> void:
 	)
 
 
+## The single line telling the player what they are doing and where.
+##
+## One line, upper case, always present while the round runs. The bearing feeds
+## the compass and nothing else: it is a direction, never a route and never a
+## distance. A marker painted on the minimap would answer the navigation problem
+## outright, and the navigation problem is the cave.
+func set_objective(text: String, bearing_target: Vector3, has_bearing: bool) -> void:
+	_objective_bearing = bearing_target
+	_objective_has_bearing = has_bearing
+
+	if _objective_label == null:
+		return
+
+	_objective_label.text = text
+	# An empty line is a blank row pushing the rest of the block down, so the
+	# label leaves rather than sits there.
+	_objective_label.visible = not text.is_empty()
+
+
 ## A compass strip, so the cave can be navigated by memory.
 ##
 ## The map is a loop of chambers that look increasingly alike by design, and
@@ -875,6 +898,41 @@ func _draw_compass() -> void:
 	_compass.draw_rect(
 		Rect2(centre - 1.0, 18.0, 2.0, 6.0),
 		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	)
+
+	_draw_objective_chevron(bearing, centre)
+
+
+## A single chevron on the compass, at the bearing of the current objective.
+##
+## It rides the same strip as the cardinal letters, so it answers "which way"
+## in the place the player already looks for that answer, and it says nothing
+## about how far or by what route.
+func _draw_objective_chevron(bearing: float, centre: float) -> void:
+	if not _objective_has_bearing or _player == null:
+		return
+
+	var to_target := _objective_bearing - _player.global_position
+	to_target.y = 0.0
+	if to_target.length_squared() < 0.01:
+		return
+
+	var target_bearing := atan2(to_target.x, -to_target.z)
+	var offset := angle_difference(bearing, target_bearing)
+	var half_arc := deg_to_rad(COMPASS_VISIBLE_ARC * 0.5)
+
+	# Clamped to the edge of the strip rather than hidden when the objective is
+	# behind the player. A chevron that disappears reads as "arrived", and the
+	# one thing it must never do is stop telling the truth.
+	var clamped := clampf(offset, -half_arc, half_arc)
+	var x: float = centre + clamped / half_arc * centre
+	var colour := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+
+	_compass.draw_colored_polygon(
+		PackedVector2Array([
+			Vector2(x, 0.0), Vector2(x - 5.0, -7.0), Vector2(x + 5.0, -7.0)
+		]),
+		colour
 	)
 
 

@@ -202,7 +202,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Capture stops the cursor escaping the window; it is not what makes
 		# looking work, and treating it as a precondition made a cosmetic
 		# problem into an unplayable one.
-		_apply_look(event.relative)
+		_apply_look(_look_delta(event))
 
 	elif event is InputEventMouseButton and event.pressed:
 		# Clicking back into the window re-captures, so the player does not have
@@ -280,6 +280,32 @@ func _tick_footsteps(delta: float) -> void:
 	if _distance_since_footstep >= footstep_distance:
 		_distance_since_footstep = 0.0
 		footstep_taken.emit()
+
+
+## How far a pointing device moved, in physical screen pixels.
+##
+## `screen_relative`, not `relative`. This project stretches its canvas
+## (`window/stretch/mode="canvas_items"` against a 1920x1080 base), and Godot
+## divides `relative` by that stretch scale before the event arrives — so the
+## same physical swipe turns the camera a different amount depending on how big
+## the window is. Fullscreen on a Retina MacBook is the worst case: the scale
+## there is around 1.6, so `relative` reports roughly two thirds of the motion
+## the hand actually made, and the trackpad feels sluggish in fullscreen and
+## fine in a window while nothing about the trackpad has changed. That is the
+## kind of bug that gets blamed on the device.
+##
+## `screen_relative` is unscaled physical pixels, so `mouse_sensitivity` means
+## the same thing on every display and in every window size. It exists from
+## Godot 4.3 onward, which this project is well past.
+##
+## Falls back to `relative` when `screen_relative` is empty, because a
+## synthesised event — `Input.parse_input_event` in the headless tests, or any
+## remapper — may fill only one of the two, and dropping that motion would be a
+## camera that does not turn. A real macOS trackpad fills both.
+func _look_delta(event: InputEventMouseMotion) -> Vector2:
+	if not event.screen_relative.is_zero_approx():
+		return event.screen_relative
+	return event.relative
 
 
 ## Point the camera using a relative mouse delta.

@@ -38,6 +38,9 @@ const EMPTY_COLOUR := Color(0.32, 0.38, 0.5)
 var _stock := 0
 var _recharge_remaining := 0.0
 var _player_inside := false
+## Asked how many rounds the player can accept. Set by Game, which is the only
+## thing that knows both the crate and the weapon.
+var capacity_handler := Callable()
 
 var _light: OmniLight3D
 var _area: Area3D
@@ -83,11 +86,29 @@ func has_player_inside() -> bool:
 
 
 func can_interact(_player: Node) -> bool:
-	return has_stock()
+	return has_stock() and room_to_take() > 0
 
 
 func interaction_prompt(_player: Node) -> String:
 	return "Resupply"
+
+
+## How many rounds the player could actually accept right now.
+##
+## The crate still does not know what a magazine is — it asks how much will be
+## taken and is told a number, which is the only thing it needs in order not to
+## give away more than that.
+##
+## Without this a player at full reserve emptied a crate for nothing: the drain
+## and the 55 second recharge ran unconditionally, and every piece of feedback
+## — the resupply sound, the pickup chime, the world noise — was gated behind
+## "did the reserve actually go up", so the crate went cold and silent and the
+## player was given no way to tell that from a successful loot.
+func room_to_take() -> int:
+	if not capacity_handler.is_valid():
+		return _stock
+
+	return maxi(0, int(capacity_handler.call()))
 
 
 func interact(player: Node) -> bool:
@@ -113,13 +134,27 @@ func stock() -> int:
 func reset() -> void:
 	_stock = capacity
 	_recharge_remaining = 0.0
+	# reset_to_spawn teleports the player rather than moving them, so body_exited
+	# never fires for a cache they were standing in when the round ended. Left
+	# set, this cache believes the player is inside it for the whole next round.
+	_player_inside = false
 	_refresh_glow()
 
 
+## Hand over only what the player can carry, and keep the rest.
+##
+## A crate that empties itself into a full reserve is a resource destroyed by
+## walking into it, which punishes the player for the one thing the caches
+## exist to encourage.
 func _collect() -> void:
-	var taken := _stock
-	_stock = 0
-	_recharge_remaining = recharge_seconds
+	var taken: int = mini(_stock, room_to_take())
+	if taken <= 0:
+		return
+
+	_stock -= taken
+	if _stock <= 0:
+		_recharge_remaining = recharge_seconds
+
 	_refresh_glow()
 	collected.emit(taken)
 
