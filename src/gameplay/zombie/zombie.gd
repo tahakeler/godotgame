@@ -837,7 +837,20 @@ func _can_see_target() -> bool:
 	var to_target := _target.global_position - global_position
 	var distance := to_target.length()
 
-	if distance > sight_range:
+	# A lit player is visible further off. This asks the target how visible it
+	# is rather than having the torch reach in and edit sight_range: pull, not
+	# push, so the light cannot fight inspector tuning, cannot stack across
+	# several zombies, and cannot leave one permanently buffed because the
+	# player happened to die mid-beam.
+	#
+	# It is also what finally makes the torch a decision. Until now seeing in a
+	# pitch-black cave was free, so the only reason to ever switch it off was
+	# that you had forgotten it was on.
+	var reach := sight_range
+	if _target.has_method("visibility_scale"):
+		reach *= _target.visibility_scale()
+
+	if distance > reach:
 		return false
 
 	# Behind counts as unseen, so breaking line of sight by getting behind one
