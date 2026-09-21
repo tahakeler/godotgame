@@ -683,6 +683,14 @@ func try_reload() -> bool:
 
 ## Award ammunition, clamped to the reserve ceiling. Returns the amount actually
 ## added, which is less than requested when the reserve is already full.
+## How many more rounds this weapon's reserve could hold.
+##
+## Asked by an ammo cache before it drains itself, so a crate is never spent on
+## a player who cannot carry what is in it.
+func reserve_capacity() -> int:
+	return maxi(0, max_reserve - reserve_ammo)
+
+
 func add_reserve_ammo(amount: int) -> int:
 	var before := reserve_ammo
 	reserve_ammo = clampi(reserve_ammo + amount, 0, max_reserve)
