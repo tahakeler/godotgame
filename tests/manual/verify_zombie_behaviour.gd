@@ -53,6 +53,7 @@ func _process(_delta: float) -> bool:
 	test_a_screamer_will_not_cross_the_player_to_reach_an_ally()
 	test_a_screamer_with_nobody_near_backs_away_instead()
 	test_a_watched_stalker_keeps_one_retreat_direction()
+	test_a_screamer_is_silent_while_it_draws_breath()
 
 	_report()
 	return true
@@ -873,6 +874,68 @@ func _approaches_from_outside_view(
 			outside += 1
 
 	return outside
+
+
+## The Screamer's telegraph, and the only reason "kill it first" is advice
+## rather than a slogan.
+##
+## Measured before it existed: one Screamer recruited 8 of 8 sleepers in a
+## single tick 4.1s into the encounter. Killing it first was impossible, not
+## hard — there was no interval between noticing and screaming for the player
+## to act in. A silent wind-up would be no better than none, so this asserts
+## the silence as well as the eventual noise.
+func test_a_screamer_is_silent_while_it_draws_breath() -> void:
+	# Arrange
+	var screamer := _zombie(ZombieTypes.Kind.SCREAMER)
+	var player := _marker(Vector3(0.0, 0.0, -8.0))
+	screamer.set_target(player)
+	var alarms := [0]
+	screamer.raised_alarm.connect(
+		func(_z: Zombie, _at: Vector3) -> void: alarms[0] += 1
+	)
+
+	# Act: noticing starts the inhale rather than the alarm.
+	screamer._set_awareness(Zombie.Awareness.HUNTING)
+	screamer._tick_alarm(screamer.alarm_windup - 0.05)
+	var during_the_breath: int = alarms[0]
+
+	screamer._tick_alarm(0.1)
+	var after_the_breath: int = alarms[0]
+
+	# Assert
+	if screamer.alarm_windup <= 0.0:
+		_failures.append("a Screamer has no wind-up — it screams the instant it sees you")
+	elif during_the_breath != 0:
+		_failures.append(
+			"a Screamer raised %d alarms while still drawing breath — there is no "
+			% during_the_breath + "window in which killing it prevents anything"
+		)
+	elif after_the_breath != 1:
+		_failures.append(
+			"a Screamer that finished its %.1fs wind-up raised %d alarms, expected 1"
+			% [screamer.alarm_windup, after_the_breath]
+		)
+	else:
+		print("PASS: a Screamer is silent for %.1fs before it screams"
+			% screamer.alarm_windup)
+
+	# And a hit during the breath costs it the whole wind-up, which is what the
+	# archetype table has always claimed a stagger buys against this kind.
+	screamer._set_awareness(Zombie.Awareness.INVESTIGATING)
+	screamer._set_awareness(Zombie.Awareness.HUNTING)
+	screamer._tick_alarm(screamer.alarm_windup - 0.05)
+	screamer.take_damage(1.0)
+	screamer._tick_alarm(0.1)
+
+	if alarms[0] != after_the_breath:
+		_failures.append(
+			"shooting a Screamer a frame before it screamed did not interrupt it"
+		)
+	else:
+		print("PASS: a hit mid-breath costs a Screamer its whole wind-up")
+
+	screamer.free()
+	player.free()
 
 
 func _zombie(kind: ZombieTypes.Kind) -> Zombie:
