@@ -290,6 +290,10 @@ var _has_previous_sighting := false
 ## Where a zombie that has broken off is withdrawing to, and how long it stays
 ## withdrawn. Only kinds with breaks_off_when_watched use either.
 var _retreat_position := Vector3.ZERO
+## The direction the current withdrawal is going, fixed for its duration. Kept
+## so that a Stalker the player keeps looking at extends one retreat instead of
+## starting a new one every sight tick — see _begin_break_off().
+var _retreat_heading := Vector3.ZERO
 var _retreat_remaining := 0.0
 var _alarm_remaining := 0.0
 ## Nearest living neighbour, refreshed by the neighbour scan on the repath
@@ -300,6 +304,18 @@ var _nearest_ally_position := Vector3.INF
 ## cannot be confused with idle hesitation, and so a stagger-immune kind's
 ## timer is provably always zero.
 var _stagger_remaining := 0.0
+
+## Whether this zombie has been taken out of the fight because the round is
+## over. Read by the spawner and by the tests; set only through
+## stop_fighting() and resume_fighting().
+##
+## This is a separate flag rather than just switching physics processing off,
+## because the things that have to stop are not all driven from the physics
+## frame. A stopped zombie still has live signal connections, and anything that
+## reaches it by another route — a hit resolving, a noise broadcast, an alarm
+## from a zombie that was stopped a frame later — must find a body that has
+## already left the fight.
+var is_stopped := false
 
 ## Set by configure(); read by the spawner when this zombie dies.
 var kind: ZombieTypes.Kind = ZombieTypes.Kind.SHAMBLER
@@ -460,6 +476,54 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	attack_range = base_attack_range * (height / REFERENCE_HEIGHT)
 
 
+## Take this zombie out of the fight, and leave it standing where it is.
+##
+## Called when the round ends. Stopping the spawner used to stop only the
+## spawning: every zombie already in the cave carried on pathing, biting and
+## groaning behind the results overlay, so a player reading their score was
+## still taking damage flashes, hurt audio and contact pings from a fight that
+## was over — at the CPU cost of a full horde still running navigation on a
+## screen nobody was playing.
+##
+## Frozen rather than despawned, and frozen rather than merely defanged. A
+## results screen with the horde still milling about in the background reads as
+## the game continuing without you; a horde that vanishes the instant you die
+## reads as a bug. Standing still is the only one of the three that looks
+## deliberate — and it is also the cheapest, since the physics frame is where
+## essentially all of a zombie's cost lives.
+##
+## Deliberately not a state on the awareness machine. Awareness is what a
+## zombie believes about the player, and "the round is over" is not something
+## it believes — mixing the two would mean every branch of the state machine
+## growing a case for a situation that is not about the player at all.
+func stop_fighting() -> void:
+	if is_stopped:
+		return
+
+	is_stopped = true
+
+	# Left mid-stride otherwise: the visual reads the horizontal speed to pick
+	# its animation, so a frozen zombie with velocity still on it would stand
+	# in place playing a run cycle.
+	velocity = Vector3.ZERO
+	_visual.update_locomotion(0.0)
+
+	set_physics_process(false)
+
+
+## Put a stopped zombie back to work.
+##
+## The inverse matters as much as the stop. Restarting has to be able to hand
+## the fight back to anything that survived, and a freeze with no way out would
+## turn one ended round into a permanently disarmed horde.
+func resume_fighting() -> void:
+	if not is_stopped:
+		return
+
+	is_stopped = false
+	set_physics_process(true)
+
+
 ## Assign the node this zombie hunts, and give it a reason to be here.
 ##
 ## A newly spawned zombie starts out already believing the player is where they
@@ -497,7 +561,7 @@ func take_damage(amount: float, _hit_position: Vector3 = Vector3.ZERO,
 ##
 ## Returns true only when the noise actually told this zombie something.
 func hear_noise(noise_position: Vector3, loudness: float) -> bool:
-	if health.is_dead or awareness == Awareness.HUNTING:
+	if health.is_dead or is_stopped or awareness == Awareness.HUNTING:
 		return false
 
 	# Beneath notice. A Brute's floor sits above a thrown decoy and below a
@@ -619,7 +683,7 @@ func _is_committed() -> bool:
 ## one noticed gunshot into a chamber emptying toward you rather than a single
 ## zombie taking an interest.
 func receive_alert(where: Vector3) -> void:
-	if health.is_dead or _is_committed():
+	if health.is_dead or is_stopped or _is_committed():
 		return
 
 	_believe(where)
@@ -812,7 +876,21 @@ func _is_being_watched() -> bool:
 ## The withdrawal point is off to one side rather than straight backward: a
 ## Stalker that reversed in a line would simply be walking away, and would
 ## come back along the route the player is already watching.
+## Continuing to back off under a steady gaze is intended. Picking a new
+## direction to back off in, five times a second, is not: break-off is reached
+## from the sight tick, which runs every sight_interval for as long as the
+## player keeps looking. The outward component of the withdrawal was stable and
+## the sideways one was re-rolled each time, so a watched Stalker crabbed from
+## side to side and never actually left.
+##
+## Already retreating means extend, not restart: same heading, re-projected
+## from wherever the body has got to, and the clock pushed back out to full.
 func _begin_break_off() -> void:
+	if awareness == Awareness.RETREATING:
+		_retreat_remaining = break_off_duration
+		_retreat_position = global_position + _retreat_heading * break_off_distance
+		return
+
 	_retreat_remaining = break_off_duration
 
 	var away := global_position - _target.global_position
@@ -823,9 +901,12 @@ func _begin_break_off() -> void:
 	# Sideways component is drawn from this zombie's own stream, so two
 	# Stalkers backing off from the same spot do not peel the same way.
 	var sideways := away.normalized().cross(Vector3.UP) * _rng.randf_range(-1.0, 1.0)
-	_retreat_position = global_position + (
-		away.normalized() + sideways
-	).normalized() * break_off_distance
+
+	# Drawn once and kept for the whole withdrawal. The randomness is there so
+	# two Stalkers backing off from the same spot do not peel the same way, not
+	# so that one Stalker peels a different way every tick.
+	_retreat_heading = (away.normalized() + sideways).normalized()
+	_retreat_position = global_position + _retreat_heading * break_off_distance
 
 	_set_awareness(Awareness.RETREATING)
 
@@ -1072,6 +1153,21 @@ func _accelerate_toward(desired_velocity: Vector3, delta: float) -> void:
 ## zombie's own kind is heading (a Shambler drifts toward it). Folding all
 ## three into one pass over the siblings is the only reason two new behaviours
 ## cost nothing.
+## Whether running to this spot would take a fleeing zombie toward the player.
+##
+## Distance alone is not enough. A zombie five metres away can still be five
+## metres away *past* the player, and a Screamer that ran to it would close
+## with the thing it is running from. The rule is simply that the refuge may
+## not be nearer the player than the Screamer already is — which makes the
+## behaviour true by construction rather than true in the common case.
+func _is_refuge(where: Vector3) -> bool:
+	if _target == null:
+		return true
+
+	var player_position := _target.global_position
+	return where.distance_to(player_position) >= global_position.distance_to(player_position)
+
+
 func _compute_separation() -> Vector3:
 	var push := Vector3.ZERO
 	_nearest_ally_position = Vector3.INF
@@ -1096,7 +1192,25 @@ func _compute_separation() -> Vector3:
 		var distance := offset.length()
 		var combined_radius: float = _body_radius + other._body_radius + separation_margin
 
-		if distance < nearest_distance:
+		# Only a kind that actually runs to other zombies pays for this, and
+		# only within the range at which a neighbour is a neighbour. The search
+		# was previously unbounded, which had two bad consequences: any zombie
+		# anywhere in the cave counted as cover, so the "nothing to hide
+		# behind" fallback below only ran when the Screamer was the last thing
+		# alive in the arena; and if the only other zombie was on the far side
+		# of the player, the destination was on the far side of the player. The
+		# one kind designed never to approach you would charge through you to
+		# get there.
+		#
+		# cohesion_radius is reused rather than a new constant invented: it is
+		# already this class's answer to "how far apart can two zombies be and
+		# still be together", and hiding behind something is the same question.
+		if (
+			flees_to_allies
+			and distance < nearest_distance
+			and distance <= cohesion_radius
+			and _is_refuge(other.global_position)
+		):
 			nearest_distance = distance
 			_nearest_ally_position = other.global_position
 
@@ -1238,7 +1352,11 @@ func _hold_still_and_track(delta: float) -> void:
 
 
 func _try_land_hit() -> void:
-	if _attack_landed or _target == null:
+	# Guarded here as well as by the frozen physics frame. This is the one
+	# place a zombie reaches out and touches the player, and it is worth being
+	# unable to do so by more than one route: a hit that lands after the round
+	# has ended is damage the player can neither see coming nor answer.
+	if _attack_landed or _target == null or is_stopped:
 		return
 
 	if global_position.distance_to(_target.global_position) > attack_range:
@@ -1252,6 +1370,9 @@ func _try_land_hit() -> void:
 
 
 func _tick_groan(delta: float) -> void:
+	if is_stopped:
+		return
+
 	_groan_remaining -= delta
 	if _groan_remaining > 0.0:
 		return

@@ -48,9 +48,230 @@ func _process(_delta: float) -> bool:
 	test_a_losing_zombie_keeps_leading_the_player()
 	test_a_zombie_that_loses_the_player_works_the_area()
 	test_every_kind_still_paths_and_still_attacks()
+	test_stopping_the_round_stops_the_zombies()
+	test_a_stopped_zombie_can_be_put_back_to_work()
+	test_a_screamer_will_not_cross_the_player_to_reach_an_ally()
+	test_a_screamer_with_nobody_near_backs_away_instead()
+	test_a_watched_stalker_keeps_one_retreat_direction()
 
 	_report()
 	return true
+
+
+## D3. ZombieSpawner.stop() used to set a flag that only governed spawning, so
+## every zombie already in the cave carried on pathing, biting and groaning
+## behind the results overlay — damage flashes, hurt audio and contact pings
+## firing on a screen nobody is playing, at the CPU cost of a full horde.
+##
+## The round is over: the horde has to be over with it.
+func test_stopping_the_round_stops_the_zombies() -> void:
+	# Arrange: a zombie in range of a target, mid-fight.
+	var spawner := _spawner()
+	var zombie := _zombie_in(ZombieTypes.Kind.SHAMBLER, spawner)
+	var dummy := _marker(Vector3(0.9, 0.0, 0.0))
+	zombie.set_target(dummy)
+	zombie.awareness = Zombie.Awareness.HUNTING
+	spawner._alive = [zombie]
+
+	var hits := [0]
+	var groans := [0]
+	zombie.hit_player.connect(func(_d: float, _p: Vector3) -> void: hits[0] += 1)
+	zombie.groaned.connect(func(_at: Vector3) -> void: groans[0] += 1)
+
+	# Act
+	spawner.stop()
+
+	# A full attack cycle and a groan that would both have fired a moment ago.
+	zombie._tick_attack(0.001)
+	zombie._tick_attack(zombie.attack_windup + 0.01)
+	zombie._tick_attack(0.01)
+	zombie._groan_remaining = 0.0
+	zombie._tick_groan(0.01)
+
+	# Assert
+	if hits[0] != 0:
+		_failures.append(
+			"a zombie landed %d hits after the round was stopped — the player is "
+			% hits[0] + "taking damage behind the results screen"
+		)
+	elif groans[0] != 0:
+		_failures.append("a zombie was still making noise after the round was stopped")
+	elif zombie.is_physics_processing():
+		_failures.append(
+			"a stopped zombie is still running physics — a full horde is still "
+			+ "pathing on a screen nobody is playing"
+		)
+	elif not zombie.is_stopped:
+		_failures.append("stop() did not mark the zombie as stopped")
+	else:
+		print("PASS: stopping the round freezes the horde as well as the spawning")
+
+	spawner._alive = []
+	_free_group(spawner)
+	dummy.free()
+
+
+## The other half of D3, and the part that is easy to break while fixing it:
+## restarting has to put a frozen zombie back into the fight. Anything that
+## freezes without an inverse turns a stop into a leak.
+func test_a_stopped_zombie_can_be_put_back_to_work() -> void:
+	# Arrange
+	var spawner := _spawner()
+	var zombie := _zombie_in(ZombieTypes.Kind.SHAMBLER, spawner)
+	var dummy := _marker(Vector3(0.9, 0.0, 0.0))
+	zombie.set_target(dummy)
+	spawner._alive = [zombie]
+	spawner.stop()
+
+	var hits := [0]
+	zombie.hit_player.connect(func(_d: float, _p: Vector3) -> void: hits[0] += 1)
+
+	# Act
+	zombie.resume_fighting()
+	zombie._tick_attack(0.001)
+	zombie._tick_attack(zombie.attack_windup + 0.01)
+	zombie._tick_attack(0.01)
+
+	# Assert
+	if zombie.is_stopped or not zombie.is_physics_processing():
+		_failures.append("a resumed zombie was still frozen")
+	elif hits[0] == 0:
+		_failures.append(
+			"a resumed zombie could not land a hit — stopping a round would "
+			+ "permanently disarm anything that survived it"
+		)
+	else:
+		print("PASS: a stopped zombie goes back to work when the fight resumes")
+
+	spawner._alive = []
+	_free_group(spawner)
+	dummy.free()
+
+
+## D2. The nearest-ally search had no distance cap, so any zombie anywhere in
+## the cave counted. If the only other zombie was on the far side of the
+## player, the Screamer's destination was on the far side of the player — the
+## one kind designed never to approach you would charge straight through you
+## to get to it.
+func test_a_screamer_will_not_cross_the_player_to_reach_an_ally() -> void:
+	# Arrange: player between the Screamer and a distant zombie.
+	var group := _group()
+	var screamer := _zombie_in(ZombieTypes.Kind.SCREAMER, group)
+	var distant_ally := _zombie_in(ZombieTypes.Kind.SHAMBLER, group)
+	var player := _marker(Vector3(0.0, 0.0, -10.0))
+	screamer.global_position = Vector3.ZERO
+	distant_ally.global_position = Vector3(0.0, 0.0, -40.0)
+	screamer.set_target(player)
+	screamer.awareness = Zombie.Awareness.HUNTING
+
+	# Act
+	screamer._compute_separation()
+	var goal: Vector3 = screamer._move_goal()
+
+	# Assert
+	if goal.is_equal_approx(distant_ally.global_position):
+		_failures.append(
+			"a Screamer chose an ally %.0fm away on the far side of the player — "
+			% screamer.global_position.distance_to(distant_ally.global_position)
+			+ "it would path straight through the thing it is running from"
+		)
+	elif goal.distance_to(player.global_position) \
+			< screamer.global_position.distance_to(player.global_position):
+		_failures.append(
+			"a Screamer's destination is closer to the player (%.1fm) than it is "
+			% goal.distance_to(player.global_position) + "itself"
+		)
+	else:
+		print("PASS: a Screamer will not cross the player to reach a distant ally")
+
+	_free_group(group)
+	player.free()
+
+
+## The other consequence of the missing cap: the "nothing to hide behind"
+## fallback only ran when the Screamer was the last zombie alive in the whole
+## arena, which is not what it was written for. With no ally *nearby* it has to
+## back away rather than commit to a march across the map.
+func test_a_screamer_with_nobody_near_backs_away_instead() -> void:
+	# Arrange: an ally on the Screamer's own side of the player, but far
+	# outside any sensible refuge range.
+	var group := _group()
+	var screamer := _zombie_in(ZombieTypes.Kind.SCREAMER, group)
+	var far_ally := _zombie_in(ZombieTypes.Kind.SHAMBLER, group)
+	var player := _marker(Vector3(0.0, 0.0, -10.0))
+	screamer.global_position = Vector3.ZERO
+	far_ally.global_position = Vector3(0.0, 0.0, screamer.cohesion_radius * 6.0)
+	screamer.set_target(player)
+	screamer.awareness = Zombie.Awareness.HUNTING
+
+	# Act
+	screamer._compute_separation()
+	var goal: Vector3 = screamer._move_goal()
+
+	# Assert
+	if goal.is_equal_approx(far_ally.global_position):
+		_failures.append(
+			"a Screamer set off on a %.0fm march to the only other zombie in the "
+			% far_ally.global_position.z
+			+ "cave — the alone-and-backing-away case is unreachable"
+		)
+	elif goal.distance_to(player.global_position) \
+			<= screamer.global_position.distance_to(player.global_position):
+		_failures.append(
+			"a Screamer with nobody near it did not back away from the player"
+		)
+	else:
+		print("PASS: a Screamer with no ally within %.0fm backs away instead"
+			% screamer.cohesion_radius)
+
+	_free_group(group)
+	player.free()
+
+
+## F1. Break-off had no guard against already being retreating, so while the
+## player kept looking, every sight tick re-rolled the lateral component of the
+## withdrawal and reset the clock. The outward direction was stable and the
+## sideways one was not, which reads as a zigzag rather than a retreat.
+##
+## Continuing to back off while watched is intended. Choosing a new direction
+## to back off in, five times a second, is not.
+func test_a_watched_stalker_keeps_one_retreat_direction() -> void:
+	# Arrange: a Stalker in the player's view, already withdrawing.
+	var stalker := _zombie(ZombieTypes.Kind.STALKER)
+	var player := _marker(Vector3.ZERO)
+	stalker.set_target(player)
+	stalker.global_position = Vector3(0.0, 0.0, -6.0)
+	stalker._begin_break_off()
+
+	var first_heading := (
+		stalker._retreat_position - stalker.global_position
+	).normalized()
+
+	# Act: exactly what a second sight tick under a steady gaze does.
+	stalker._retreat_remaining = stalker.break_off_duration * 0.5
+	stalker._begin_break_off()
+
+	var second_heading := (
+		stalker._retreat_position - stalker.global_position
+	).normalized()
+
+	# Assert
+	if not stalker.is_retreating():
+		_failures.append("a Stalker dropped out of its retreat on the second tick")
+	elif not first_heading.is_equal_approx(second_heading):
+		_failures.append(
+			"a watched Stalker re-rolled its withdrawal direction (%v then %v) — "
+			% [first_heading, second_heading] + "it would zigzag instead of leaving"
+		)
+	elif stalker._retreat_remaining < stalker.break_off_duration:
+		_failures.append(
+			"a Stalker under a steady gaze stopped extending its retreat"
+		)
+	else:
+		print("PASS: a watched Stalker keeps backing off along one heading")
+
+	stalker.free()
+	player.free()
 
 
 ## The headline. Every kind must differ from every other kind on at least one
@@ -408,7 +629,11 @@ func test_a_screamer_runs_to_other_zombies_instead_of_the_player() -> void:
 	var ally := _zombie_in(ZombieTypes.Kind.SHAMBLER, group)
 	var player := _marker(Vector3(0.0, 0.0, -10.0))
 	screamer.global_position = Vector3.ZERO
-	ally.global_position = Vector3(0.0, 0.0, 12.0)
+	# Behind the Screamer relative to the player, and inside the range at which
+	# a neighbour counts as somewhere to hide. Derived rather than typed in, so
+	# retuning that range cannot silently move the ally out of reach and turn
+	# this into a test of the fallback instead.
+	ally.global_position = Vector3(0.0, 0.0, screamer.cohesion_radius * 0.75)
 	screamer.set_target(player)
 	screamer.awareness = Zombie.Awareness.HUNTING
 
