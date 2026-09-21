@@ -1,0 +1,342 @@
+extends SceneTree
+
+## Measures the ammunition economy by playing rounds, rather than by reading
+## the tuning table and guessing.
+##
+## A probe, not a gate step. There is no pass/fail here — the two failure modes
+## the design names ("ammunition that feels infinite" and "long stretches where
+## the player cannot meaningfully fight") are judgements about figures, not
+## assertions, so this prints and a person reads.
+##
+## An autopilot stands in for the player: it faces the nearest zombie, picks a
+## weapon by range, fires when it can, reloads by the weapon's own rules, and
+## swings the melee once everything is dry. It is a better shot than a human and
+## never retreats, so every number below is an *upper* bound on how long the
+## ammunition lasts. If the supply looks thin here it is thinner in practice.
+##
+## The autopilot is kept alive on purpose (see `--immortal`). The question is
+## whether the ammunition supply keeps up with the spawn rate; a run that ends
+## because the stand-in player was eaten answers a different question.
+##
+##   Godot --headless --script tools/playtest_ammo.gd -- --seconds=150
+##   Godot --headless --script tools/playtest_ammo.gd -- --only=shotgun
+
+const GAME_SCENE := "res://src/core/game.tscn"
+## Simulated seconds are cheap; real ones are not. Anything the autopilot does
+## is frame-rate independent, so running the clock fast changes how long the
+## probe takes and not what it measures.
+const TIME_SCALE := 5.0
+## How far a zombie can be before the autopilot stops bothering to aim at it.
+const ENGAGE_RANGE := 45.0
+## Ranges the autopilot picks weapons at. Chosen to match what each weapon is
+## for rather than to flatter any of them.
+const SHOTGUN_RANGE := 8.0
+const RIFLE_RANGE := 40.0
+
+var _game: Game
+var _started := false
+var _elapsed := 0.0
+var _seconds := 150.0
+var _only := ""
+
+## Per kind: rounds fired, seconds held, and when it first ran completely out.
+var _per_weapon := {}
+## Seconds the whole arsenal has been empty, and how many separate times.
+var _dry_total := 0.0
+var _dry_episodes := 0
+var _dry_longest := 0.0
+var _dry_current := 0.0
+var _was_dry := false
+
+var _melee_swings := 0
+var _melee_hits := 0
+var _reloads := 0
+var _reserve_gained := 0
+## Seconds the autopilot spent with a visible target in range — the only part
+## of the clock in which ammunition is actually being spent.
+var _engaged := 0.0
+var _last_delta := 0.0
+var _alive_samples := 0
+var _alive_total := 0
+
+
+func _initialize() -> void:
+	_parse_arguments()
+	_game = (load(GAME_SCENE) as PackedScene).instantiate()
+	root.add_child(_game)
+
+
+func _parse_arguments() -> void:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--seconds="):
+			_seconds = float(argument.split("=")[1])
+		elif argument.begins_with("--only="):
+			_only = argument.split("=")[1].to_lower()
+
+
+func _process(delta: float) -> bool:
+	if _game == null or _game.weapon == null:
+		return false
+
+	if not _started:
+		_started = true
+		DeterministicSettings.apply(root)
+		Engine.time_scale = TIME_SCALE
+		# Endless, because an extraction round ends on its own clock and stops
+		# the spawner. The first attempt at this measurement ran in extraction
+		# mode and spent most of its window on a round that had already been
+		# won, which is how it reported an ammunition supply that never ran out.
+		_game.mode = GameSettings.Mode.ENDLESS
+		_game.start_round()
+		_instrument()
+		return false
+
+	# Everything measured is in simulated seconds. `delta` already carries the
+	# time scale, so the clock and the game agree without a correction here.
+	_elapsed += delta
+
+	_last_delta = delta
+	_drive(delta)
+	_sample(delta)
+
+	if _elapsed < _seconds:
+		return false
+
+	_report()
+	return true
+
+
+func _instrument() -> void:
+	var weapon: Weapon = _game.weapon
+
+	for kind in WeaponTypes.order():
+		_per_weapon[kind] = {
+			"name": WeaponTypes.display_name(kind),
+			"fired": 0,
+			"held": 0.0,
+			"emptied_at": -1.0,
+			"loadout": _loadout_size(kind),
+		}
+
+	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
+		_per_weapon[weapon.kind].fired += 1
+	)
+	weapon.melee_swung.connect(func(hit: bool, _staggered: bool, _at: Vector3) -> void:
+		_melee_swings += 1
+		if hit:
+			_melee_hits += 1
+	)
+	# A level-up takes the weapon out of the player's hands until a choice is
+	# made, and nobody is here to make one. Taking the first offer immediately
+	# keeps the run going; which upgrade lands is noise next to whether the
+	# ammunition holds out, and the upgrades that touch ammunition are declared
+	# in the report by the reserve figures themselves.
+	_game.progression.levelled_up.connect(
+		func(_level: int, choices: Array[Dictionary]) -> void:
+			if not choices.is_empty():
+				_game._apply_upgrade(choices[0].id)
+	)
+	weapon.reload_started.connect(func(_duration: float) -> void: _reloads += 1)
+	weapon.scrounged.connect(func(amount: int) -> void: _reserve_gained += amount)
+
+
+## Magazine plus reserve for a kind, read out of the weapon's own slots so the
+## figure reflects the difficulty scaling rather than the raw table.
+func _loadout_size(kind: WeaponTypes.Kind) -> int:
+	var slot: Dictionary = _game.weapon._slots.get(kind, {})
+	if slot.is_empty():
+		return 0
+	return int(slot.magazine) + int(slot.reserve)
+
+
+func _alive() -> Array:
+	return _game.spawner._alive
+
+
+func _nearest() -> Zombie:
+	var best: Zombie = null
+	var best_distance := ENGAGE_RANGE
+
+	for zombie in _alive():
+		if not is_instance_valid(zombie):
+			continue
+		var distance: float = zombie.global_position.distance_to(
+			_game.player.global_position
+		)
+		if distance < best_distance:
+			best_distance = distance
+			best = zombie
+
+	return best
+
+
+## Stand in for the player for one frame.
+func _drive(_unused: float) -> void:
+	var player: Player = _game.player
+	var weapon: Weapon = _game.weapon
+
+	# Keeping the stand-in alive isolates the question. Survivability is a
+	# different measurement with a different tool.
+	player.health.heal(player.health.max_health)
+
+	var target := _nearest()
+	if target == null:
+		return
+
+	var aim: Vector3 = target.global_position + Vector3.UP * 1.1
+	var offset: Vector3 = aim - player.head.global_position
+	var flat := Vector2(offset.x, offset.z).length()
+
+	player.rotation.y = atan2(-offset.x, -offset.z)
+	player.head.rotation.x = clampf(atan2(offset.y, flat), -1.4, 1.4)
+
+	var distance: float = offset.length()
+	var wanted := _preferred_kind(distance)
+
+	if wanted != weapon.kind and not weapon.is_switching():
+		weapon.equip(wanted)
+		return
+
+	if weapon.is_arsenal_dry():
+		if distance <= weapon.melee_range:
+			weapon.try_melee()
+		return
+
+	if distance > weapon.shot_range:
+		return
+	if not _can_see(aim):
+		# A player does not empty a magazine into the rock between them and a
+		# groan. Without this the probe measures the arena's sightlines rather
+		# than the ammunition supply.
+		return
+
+	_engaged += _last_delta
+	weapon.try_fire()
+
+
+## True when nothing solid sits between the eye and the aim point.
+func _can_see(aim: Vector3) -> bool:
+	var origin: Vector3 = _game.player.head.global_position
+	var query := PhysicsRayQueryParameters3D.create(origin, aim)
+	# World geometry only. Anything it stops on is cover.
+	query.collision_mask = 1
+	query.exclude = [_game.player.get_rid()]
+	return _game.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+
+
+## Which weapon the autopilot reaches for, given the range and what is loaded.
+##
+## Falls through to anything with rounds left, which is the behaviour that makes
+## "how often is the player fully dry" mean what it says: a dry weapon is only
+## counted against the run once every weapon is dry.
+func _preferred_kind(distance: float) -> WeaponTypes.Kind:
+	var weapon: Weapon = _game.weapon
+	var order: Array = []
+
+	if _only != "":
+		order = [_kind_named(_only)]
+	elif distance <= SHOTGUN_RANGE:
+		order = [
+			WeaponTypes.Kind.SHOTGUN, WeaponTypes.Kind.RIFLE,
+			WeaponTypes.Kind.PISTOL,
+		]
+	elif distance <= RIFLE_RANGE:
+		order = [
+			WeaponTypes.Kind.RIFLE, WeaponTypes.Kind.PISTOL,
+			WeaponTypes.Kind.SHOTGUN,
+		]
+	else:
+		order = [
+			WeaponTypes.Kind.PISTOL, WeaponTypes.Kind.RIFLE,
+			WeaponTypes.Kind.SHOTGUN,
+		]
+
+	for kind in order:
+		if _has_rounds(kind):
+			return kind
+
+	return weapon.kind
+
+
+func _kind_named(name: String) -> WeaponTypes.Kind:
+	for kind in WeaponTypes.order():
+		if WeaponTypes.display_name(kind).to_lower() == name:
+			return kind
+	return WeaponTypes.Kind.PISTOL
+
+
+func _has_rounds(kind: WeaponTypes.Kind) -> bool:
+	var weapon: Weapon = _game.weapon
+	if kind == weapon.kind:
+		return weapon.magazine_ammo > 0 or weapon.reserve_ammo > 0
+	var slot: Dictionary = weapon._slots.get(kind, {})
+	if slot.is_empty():
+		return false
+	return int(slot.magazine) > 0 or int(slot.reserve) > 0
+
+
+func _sample(delta: float) -> void:
+	var weapon: Weapon = _game.weapon
+	_per_weapon[weapon.kind].held += delta
+
+	for kind in _per_weapon:
+		var entry: Dictionary = _per_weapon[kind]
+		if entry.emptied_at < 0.0 and not _has_rounds(kind):
+			entry.emptied_at = _elapsed
+
+	_alive_samples += 1
+	_alive_total += _game.spawner.get_alive_count()
+
+	var dry := weapon.is_arsenal_dry()
+
+	if dry:
+		_dry_total += delta
+		_dry_current += delta
+		if not _was_dry:
+			_dry_episodes += 1
+	elif _was_dry:
+		_dry_longest = maxf(_dry_longest, _dry_current)
+		_dry_current = 0.0
+
+	_was_dry = dry
+
+
+func _report() -> void:
+	Engine.time_scale = 1.0
+	_dry_longest = maxf(_dry_longest, _dry_current)
+
+	var accuracy := 0.0
+	if _game.shots_fired > 0:
+		accuracy = 100.0 * float(_game.shots_hit) / float(_game.shots_fired)
+
+	print("")
+	print("AMMO ECONOMY — %.0fs simulated%s" % [
+		_elapsed, "" if _only == "" else (", %s only" % _only)
+	])
+	print("weapon    loadout  fired  held(s)  first empty(s)")
+
+	for kind in _per_weapon:
+		var entry: Dictionary = _per_weapon[kind]
+		print("%-9s %7d %6d %8.1f  %s" % [
+			entry.name, entry.loadout, entry.fired, entry.held,
+			"never" if entry.emptied_at < 0.0 else "%.1f" % entry.emptied_at,
+		])
+
+	print("")
+	print("engaged time         %.1fs of %.0fs (%.0f%%), mean %.1f zombies alive" % [
+		_engaged, _elapsed, 100.0 * _engaged / maxf(_elapsed, 0.01),
+		float(_alive_total) / maxf(float(_alive_samples), 1.0)
+	])
+	print("kills                %d" % _game.kills)
+	print("shots fired / hit    %d / %d (%.0f%% accuracy)" % [
+		_game.shots_fired, _game.shots_hit, accuracy
+	])
+	print("reloads              %d" % _reloads)
+	print("scrounged rounds     %d" % _reserve_gained)
+	print("melee swings / hits  %d / %d" % [_melee_swings, _melee_hits])
+	print("fully dry            %d episode(s), %.1fs total (%.0f%% of the run)" % [
+		_dry_episodes, _dry_total, 100.0 * _dry_total / maxf(_elapsed, 0.01)
+	])
+	print("longest dry spell    %.1fs" % _dry_longest)
+	print("round state at end   %d (0 = still playing)" % _game.state)
+	quit(0)

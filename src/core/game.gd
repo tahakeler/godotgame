@@ -142,11 +142,26 @@ func _wire_audio() -> void:
 	# The swing reports where it landed so a connection is heard out at the
 	# zombie while the whiff stays in the player's own hands — the direction
 	# is the confirmation.
-	weapon.melee_swung.connect(func(hit: bool, at: Vector3) -> void:
-		if hit:
-			sounds.play_at("melee_hit", at)
-		else:
+	# Three outcomes, three sounds. A swing has to be legible in the half second
+	# the player has to react to it:
+	#
+	#   whiff            — breathy, close, in your own hands. Nothing was there.
+	#   hit and stagger  — a wet crack out at the target. It flinched; move.
+	#   hit and no flinch — the same crack *plus* a dead, heavy thud. You
+	#                      connected, it took the damage, and it did not care.
+	#
+	# The third is the one worth the extra clip. A Brute cannot be staggered by
+	# design, and a last resort that appears to do nothing against the enemy
+	# most likely to have cornered you reads as a bug unless the game is loud
+	# about the difference between "no effect" and "no flinch".
+	weapon.melee_swung.connect(func(hit: bool, staggered: bool, at: Vector3) -> void:
+		if not hit:
 			sounds.play("melee_swing")
+			return
+
+		sounds.play_at("melee_hit", at)
+		if not staggered:
+			sounds.play_at("melee_unmoved", at)
 	)
 	weapon.dry_fired.connect(func() -> void: sounds.play("dry_fire"))
 	weapon.scrounged.connect(func(_amount: int) -> void: sounds.play("ammo_gained"))
@@ -387,8 +402,16 @@ func _wire_effects() -> void:
 	# A swing shakes whether or not it lands, and the hitmarker is what tells
 	# the two apart. Routed from melee_swung rather than target_hit so a melee
 	# kill never counts as a bullet that hit.
-	weapon.melee_swung.connect(func(hit: bool, _at: Vector3) -> void:
-		player.add_trauma(weapon.melee_trauma)
+	weapon.melee_swung.connect(func(hit: bool, staggered: bool, _at: Vector3) -> void:
+		# A blow that lands on something that will not move puts the shock back
+		# through the player. More shake, not less — the feedback has to say
+		# "that connected and went nowhere", and a softer hit would say the
+		# opposite.
+		var trauma := weapon.melee_trauma
+		if hit and not staggered:
+			trauma = weapon.melee_unmoved_trauma
+
+		player.add_trauma(trauma)
 		if hit:
 			hud.flash_hitmarker()
 	)
