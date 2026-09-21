@@ -131,11 +131,16 @@ func test_ammo_follows_the_weapon_and_its_own_reserve() -> void:
 	var weapon: Weapon = _game.weapon
 
 	weapon.equip(WeaponTypes.Kind.PISTOL)
+	# A weapon is not in hand until it has been raised, and the HUD deliberately
+	# keeps reporting the old gun until it is. Outside a processed frame the swap
+	# has to be stepped by hand.
+	weapon.call("_tick_swap", 5.0)
 	var pistol_reserve := weapon.reserve_ammo
 	var pistol_caption: String = hud._ammo_caption.text
 
 	# Act
 	weapon.equip(WeaponTypes.Kind.SHOTGUN)
+	weapon.call("_tick_swap", 5.0)
 	var shotgun_reserve := weapon.reserve_ammo
 
 	# Assert: the caption names the gun in hand, and the reserve is that gun's
