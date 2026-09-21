@@ -32,6 +32,7 @@ func _process(_delta: float) -> bool:
 	test_flashlight_toggles_and_reports()
 	test_flashlight_follows_the_camera()
 	test_flashlight_action_is_bound()
+	test_flashlight_costs_the_player_visibility()
 
 	_report()
 	return true
@@ -109,3 +110,63 @@ func _report() -> void:
 	for failure in _failures:
 		printerr("FAIL: %s" % failure)
 	quit(1)
+
+
+## The torch has to cost something, or switching it on is not a decision.
+##
+## Asserted at the zombie rather than at the player, because the player side is
+## only half the mechanism: the flashlight reports a multiplier, and the value
+## of that multiplier is entirely in whether anything reads it. This is the
+## seam where a refactor quietly drops the cost and nothing else notices — the
+## light still works, the cave is still lit, and the game just gets easier.
+func test_flashlight_costs_the_player_visibility() -> void:
+	# Arrange
+	var player := _game.player
+	var flashlight := player.flashlight
+
+	var zombie: Zombie = load("res://src/gameplay/zombie/zombie.tscn").instantiate()
+	_game.add_child(zombie)
+	zombie.configure(ZombieTypes.Kind.SHAMBLER)
+	zombie.set_target(player)
+
+	# Stand it just beyond its own sight range, looking straight at the player.
+	var gap: float = zombie.sight_range * 1.2
+	zombie.global_position = player.global_position + Vector3(0.0, 0.0, gap)
+	zombie.look_at(player.global_position, Vector3.UP)
+
+	# Act
+	flashlight.set_on(false)
+	var seen_dark := zombie._can_see_target()
+
+	flashlight.set_on(true)
+	var seen_lit := zombie._can_see_target()
+
+	flashlight.set_on(false)
+	zombie.queue_free()
+
+	# Assert
+	var scale := flashlight.lit_visibility_scale
+	if scale <= 1.0:
+		_failures.append("a lit player is no more visible than an unlit one")
+	elif gap > zombie.sight_range * scale:
+		# The test itself would be meaningless — the zombie could not see the
+		# player at either setting, so both answers would be "no".
+		_failures.append(
+			"the test stood the zombie %.1fm away, past even the lit range of %.1fm"
+			% [gap, zombie.sight_range * scale]
+		)
+	elif seen_dark:
+		_failures.append("an unlit player was spotted from beyond sight_range")
+	elif not seen_lit:
+		_failures.append(
+			"switching the torch on did not extend how far the player is seen"
+		)
+	else:
+		print(
+			"PASS: the torch is seen %.0fm further off (%.0fm dark, %.0fm lit)"
+			% [
+				zombie.sight_range * (scale - 1.0),
+				zombie.sight_range,
+				zombie.sight_range * scale,
+			]
+		)
