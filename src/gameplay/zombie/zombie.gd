@@ -911,6 +911,36 @@ func _begin_break_off() -> void:
 	_set_awareness(Awareness.RETREATING)
 
 
+## The direction this zombie's body is actually pointing.
+##
+## Deliberately +Z and not Godot's usual -Z. Steering sets the yaw with
+## `atan2(velocity.x, velocity.z)`, which puts +Z along the direction of
+## travel, and _hold_still_and_track() turns toward the player with the same
+## expression — so +Z is what "forward" has always meant for a zombie body, and
+## it is what the model is built around.
+##
+## Sight and the lunge did not agree with it. Both used -Z, so every zombie
+## carried its 140-degree vision cone pointing directly behind itself: it could
+## only ever see what it had already walked past, and it lunged away from
+## whatever it had just turned to face. Measured on a Shambler walking straight
+## at a stationary player, the dot product between "facing" and "direction to
+## the player" sat at exactly -1.00 for the entire approach.
+##
+## That one sign was quietly holding down most of this class. HUNTING is only
+## ever entered by seeing the player, so zombies arrived, attacked and killed
+## while still INVESTIGATING — which meant the hunting tell never lit, the
+## spawner's threat meter (hunters only) read near-zero during a mauling, a
+## Screamer could not raise an alarm because alarms require HUNTING, and a
+## Stalker could not break off because break-off is reached from a successful
+## sight check. Every one of those looked like a separate design problem.
+##
+## Fixed here rather than by rotating the body, because the body is what the
+## art, the animation and the steering all already agree on; the two callers
+## below were the only dissenters.
+func facing() -> Vector3:
+	return global_transform.basis.z
+
+
 func _can_see_target() -> bool:
 	if _target == null:
 		return false
@@ -936,7 +966,7 @@ func _can_see_target() -> bool:
 
 	# Behind counts as unseen, so breaking line of sight by getting behind one
 	# actually works.
-	var facing := -global_transform.basis.z
+	var facing := facing()
 	if distance > 0.01 and facing.dot(to_target / distance) < cos(deg_to_rad(sight_cone_degrees * 0.5)):
 		return false
 
@@ -1333,7 +1363,7 @@ func _begin_lunge() -> void:
 	# Locked in at the moment the lunge starts. Committing to the direction
 	# faced right now, rather than continuing to track the target, is what
 	# makes stepping aside during the lunge actually work.
-	_lunge_direction = -global_transform.basis.z
+	_lunge_direction = facing()
 
 
 func _hold_still_and_track(delta: float) -> void:

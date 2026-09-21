@@ -37,6 +37,11 @@ const SCENARIOS := {
 	"cascade": [4, 4, 4, 0, 0, 0, 0, 0, 1, 1, 2, 3],
 	## One Stalker, and a player who keeps looking straight at it.
 	"stalker_watch": [3],
+	## One Shambler, instrumented gate by gate. Every run above showed zombies
+	## arriving on top of the player having never entered HUNTING, which would
+	## mean the strongest readability tell, the threat meter and the Screamer's
+	## entire mechanic are all gated on a flag that mostly does not set.
+	"sight": [0],
 }
 
 var _game: Game
@@ -239,8 +244,51 @@ func _sample() -> void:
 
 	_awake_timeline.append("%.0f:%d" % [_elapsed, awake])
 
+	if _queue[0] == "sight":
+		_sample_sight(player_position)
+
 	if _stalker != null and is_instance_valid(_stalker):
 		_sample_stalker(player)
+
+
+## Break _can_see_target() into its three gates and report which one is
+## refusing, once a second.
+##
+## "It never noticed you" is not actionable on its own: range, the sight cone
+## and the line-of-sight ray fail for completely different reasons and want
+## completely different fixes.
+func _sample_sight(player_position: Vector3) -> void:
+	if roundi(_elapsed * 4.0) % 4 != 0:
+		return
+
+	var zombie: Zombie = _tracked[0].zombie
+	if not is_instance_valid(zombie):
+		return
+
+	var to_target := player_position - zombie.global_position
+	var distance := to_target.length()
+	var facing := zombie.facing()
+	var dot := facing.dot(to_target / maxf(distance, 0.001))
+	var cone_limit := cos(deg_to_rad(zombie.sight_cone_degrees * 0.5))
+
+	var eye_height: float = zombie._collider.shape.height * 0.85
+	var query := PhysicsRayQueryParameters3D.create(
+		zombie.global_position + Vector3.UP * eye_height,
+		player_position + Vector3.UP * 1.5
+	)
+	query.collision_mask = 1
+	query.exclude = [zombie.get_rid()]
+	var blocker := zombie.get_world_3d().direct_space_state.intersect_ray(query)
+
+	print("  %4.0fs  %5.1fm  dot %+.2f (need %+.2f)  %-14s  %-12s  %s" % [
+		_elapsed,
+		distance,
+		dot,
+		cone_limit,
+		"IN RANGE" if distance <= zombie.sight_range else "TOO FAR",
+		"FACING" if dot >= cone_limit else "LOOKING AWAY",
+		"clear" if blocker.is_empty() else "blocked by %s" % blocker.collider.name,
+	])
 
 
 ## The Stalker's own readability questions: is it where the player is not
