@@ -54,6 +54,7 @@ func _process(_delta: float) -> bool:
 	test_a_screamer_with_nobody_near_backs_away_instead()
 	test_a_watched_stalker_keeps_one_retreat_direction()
 	test_a_screamer_is_silent_while_it_draws_breath()
+	test_a_stalker_that_is_already_on_you_ignores_being_looked_at()
 
 	_report()
 	return true
@@ -936,6 +937,72 @@ func test_a_screamer_is_silent_while_it_draws_breath() -> void:
 
 	screamer.free()
 	player.free()
+
+
+## Noticing a Stalker has to stop working once it is already on top of you, or
+## looking at it is a free and total counter and the enemy is trivia.
+##
+## Asserted as a *pair*, because either half alone is satisfiable by something
+## broken: a Stalker that never breaks off would pass the near case, and one
+## that always breaks off would pass the far case. The threshold is the claim,
+## so both sides of it get checked.
+func test_a_stalker_that_is_already_on_you_ignores_being_looked_at() -> void:
+	# Arrange: a player at the origin looking down -Z, staring straight at a
+	# Stalker that is well inside the range at which it stops manoeuvring.
+	var near := _watched_stalker(0.5)
+	var far := _watched_stalker(1.5)
+
+	# Act
+	near._tick_senses(0.0)
+	far._tick_senses(0.0)
+
+	# Assert
+	if near.is_retreating():
+		_failures.append(
+			"a Stalker %.1fm away — inside its %.1fm commitment range — still "
+			% [
+				near.global_position.distance_to(near._target.global_position),
+				near.flank_commit_distance,
+			]
+			+ "backed off when looked at, so staring at one is a free counter"
+		)
+	elif not far.is_retreating():
+		_failures.append(
+			"a Stalker %.1fm away did not break off when stared at — the "
+			% far.global_position.distance_to(far._target.global_position)
+			+ "threshold is not a threshold, it has simply stopped retreating"
+		)
+	else:
+		print("PASS: a Stalker inside %.1fm is committed; outside it, looking still works"
+			% near.flank_commit_distance)
+
+	_free_targeted(near)
+	_free_targeted(far)
+
+
+## A Stalker at the given multiple of its commitment range, facing a player who
+## is facing straight back at it.
+func _watched_stalker(commit_range_multiple: float) -> Zombie:
+	var stalker := _zombie(ZombieTypes.Kind.STALKER)
+	var player := _marker(Vector3.ZERO)
+	stalker.set_target(player)
+	stalker.global_position = Vector3(
+		0.0, 0.0, -stalker.flank_commit_distance * commit_range_multiple
+	)
+	# Both looking at each other: the Stalker must be able to see the player at
+	# all before being watched can mean anything, and look_at points -Z, which
+	# is what facing() reads.
+	stalker.look_at(player.global_position, Vector3.UP)
+	stalker.awareness = Zombie.Awareness.HUNTING
+	stalker._sight_remaining = 0.0
+	return stalker
+
+
+func _free_targeted(zombie: Zombie) -> void:
+	var target: Node3D = zombie._target
+	zombie.free()
+	if target != null and is_instance_valid(target):
+		target.free()
 
 
 func _zombie(kind: ZombieTypes.Kind) -> Zombie:
