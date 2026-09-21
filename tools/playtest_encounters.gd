@@ -39,6 +39,11 @@ const SCENARIOS := {
 	"one_screamer": [4, 0, 0, 0, 0, 1, 1, 2, 3],
 	## One Stalker, and a player who keeps looking straight at it.
 	"stalker_watch": [3],
+	## Not a composition at all: the real spawner, left to run a real round
+	## against a stand-in that cannot die. Every scenario above places zombies
+	## by hand, which is the only way to ask a controlled question and the wrong
+	## way to ask what a round actually feels like.
+	"live": [],
 	## One Shambler, instrumented gate by gate. Every run above showed zombies
 	## arriving on top of the player having never entered HUNTING, which would
 	## mean the strongest readability tell, the threat meter and the Screamer's
@@ -72,6 +77,16 @@ var _stalker_reversals := 0
 var _stalker_last_heading := Vector3.ZERO
 var _stalker_was_retreating := false
 
+## Live-round bookkeeping, keyed by zombie instance id.
+var _seen: Dictionary = {}
+var _stalker_break_offs_live := 0
+var _stalker_contacts := 0
+## Stand-in for a player who is actually shooting. Zero means nothing dies,
+## which turns every pacing measurement into a measurement of the cap.
+var _kills_per_second := 0.0
+var _kill_remaining := 0.0
+var _kills := 0
+
 
 func _initialize() -> void:
 	for argument in OS.get_cmdline_user_args():
@@ -79,6 +94,8 @@ func _initialize() -> void:
 			_scenario = argument.split("=")[1]
 		elif argument.begins_with("--seconds="):
 			_seconds = float(argument.split("=")[1])
+		elif argument.begins_with("--kills="):
+			_kills_per_second = float(argument.split("=")[1])
 
 	if _scenario == "all":
 		for name in SCENARIOS:
@@ -162,6 +179,20 @@ func _begin_next() -> void:
 	print("=".repeat(66))
 	print("%s — %d zombies, %.0fs" % [name, kinds.size(), _seconds])
 	print("=".repeat(66))
+
+	# A live round runs the director rather than a fixture, so there is nothing
+	# to place and nothing to put to sleep.
+	if name == "live":
+		_seen.clear()
+		_stalker_break_offs_live = 0
+		_stalker_contacts = 0
+		_kills = 0
+		_kill_remaining = 0.0
+		spawner.begin(_game.arena, player)
+		print("  %5s %6s %5s %5s %7s   %s" % [
+			"t", "alive", "hunt", "<10m", "nearest", "composition"
+		])
+		return
 
 	for index in kinds.size():
 		var kind: int = kinds[index]
@@ -272,6 +303,10 @@ func _sample() -> void:
 
 	_awake_timeline.append("%.0f:%d" % [_elapsed, awake])
 
+	if _queue[0] == "live":
+		_sample_live(player)
+		return
+
 	if _queue[0] == "sight":
 		_sample_sight(player_position)
 
@@ -285,6 +320,133 @@ func _sample() -> void:
 
 	if _stalker != null and is_instance_valid(_stalker):
 		_sample_stalker(player)
+
+
+## Watch a real round: what the director actually sends, and what a Stalker
+## does inside a crowd rather than alone.
+##
+## The stand-in is kept alive by hand. The question is what the round *becomes*
+## over a minute and a half, and a player who dies at t=40 cannot answer it.
+func _sample_live(player: Node3D) -> void:
+	if player.has_node("Health"):
+		var health: Health = player.get_node("Health")
+		health.current_health = health.max_health
+
+	# Held open by hand. Killing zombies feeds progression, and something
+	# downstream of that stops the director — measured: spawning ceased after
+	# four kills and the cave stayed empty for the remaining 110 seconds. That
+	# is Game's business and possibly correct; it is not what this probe is
+	# asking about, and a director that has switched itself off cannot answer a
+	# question about pacing.
+	# And unpaused. Kills feed progression, progression opens the upgrade
+	# screen, and that pauses the tree — which stops the director and the horde
+	# while this probe's own _process carries on, so the round looks empty
+	# rather than paused.
+	paused = false
+
+	_game.spawner._active = true
+
+	_simulate_shooting(player)
+
+	var counts := PackedInt32Array([0, 0, 0, 0, 0])
+	var alive := 0
+	var hunting := 0
+	var close := 0
+	var nearest := INF
+
+	for child in _game.spawner.get_children():
+		var zombie := child as Zombie
+		if zombie == null or not is_instance_valid(zombie) or zombie.health.is_dead:
+			continue
+
+		alive += 1
+		counts[zombie.kind] += 1
+		if zombie.is_hunting():
+			hunting += 1
+
+		var distance := zombie.global_position.distance_to(player.global_position)
+		nearest = minf(nearest, distance)
+		if distance < 10.0:
+			close += 1
+
+		_track_live_stalker(zombie, distance)
+
+	if roundi(_elapsed * 4.0) % 20 != 0:
+		return
+
+	var composition := ""
+	for kind in ZombieTypes.Kind.values():
+		composition += "%s:%d " % [
+			str((ZombieTypes.Kind.keys() as Array)[kind]).substr(0, 2), counts[kind]
+		]
+
+	print("  %4.0fs %6d %5d %5d %6.1fm   %s" % [
+		_elapsed, alive, hunting, close, nearest, composition
+	])
+
+
+## Kill the nearest zombie on a fixed cadence, standing in for a player who is
+## actually fighting.
+##
+## Without this the population can only ever rise, so the cap is reached and
+## the round freezes: every measurement of pacing becomes a measurement of the
+## cap. It also hides the composition entirely — nothing dies, no slot frees,
+## and whatever spawned before the cap filled is what the player faces for the
+## rest of the round.
+##
+## Nearest-first because that is what a cornered player does. A player picking
+## targets well is a different and much harder thing to model, and the point
+## here is the director's behaviour rather than the player's.
+func _simulate_shooting(player: Node3D) -> void:
+	if _kills_per_second <= 0.0:
+		return
+
+	_kill_remaining -= SAMPLE_INTERVAL
+	if _kill_remaining > 0.0:
+		return
+
+	_kill_remaining = 1.0 / _kills_per_second
+
+	var nearest: Zombie = null
+	var nearest_distance := INF
+
+	for child in _game.spawner.get_children():
+		var zombie := child as Zombie
+		if zombie == null or not is_instance_valid(zombie) or zombie.health.is_dead:
+			continue
+
+		var distance := zombie.global_position.distance_to(player.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = zombie
+
+	if nearest != null:
+		_kills += 1
+		nearest.take_damage(nearest.health.max_health)
+
+
+## Per-Stalker bookkeeping across a live round.
+##
+## The solo fixture answered "what does a Stalker do when it is the only thing
+## in the room and you never stop looking at it", which is a deliberately
+## extreme case. This answers the question that actually matters: inside a
+## crowd, with the player busy, does the break-off limit ever get reached at
+## all, or does a Stalker read the way it did before the limit existed?
+func _track_live_stalker(zombie: Zombie, distance: float) -> void:
+	if zombie.kind != ZombieTypes.Kind.STALKER:
+		return
+
+	var id := zombie.get_instance_id()
+	var was_retreating: bool = _seen.get(id, false)
+	var retreating := zombie.is_retreating()
+
+	if retreating and not was_retreating:
+		_stalker_break_offs_live += 1
+	_seen[id] = retreating
+
+	if distance <= CONTACT_DISTANCE and not _seen.has("contact_%d" % id):
+		_seen["contact_%d" % id] = true
+		_stalker_contacts += 1
 
 
 ## Point the player's body at a spot, the way a player who has noticed
@@ -425,6 +587,13 @@ func _report() -> void:
 		print("  zombies recruited:  %d of %d"
 			% [_recruits, maxi(_tracked.size() - 1, 1)])
 		print("  awake over time:    %s" % " ".join(_thinned_timeline()))
+
+	if _queue[0] == "live":
+		print("")
+		print("  stalker break-offs across the round: %d" % _stalker_break_offs_live)
+		print("  stalkers that reached the player:    %d" % _stalker_contacts)
+		print("  simulated kills:                     %d (%.1f/s)" % [_kills, _kills_per_second])
+		return
 
 	if _stalker_samples > 0:
 		print("")
