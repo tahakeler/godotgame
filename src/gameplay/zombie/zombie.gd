@@ -207,6 +207,15 @@ enum Awareness {
 ## Beyond this it does not care whether it is being looked at — a distant shape
 ## in the dark has not been spotted just because you faced its direction.
 @export var watched_range := 16.0
+## How many times a Stalker may withdraw from one sustained hunt before it
+## stops withdrawing and comes through.
+##
+## Two is the shape the enemy needs: evasive twice, so a vigilant player is
+## rewarded twice and the behaviour reads as deliberate rather than as a
+## single scripted flinch, and then a third approach that is genuinely "it is
+## coming through this time" — which the unlimited version never reached,
+## because it simply left.
+@export var break_off_limit := 2
 @export var break_off_duration := 2.6
 ## How far it withdraws to. Far enough to leave the player's light, not so far
 ## that it disengages from the fight entirely.
@@ -330,6 +339,11 @@ var _retreat_position := Vector3.ZERO
 ## starting a new one every sight tick — see _begin_break_off().
 var _retreat_heading := Vector3.ZERO
 var _retreat_remaining := 0.0
+## Withdrawals spent in the current hunt. Reset only when the Stalker gives
+## up on the player entirely — see _set_awareness. Retreating is itself a
+## departure from HUNTING, so resetting on that would zero the counter every
+## time it was used and the limit would never bite.
+var _break_offs_used := 0
 var _alarm_remaining := 0.0
 ## True while a Screamer is drawing breath but has not yet let it out. The
 ## window in which killing it prevents the pull entirely.
@@ -688,6 +702,14 @@ func _set_awareness(next: Awareness) -> void:
 	if previous == Awareness.HUNTING and next != Awareness.HUNTING:
 		_inhaling = false
 
+	# Withdrawals are spent per *hunt*, and a hunt only ends when the Stalker
+	# gives up on the player altogether. Resetting on leaving HUNTING would be
+	# the obvious place and would be wrong: breaking off is itself a departure
+	# from HUNTING, so the counter would zero every time it was used and the
+	# limit would never bite once.
+	if next == Awareness.UNAWARE:
+		_break_offs_used = 0
+
 
 ## Colour a zombie by what it knows.
 ##
@@ -848,28 +870,8 @@ func _tick_senses(delta: float) -> void:
 		# that finds itself in the player's view gives up the approach and
 		# goes round again rather than trading its advantage for a few metres.
 		# Being seen is not the same as being caught, for one kind — right up
-		# until it is too close to back out of.
-		#
-		# Withdrawing whenever it was looked at made staring at a Stalker a
-		# free, total and permanent counter: measured over 30s of continuous
-		# observation it broke off at 7.6-8.4m every single time, never once got
-		# inside 7.3m, and its retreat goals drifted outward from 15.3m to 24.3m
-		# until it had removed itself from the encounter. Faithful to the spec,
-		# and trivia rather than counterplay — it cost the player nothing but
-		# looking.
-		#
-		# So the commitment threshold cuts both ways. flank_commit_distance is
-		# already the range at which a Stalker stops manoeuvring and strikes,
-		# justified as "one that has got behind you has already won its game";
-		# this is the same sentence from the other side, and it reuses the same
-		# constant rather than inventing a second one to drift against.
-		# Vigilance still beats a Stalker, but it has to be early vigilance,
-		# which is a skill rather than a reflex.
-		var too_close_to_back_out := (
-			global_position.distance_to(_target.global_position) <= flank_commit_distance
-		)
-
-		if breaks_off_when_watched and not too_close_to_back_out and _is_being_watched():
+		# until it has run out of ways to avoid being caught.
+		if breaks_off_when_watched and _is_being_watched() and _may_break_off():
 			_begin_break_off()
 			return
 
@@ -925,6 +927,42 @@ func _observe_target() -> void:
 	last_known_position = seen_at
 
 
+## Whether withdrawing is still an option, or whether this one is coming
+## through regardless.
+##
+## Two independent rules, because withdrawing failed in two different ways and
+## each rule only covers one of them.
+##
+## The count is the one that matters. Staring at a Stalker used to be a free,
+## total and permanent counter: measured over 30s of continuous observation it
+## broke off every time, never got inside 7.3m, and its retreat goals drifted
+## outward from 15.3m to 24.3m until it had removed itself from the encounter.
+## Faithful to the spec, and trivia rather than counterplay — it cost the
+## player nothing but looking. A limit says the real sentence instead: staring
+## buys you resets, not immunity. The third approach is the one that arrives.
+##
+## Deliberately a count and not a distance. A distance threshold has now been
+## wrong twice for the same reason — flanking parked on one, and the
+## commitment range below sits just outside the 7.6-8.4m band where break-off
+## actually fires, so it never gets a chance to apply under a steady gaze. A
+## count does not care where the see/watch geometry happens to align, so it
+## survives a speed change, a map change and the Blender rebuild.
+##
+## The distance rule stays anyway. It covers the opposite failure — noticing a
+## Stalker that is already on top of you and waving it away — which the count
+## does nothing about on the first approach, and it costs nothing to keep.
+func _may_break_off() -> bool:
+	if _break_offs_used >= break_off_limit:
+		return false
+
+	# Too close to back out of. flank_commit_distance is already the range at
+	# which a Stalker stops manoeuvring and strikes, justified as "one that has
+	# got behind you has already won its game"; this is the same sentence from
+	# the other side, reusing the same constant rather than inventing a second
+	# one to drift against.
+	return global_position.distance_to(_target.global_position) > flank_commit_distance
+
+
 ## Whether the player is looking more or less straight at this zombie.
 ##
 ## Deliberately a narrower cone than the player's actual field of view, and
@@ -972,6 +1010,11 @@ func _begin_break_off() -> void:
 		_retreat_remaining = break_off_duration
 		_retreat_position = global_position + _retreat_heading * break_off_distance
 		return
+
+	# Counted here rather than at the call site, and only on the branch that
+	# starts a *new* withdrawal — the early return above extends one already in
+	# progress, and a watched Stalker reaches that path five times a second.
+	_break_offs_used += 1
 
 	_retreat_remaining = break_off_duration
 
