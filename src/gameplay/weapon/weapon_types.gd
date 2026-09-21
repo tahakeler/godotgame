@@ -43,6 +43,8 @@ const DEFINITIONS := {
 	Kind.PISTOL: {
 		"name": "PISTOL",
 		"model": "res://assets/models/weapons/blaster-a.glb",
+		## Gunmetal with a faint warm cast. The kit ships this one lilac.
+		"tint": Color(0.86, 0.84, 0.90),
 		# Two pistol rounds kill a Shambler (50 hp), one kills a Runner (26).
 		# That is the floor the rest of the arsenal is measured against.
 		"damage": 26.0,
@@ -75,6 +77,8 @@ const DEFINITIONS := {
 	Kind.SHOTGUN: {
 		"name": "SHOTGUN",
 		"model": "res://assets/models/weapons/blaster-k.glb",
+		## Darker and browner — the heavy, older-looking one of the three.
+		"tint": Color(0.82, 0.70, 0.56),
 		# 13 x 8 = 104 on a point-blank hit: a Shambler and most of a second
 		# one. Past the range cut-off it is 0, because the trace stops short.
 		"damage": 13.0,
@@ -108,6 +112,8 @@ const DEFINITIONS := {
 	Kind.RIFLE: {
 		"name": "RIFLE",
 		"model": "res://assets/models/weapons/blaster-q.glb",
+		## Cool steel, so the three read apart at a glance in a dark corridor.
+		"tint": Color(0.72, 0.80, 0.92),
 		# Lowest per-shot damage of the three, highest damage per second — but
 		# only for the first few rounds, before the climb takes the accuracy.
 		"damage": 17.0,

@@ -294,7 +294,7 @@ func _equip_now(target: WeaponTypes.Kind) -> void:
 	magazine_ammo = slot.magazine
 	reserve_ammo = slot.reserve
 
-	_show_model(stats.get("model", ""))
+	_show_model(stats.get("model", ""), stats.get("tint", Color.WHITE) as Color)
 	ammo_changed.emit(magazine_ammo, reserve_ammo)
 	weapon_switched.emit(kind, display_name)
 
@@ -384,7 +384,7 @@ func _read_switch_input() -> void:
 ## Models are instanced once on first use and then kept, because a swap is a
 ## thing the player does several times a fight and loading a .glb mid-fight is
 ## a hitch in exactly the moment they can least afford one.
-func _show_model(path: String) -> void:
+func _show_model(path: String, tint: Color) -> void:
 	var holder := get_node_or_null("Models")
 	if holder == null:
 		return
@@ -402,7 +402,80 @@ func _show_model(path: String) -> void:
 	var instance: Node3D = scene.instantiate()
 	instance.name = _model_node_name(path)
 	instance.scale = Vector3.ONE * 0.5
+	_tint_model(instance, tint)
 	holder.add_child(instance)
+
+
+## Recolour a weapon model into the cave's palette.
+##
+## The blaster kit ships in bright primaries — the pistol is lilac and white —
+## which against brown rock under a neutral grade reads as a prop from a
+## different game held up in front of this one. It is the most out-of-place
+## thing on screen.
+##
+## All of that colour lives in the texture, not in albedo_color, which is plain
+## white on every surface. Multiplying albedo therefore only darkens the purple
+## rather than removing it — the first attempt at this produced a dark purple
+## pistol. So the shader desaturates what it samples first and then applies a
+## cast, which keeps the texture's light and dark detail while discarding its
+## hue.
+const VIEWMODEL_SHADER := """
+shader_type spatial;
+uniform sampler2D source : source_color, filter_linear_mipmap, repeat_enable;
+uniform vec4 cast_colour : source_color = vec4(1.0);
+uniform float desaturation : hint_range(0.0, 1.0) = 0.85;
+void fragment() {
+	vec3 sampled = texture(source, UV).rgb;
+	float luma = dot(sampled, vec3(0.2126, 0.7152, 0.0722));
+	ALBEDO = mix(sampled, vec3(luma), desaturation) * cast_colour.rgb;
+	METALLIC = 0.4;
+	ROUGHNESS = 0.45;
+	SPECULAR = 0.55;
+}
+"""
+
+
+func _tint_model(instance: Node3D, tint: Color) -> void:
+	if tint == Color.WHITE:
+		return
+
+	var shader := Shader.new()
+	shader.code = VIEWMODEL_SHADER
+
+	for mesh_instance in _mesh_instances(instance):
+		var mesh := mesh_instance.mesh
+		if mesh == null:
+			continue
+
+		for surface in mesh.get_surface_count():
+			var source := mesh_instance.get_active_material(surface)
+
+			var material := ShaderMaterial.new()
+			material.shader = shader
+			material.set_shader_parameter("cast_colour", tint)
+
+			# Carry the kit's own texture across. Without it the gun is a
+			# single flat colour and loses the shading that separates the
+			# barrel, the grip and the magazine at viewmodel scale.
+			if source is StandardMaterial3D:
+				material.set_shader_parameter(
+					"source", (source as StandardMaterial3D).albedo_texture
+				)
+
+			mesh_instance.set_surface_override_material(surface, material)
+
+
+func _mesh_instances
+(node: Node) -> Array[MeshInstance3D]:
+	var found: Array[MeshInstance3D] = []
+
+	if node is MeshInstance3D:
+		found.append(node)
+
+	for child in node.get_children():
+		found.append_array(_mesh_instances(child))
+
+	return found
 
 
 func _model_node_name(path: String) -> String:
