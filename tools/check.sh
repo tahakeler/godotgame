@@ -7,7 +7,16 @@ set -uo pipefail
 
 GODOT="${GODOT_BIN:-/Applications/Godot47.app/Contents/MacOS/Godot}"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-LOG_DIR="${TMPDIR:-/tmp}/lastmagazine-check"
+# Logs go somewhere unique to this checkout.
+#
+# This used to be a fixed path, which meant every git worktree on the machine
+# wrote its verdict into the same files. Several agents work in worktrees and
+# run this gate concurrently, so a run would grep a log another run had just
+# overwritten and report a failure belonging to a different copy of the code —
+# including failures in test files that only existed in the other worktree.
+# The symptom was a step that failed in the gate and passed every time it was
+# run by hand, which is the most expensive kind of false alarm there is.
+LOG_DIR="${TMPDIR:-/tmp}/lastmagazine-check-$(printf '%s' "$PROJECT_DIR" | cksum | cut -d' ' -f1)"
 
 export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
 export PATH="$DOTNET_ROOT:$PATH"
