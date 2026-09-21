@@ -197,7 +197,10 @@ func _wire_caches() -> void:
 			return weapon.reserve_capacity()
 
 		cache.collected.connect(func(rounds: int) -> void:
-			var added := weapon.add_reserve_ammo(rounds)
+			# Spills into the other weapons once the equipped one is full, so a
+			# crate is a supply crate rather than a magazine for whatever was
+			# raised when the player reached it.
+			var added := weapon.distribute_reserve_ammo(rounds)
 			if added > 0:
 				# The crate first, then the rounds: the resupply is a thing
 				# that happened over there, the ammunition is a thing that
