@@ -139,6 +139,15 @@ func _wire_audio() -> void:
 	weapon.switch_started.connect(func(_duration: float) -> void:
 		sounds.play("weapon_switch")
 	)
+	# The swing reports where it landed so a connection is heard out at the
+	# zombie while the whiff stays in the player's own hands — the direction
+	# is the confirmation.
+	weapon.melee_swung.connect(func(hit: bool, at: Vector3) -> void:
+		if hit:
+			sounds.play_at("melee_hit", at)
+		else:
+			sounds.play("melee_swing")
+	)
 	weapon.dry_fired.connect(func() -> void: sounds.play("dry_fire"))
 	weapon.scrounged.connect(func(_amount: int) -> void: sounds.play("ammo_gained"))
 	weapon.reload_started.connect(func(_duration: float) -> void:
@@ -374,6 +383,14 @@ func _wire_effects() -> void:
 		# Per weapon, not per game: a shotgun and a pistol going off with the
 		# same screen shake is how three weapons collapse back into one.
 		player.add_trauma(weapon.fire_trauma)
+	)
+	# A swing shakes whether or not it lands, and the hitmarker is what tells
+	# the two apart. Routed from melee_swung rather than target_hit so a melee
+	# kill never counts as a bullet that hit.
+	weapon.melee_swung.connect(func(hit: bool, _at: Vector3) -> void:
+		player.add_trauma(weapon.melee_trauma)
+		if hit:
+			hud.flash_hitmarker()
 	)
 	weapon.impacted.connect(func(position: Vector3, normal: Vector3, is_flesh: bool) -> void:
 		effects.spawn_impact(position, normal, is_flesh)

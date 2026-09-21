@@ -36,6 +36,12 @@ signal scrounged(amount: int)
 signal decoy_thrown(decoy: Decoy)
 ## Where a bullet landed, the surface normal, and whether it was a zombie.
 signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
+## A melee swing happened, and whether it connected with something living.
+##
+## Deliberately not `target_hit`. Game counts shots_hit from that signal and
+## shots_fired from `fired`, and a melee hit that reported through it would
+## push a round's accuracy above 100% without a bullet ever being spent.
+signal melee_swung(hit: bool, at: Vector3)
 
 @export_group("Arsenal")
 ## What the player starts a round holding.
@@ -93,6 +99,31 @@ signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 ## there is always a way out.
 @export var dry_resupply_interval := 7.0
 @export var dry_resupply_amount := 2
+
+@export_group("Melee")
+## The floor under the whole ammo economy: something you can always do.
+##
+## `dry_resupply` prevents a *frozen* run — it trickles rounds into reserve, so
+## the player still has to eat a reload before they can fire twice — but it does
+## not prevent a *lost* one against a rising spawn rate. This does. It is
+## available at all times rather than unlocked when dry, because a last resort
+## that has to be granted is a mechanic the player has to be taught; one that is
+## simply always there and simply always worse teaches itself.
+##
+## Sized so it never competes with a firearm. A Shambler has 50 health, so a
+## pistol kills it in two rounds over 0.28s and this takes three swings over
+## 2.2s — roughly a sixth of the damage per second. Whenever there are bullets,
+## bullets are the right answer; that is the point.
+@export var melee_damage := 18.0
+## Reach in metres. Barely past a zombie's contact range, so a swing is a
+## decision to let one get that close rather than a way to keep it away.
+@export var melee_range := 2.0
+## Deliberately long. A last resort should not become a rhythm — at just over a
+## second a swing you commit to is a swing you cannot take back.
+@export var melee_cooldown := 1.1
+## Camera shake per swing. Above a gunshot's 0.2 because the swing is the whole
+## body, and because a hit you cannot hear over a fight still has to land.
+@export var melee_trauma := 0.28
 
 @export_group("Decoy")
 @export var throw_speed := 14.0
@@ -166,6 +197,7 @@ var _rest_position := Vector3.ZERO
 ## Counts down only while the weapon is completely dry.
 var _dry_remaining := 0.0
 var _throw_cooldown_remaining := 0.0
+var _melee_cooldown_remaining := 0.0
 
 @onready var _camera: Camera3D = _resolve_camera()
 @onready var _muzzle: Node3D = $Muzzle
@@ -208,6 +240,8 @@ func _process(delta: float) -> void:
 		try_throw_decoy()
 	elif Input.is_action_just_pressed("fire") and _focus_lock_remaining <= 0.0:
 		try_fire()
+	elif Input.is_action_just_pressed("melee"):
+		try_melee()
 	elif Input.is_action_just_pressed("reload"):
 		try_reload()
 
@@ -642,6 +676,69 @@ func is_aiming_throw() -> bool:
 
 func _tick_throw_cooldown(delta: float) -> void:
 	_throw_cooldown_remaining = maxf(0.0, _throw_cooldown_remaining - delta)
+	_melee_cooldown_remaining = maxf(0.0, _melee_cooldown_remaining - delta)
+
+
+## Seconds until the next swing is available. Zero means ready.
+func melee_cooldown_remaining() -> float:
+	return _melee_cooldown_remaining
+
+
+## Swing at whatever is directly in front of the player.
+##
+## Returns true when a swing was taken, hit or miss — the cooldown is spent
+## either way, because a melee you can spam with no risk of whiffing is not a
+## last resort, it is a free interrupt.
+##
+## Traces the same way a bullet does: one ray, world geometry and zombies, the
+## player's own body excluded. Reusing that path rather than writing a second
+## one is what keeps a swing agreeing with a shot about what counts as cover.
+## The differences that matter are all in the numbers — two metres instead of
+## eighty, one ray instead of eight, no spread, no noise.
+##
+## No noise is emitted on purpose. It is the only damage in the game that does
+## not tell the cave where you are, which is the one advantage it has over the
+## pistol and the reason it is worth reaching for before the last round rather
+## than after it.
+func try_melee() -> bool:
+	if not _input_enabled or _melee_cooldown_remaining > 0.0:
+		return false
+	if _camera == null:
+		return false
+
+	_melee_cooldown_remaining = melee_cooldown
+
+	var origin := _camera.global_position
+	var direction := -_camera.global_basis.z
+	var destination := origin + direction * melee_range
+
+	var query := PhysicsRayQueryParameters3D.create(origin, destination)
+	query.collision_mask = 1 | 4
+	query.exclude = [_get_owner_rid()]
+
+	var result := get_world_3d().direct_space_state.intersect_ray(query)
+
+	if result.is_empty():
+		# A swing through empty air still reports, so the sound and the shake
+		# fire. Feedback that only exists on a hit reads as a dropped input.
+		melee_swung.emit(false, destination)
+		return true
+
+	var collider: Node = result.get("collider")
+	var is_flesh := collider != null and collider.has_method("take_damage")
+
+	if is_flesh:
+		# The stagger comes free with this call. A zombie flinches and drops a
+		# wind-up whenever it is damaged, which is exactly the breathing room a
+		# melee exists to buy — and a Brute's immunity to that flinch carries
+		# over unchanged, so the one enemy you cannot shoot your way out of is
+		# also the one you cannot club your way out of. No zombie-side change
+		# was needed for any of it.
+		collider.take_damage(melee_damage, result.position, direction)
+
+	impacted.emit(result.position, result.get("normal", Vector3.UP), is_flesh)
+	melee_swung.emit(is_flesh, result.position)
+	return true
 
 
 ## Fire one round. Returns true only when a bullet actually left the weapon.
@@ -795,6 +892,7 @@ func reset_state() -> void:
 	_recoil_offset = 0.0
 	_recoil_climb_amount = 0.0
 	_climb_hold_remaining = 0.0
+	_melee_cooldown_remaining = 0.0
 	_build_slots()
 	_equip_now(starting_kind)
 	_dry_remaining = dry_resupply_interval

@@ -32,6 +32,12 @@ const EVENTS := {
 	"reload_start": ["beltHandle1"],
 	"reload_end": ["metalLatch"],
 	"zombie_hit": ["knifeSlice"],
+	# The emergency swing. Two events rather than one, because the only thing
+	# the player needs to know in the moment they are swinging is whether it
+	# landed — a hit and a whiff that sound alike make a last resort feel like
+	# it is not responding.
+	"melee_swing": ["cloth3"],
+	"melee_hit": ["chop"],
 	"zombie_death": ["cloth3"],
 	"zombie_groan": ["creak1", "creak2", "creak3"],
 	"player_hurt": ["cloth1"],
@@ -90,6 +96,10 @@ const MIX := {
 	"reload_start": {"volume": -8.0, "pitch": Vector2(0.9, 1.0)},
 	"reload_end": {"volume": -7.0, "pitch": Vector2(0.95, 1.05)},
 	"zombie_hit": {"volume": -9.0, "pitch": Vector2(0.8, 0.95)},
+	# A whiff is quiet and breathy; a connection is a wet, low thud. The gap
+	# between the two mixes is doing the work the two clips cannot.
+	"melee_swing": {"volume": -13.0, "pitch": Vector2(1.15, 1.3)},
+	"melee_hit": {"volume": -6.0, "pitch": Vector2(0.75, 0.9)},
 	"zombie_death": {"volume": -6.0, "pitch": Vector2(0.65, 0.8)},
 	"zombie_groan": {"volume": -12.0, "pitch": Vector2(0.55, 0.7)},
 	"player_hurt": {"volume": -2.0, "pitch": Vector2(0.7, 0.85)},
