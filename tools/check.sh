@@ -93,7 +93,9 @@ run_step "progression" "$GODOT" --headless --script tests/manual/verify_progress
 run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
 run_step "no-phantom-fire" "$GODOT" --headless --script tests/manual/verify_no_phantom_fire.gd
 run_step "ammo" "$GODOT" --headless --script tests/manual/verify_ammo.gd
+run_step "ammo-floor" "$GODOT" --headless --script tests/manual/verify_ammo_floor.gd
 run_step "hud-minimap" "$GODOT" --headless --script tests/manual/verify_hud_minimap.gd
+run_step "playthrough" "$GODOT" --headless --script tests/manual/verify_playthrough.gd
 run_step "feature-tests" "$GODOT" --headless --script tests/feature_tests.gd
 run_step "boot" "$GODOT" --headless --quit-after 120
 

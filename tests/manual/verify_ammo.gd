@@ -76,6 +76,13 @@ func test_weapon_fully_dry_scrounges_rounds_back() -> void:
 	var weapon := _build()
 	weapon.magazine_ammo = 0
 	weapon.reserve_ammo = 0
+	# "Completely dry" means the arsenal, not the hand. Zeroing only the live
+	# fields left a stocked shotgun and rifle in their slots, so this used to
+	# assert the floor fires for a player who is one key press from twenty
+	# shells — see verify_ammo_floor.gd.
+	for slot_kind in weapon._slots:
+		weapon._slots[slot_kind].magazine = 0
+		weapon._slots[slot_kind].reserve = 0
 
 	# Act: wait out the resupply interval.
 	weapon._tick_dry_resupply(weapon.dry_resupply_interval + 0.1)
