@@ -14,7 +14,7 @@ extends SceneTree
 ## never retreats, so every number below is an *upper* bound on how long the
 ## ammunition lasts. If the supply looks thin here it is thinner in practice.
 ##
-## The autopilot is kept alive on purpose (see `--immortal`). The question is
+## The autopilot is kept alive on purpose (`--immortal`, on by default). The question is
 ## whether the ammunition supply keeps up with the spawn rate; a run that ends
 ## because the stand-in player was eaten answers a different question.
 ##
@@ -25,19 +25,34 @@ const GAME_SCENE := "res://src/core/game.tscn"
 ## Simulated seconds are cheap; real ones are not. Anything the autopilot does
 ## is frame-rate independent, so running the clock fast changes how long the
 ## probe takes and not what it measures.
-const TIME_SCALE := 5.0
+## Left at 1.0. An earlier version of this probe ran the clock at 5x and
+## measured a mean population of 1.0 zombies where a directly instrumented
+## round reaches 8 by twenty-five seconds — the spawner is fine, the time
+## scale was starving it. A measurement that has to distort the clock to be
+## affordable is not a measurement.
+const TIME_SCALE := 1.0
 ## How far a zombie can be before the autopilot stops bothering to aim at it.
 const ENGAGE_RANGE := 45.0
 ## Ranges the autopilot picks weapons at. Chosen to match what each weapon is
 ## for rather than to flatter any of them.
 const SHOTGUN_RANGE := 8.0
 const RIFLE_RANGE := 40.0
+## Seconds the autopilot must prefer a different weapon before it acts on the
+## preference. A player picks a weapon and lives with it; re-deciding every
+## frame is indecision, not policy.
+const SWITCH_COMMIT := 2.0
 
 var _game: Game
 var _started := false
 var _elapsed := 0.0
 var _seconds := 150.0
 var _only := ""
+var _immortal := true
+var _last_wanted: WeaponTypes.Kind = WeaponTypes.Kind.PISTOL
+var _wanted_for := 0.0
+## An upgrade offered but not yet taken. Applied a frame late on purpose — see
+## _instrument.
+var _pending_upgrade := -1
 
 ## Per kind: rounds fired, seconds held, and when it first ran completely out.
 var _per_weapon := {}
@@ -56,6 +71,11 @@ var _reserve_gained := 0
 ## of the clock in which ammunition is actually being spent.
 var _engaged := 0.0
 var _last_delta := 0.0
+## Seconds of clear shots lost to each cause.
+var _blocked_switching := 0.0
+var _blocked_reloading := 0.0
+var _blocked_empty := 0.0
+var _blocked_cooldown := 0.0
 var _alive_samples := 0
 var _alive_total := 0
 
@@ -72,6 +92,8 @@ func _parse_arguments() -> void:
 			_seconds = float(argument.split("=")[1])
 		elif argument.begins_with("--only="):
 			_only = argument.split("=")[1].to_lower()
+		elif argument == "--mortal":
+			_immortal = false
 
 
 func _process(delta: float) -> bool:
@@ -94,6 +116,11 @@ func _process(delta: float) -> bool:
 	# Everything measured is in simulated seconds. `delta` already carries the
 	# time scale, so the clock and the game agree without a correction here.
 	_elapsed += delta
+
+	if _pending_upgrade >= 0:
+		var upgrade := _pending_upgrade
+		_pending_upgrade = -1
+		_game._apply_upgrade(upgrade)
 
 	_last_delta = delta
 	_drive(delta)
@@ -134,7 +161,7 @@ func _instrument() -> void:
 	_game.progression.levelled_up.connect(
 		func(_level: int, choices: Array[Dictionary]) -> void:
 			if not choices.is_empty():
-				_game._apply_upgrade(choices[0].id)
+				_pending_upgrade = choices[0].id
 	)
 	weapon.reload_started.connect(func(_duration: float) -> void: _reloads += 1)
 	weapon.scrounged.connect(func(amount: int) -> void: _reserve_gained += amount)
@@ -177,7 +204,8 @@ func _drive(_unused: float) -> void:
 
 	# Keeping the stand-in alive isolates the question. Survivability is a
 	# different measurement with a different tool.
-	player.health.heal(player.health.max_health)
+	if _immortal:
+		player.health.heal(player.health.max_health)
 
 	var target := _nearest()
 	if target == null:
@@ -193,8 +221,32 @@ func _drive(_unused: float) -> void:
 	var distance: float = offset.length()
 	var wanted := _preferred_kind(distance)
 
-	if wanted != weapon.kind and not weapon.is_switching():
-		weapon.equip(wanted)
+	# Commit to a weapon rather than re-deciding every frame.
+	#
+	# Without this the probe measures nothing but its own indecision. The first
+	# run with diagnostics spent 82 of 86 engaged seconds mid-swap: a zombie
+	# walking towards you crosses the 8m shotgun boundary constantly, and each
+	# crossing started a fresh 0.55-0.85s raise, so the autopilot swapped for
+	# almost the whole round and fired 22 rounds in 100 seconds. A player picks
+	# a weapon and lives with it for a few seconds; so does this now.
+	#
+	# Running out is the exception — that switch is forced and immediate,
+	# because it is exactly the moment the design is trying to create.
+	if wanted != weapon.kind:
+		var forced := weapon.magazine_ammo <= 0 and weapon.reserve_ammo <= 0
+		_wanted_for = 0.0 if wanted != _last_wanted else _wanted_for + _last_delta
+		_last_wanted = wanted
+
+		if forced or _wanted_for >= SWITCH_COMMIT:
+			if not weapon.is_switching():
+				weapon.equip(wanted)
+				_wanted_for = 0.0
+			return
+	else:
+		_wanted_for = 0.0
+		_last_wanted = wanted
+
+	if weapon.is_switching():
 		return
 
 	if weapon.is_arsenal_dry():
@@ -211,7 +263,18 @@ func _drive(_unused: float) -> void:
 		return
 
 	_engaged += _last_delta
-	weapon.try_fire()
+
+	# Why a frame with a clear shot did not produce one. Without this the probe
+	# can report "engaged 96% of the run, 24 rounds fired" and leave no way to
+	# tell a starved spawner from a weapon that was busy.
+	if weapon.is_switching():
+		_blocked_switching += _last_delta
+	elif weapon.is_reloading():
+		_blocked_reloading += _last_delta
+	elif weapon.magazine_ammo <= 0:
+		_blocked_empty += _last_delta
+	elif not weapon.try_fire():
+		_blocked_cooldown += _last_delta
 
 
 ## True when nothing solid sits between the eye and the aim point.
@@ -338,5 +401,8 @@ func _report() -> void:
 		_dry_episodes, _dry_total, 100.0 * _dry_total / maxf(_elapsed, 0.01)
 	])
 	print("longest dry spell    %.1fs" % _dry_longest)
+	print("clear shots lost to  switching %.1fs, reloading %.1fs, empty mag %.1fs, cooldown %.1fs" % [
+		_blocked_switching, _blocked_reloading, _blocked_empty, _blocked_cooldown
+	])
 	print("round state at end   %d (0 = still playing)" % _game.state)
 	quit(0)
