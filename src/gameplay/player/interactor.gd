@@ -55,6 +55,11 @@ var _focus: Node = null
 var _hold_elapsed := 0.0
 var _was_held := false
 var _last_prompt := ""
+## Mirrors Weapon._input_enabled. The round state machine already takes the
+## weapon and the look away at a death, a win, a pause and a level-up; before
+## this existed it did not take the interact key, so a results screen was a
+## place where crates could still be emptied and world noise still emitted.
+var _input_enabled := true
 
 
 func _ready() -> void:
@@ -73,6 +78,14 @@ func _process(delta: float) -> void:
 ## meaningfully under `--headless --script`, and a system only reachable
 ## through a key press is a system that never gets asserted on.
 func tick(delta: float, interact_held: bool) -> void:
+	if not _input_enabled:
+		# Drop any hold in progress rather than freezing it: control is being
+		# taken away, and progress paid before that has to be forfeited the
+		# same as letting go of the key does.
+		if _focus != null or _hold_elapsed > 0.0 or _was_held:
+			reset()
+		return
+
 	var target := _find_focus()
 
 	if target != _focus:
@@ -134,6 +147,12 @@ func hold_progress() -> float:
 	if hold_time <= 0.0:
 		return 0.0
 	return clampf(_hold_elapsed / hold_time, 0.0, 1.0)
+
+
+## Whether the interact key is listened to at all. Game turns this off
+## alongside the weapon whenever it takes control: round over, pause, level-up.
+func set_input_enabled(enabled: bool) -> void:
+	_input_enabled = enabled
 
 
 ## Drop any focus and any progress. Used on round restart and when a menu

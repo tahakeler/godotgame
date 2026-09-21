@@ -79,6 +79,7 @@ run_step "zombie-movement" "$GODOT" --headless --script tests/manual/verify_zomb
 run_step "noise" "$GODOT" --headless --script tests/manual/verify_noise.gd
 run_step "caches" "$GODOT" --headless --script tests/manual/verify_caches.gd
 run_step "interaction" "$GODOT" --headless --script tests/manual/verify_interaction.gd
+run_step "interaction-lifecycle" "$GODOT" --headless --script tests/manual/verify_interaction_lifecycle.gd
 run_step "decoy" "$GODOT" --headless --script tests/manual/verify_decoy.gd
 run_step "tells" "$GODOT" --headless --script tests/manual/verify_tells.gd
 run_step "tension" "$GODOT" --headless --script tests/manual/verify_tension.gd
