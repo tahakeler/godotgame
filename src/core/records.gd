@@ -75,7 +75,7 @@ static func describe(mode: GameSettings.Mode, record: Dictionary) -> String:
 		GameSettings.Mode.RELAY:
 			if not record.won:
 				return "%d kills" % record.kills
-			return "Signal complete in %s  �  %d kills" % [duration, record.kills]
+			return "Signal complete in %s  ·  %d kills" % [duration, record.kills]
 		_:
 			return "Survived %s  ·  %d kills" % [duration, record.kills]
 
