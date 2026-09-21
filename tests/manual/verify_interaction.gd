@@ -21,15 +21,50 @@ const STEP := 1.0 / 60.0
 var _game: Game
 var _failures: Array[String] = []
 var _frames := 0
+## Generous, but finite. The assertions are reached on frame 3.
+const WATCHDOG_FRAMES := 600
+
+var _watchdog := 0
 var _prompts: Array[String] = []
 
 
 func _initialize() -> void:
-	_game = (load(GAME_SCENE) as PackedScene).instantiate()
+	var scene := load(GAME_SCENE) as PackedScene
+	if scene == null:
+		# Loading the game scene can fail inside a full gate run while passing
+		# standalone. Saying so here is the difference between one readable
+		# line and a test that errors every frame forever — this file had no
+		# guard and no watchdog, and a failed load produced a 24MB log of
+		# repeated null access before anyone could see what went wrong.
+		printerr("FAIL: could not load %s" % GAME_SCENE)
+		quit(1)
+		return
+
+	_game = scene.instantiate() as Game
+	if _game == null:
+		printerr("FAIL: %s loaded but did not instantiate a Game" % GAME_SCENE)
+		quit(1)
+		return
+
 	root.add_child(_game)
 
 
 func _process(_delta: float) -> bool:
+	# A hard ceiling, for the same reason verify_zombies.gd has one: without it
+	# any failure to reach the assertions spins the loop until the run is
+	# killed by hand.
+	_watchdog += 1
+	if _watchdog > WATCHDOG_FRAMES:
+		printerr("FAIL: gave up after %d frames without reaching the assertions"
+			% WATCHDOG_FRAMES)
+		quit(1)
+		return true
+
+	if _game == null:
+		printerr("FAIL: the game scene went away before the assertions ran")
+		quit(1)
+		return true
+
 	_frames += 1
 	if _frames < 3:
 		# Autoloads exist under --script, but not until after _initialize.

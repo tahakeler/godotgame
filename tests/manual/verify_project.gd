@@ -39,6 +39,8 @@ func _initialize() -> void:
 	if main_scene.is_empty():
 		failures.append("no main scene configured")
 
+	failures.append_array(_mangled_text_files())
+
 	if failures.is_empty():
 		print("PASS: %d input actions, %d scenes verified" % [
 			REQUIRED_ACTIONS.size(), REQUIRED_SCENES.size()
@@ -48,3 +50,47 @@ func _initialize() -> void:
 		for failure in failures:
 			printerr("FAIL: %s" % failure)
 		quit(1)
+
+
+## Source files whose UTF-8 has been rewritten as latin-1.
+##
+## An in-place `perl -pi` re-encodes depending on locale unless it is given
+## -CSD, and this codebase's comments are full of em-dashes. One agent's edit
+## turned every "—" in arena.gd into "â€”" and it was only caught because the
+## file happened to be read afterwards. Nothing else notices: GDScript parses
+## fine, the game runs fine, and the damage sits in the comments until someone
+## opens the file.
+##
+## The marker is the latin-1 reading of a UTF-8 lead byte, which is the common
+## shape of every such mangling and does not occur in correct text here.
+func _mangled_text_files() -> Array[String]:
+	const MARKER := "â\u0080"
+	var found: Array[String] = []
+
+	for path in _source_files("res://src"):
+		var text := FileAccess.get_file_as_string(path)
+		if text.contains(MARKER):
+			found.append("mangled UTF-8 in %s — an edit re-encoded it" % path)
+
+	return found
+
+
+func _source_files(root: String) -> Array[String]:
+	var found: Array[String] = []
+	var directory := DirAccess.open(root)
+	if directory == null:
+		return found
+
+	directory.list_dir_begin()
+	var entry := directory.get_next()
+
+	while not entry.is_empty():
+		var path := "%s/%s" % [root, entry]
+		if directory.current_is_dir():
+			found.append_array(_source_files(path))
+		elif entry.ends_with(".gd") or entry.ends_with(".tscn"):
+			found.append(path)
+		entry = directory.get_next()
+
+	directory.list_dir_end()
+	return found
