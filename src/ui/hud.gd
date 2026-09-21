@@ -292,20 +292,44 @@ func _on_population_changed(alive: int) -> void:
 ## being spent, and light is the loudest thing the player owns that is not a
 ## gun.
 func _on_flashlight_toggled(is_on: bool) -> void:
-	# Lit is a state; "seen further" is what the state costs. The cost is read
-	# off the torch itself rather than typed here, so tuning the bargain in one
-	# place cannot leave the HUD quoting an old figure.
-	var cost := 45
-	if _player != null and _player.flashlight != null:
-		cost = roundi((_player.flashlight.lit_visibility_scale - 1.0) * 100.0)
-	_torch_label.text = (
-		"T O R C H   O N   \u00b7   S E E N   + %d%%" % cost if is_on
-		else "T O R C H   O F F"
-	)
+	# The caption names what is happening and never says by how much. A
+	# percentage invites arithmetic; the bargain should be felt in what the
+	# cave does to you, with the HUD only putting a word to it. The word is
+	# still chosen from the torch's own figure, so retuning the cost in one
+	# place cannot leave this line claiming a price that no longer exists.
+	_torch_label.text = _lit_caption() if is_on else "T O R C H   O F F"
 	_torch_label.modulate = (
 		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
 		if is_on else Color(1.0, 1.0, 1.0)
 	)
+
+
+func _lit_caption() -> String:
+	var word := _exposure_word()
+	if word.is_empty():
+		return "T O R C H   O N"
+	return "T O R C H   O N   ·   %s" % word
+
+
+## How conspicuous the torch currently makes the player, in words.
+##
+## Bands rather than a figure: "seen further" is something a player can act on,
+## "+45%" is something they can only do sums with. Read off the same
+## lit_visibility_scale the zombies use to decide how far away a lit target
+## registers, so the wording moves when the balance does — down to nothing at
+## all if the cost is ever tuned away.
+func _exposure_word() -> String:
+	var scale := 1.45
+	if _player != null and _player.flashlight != null:
+		scale = _player.flashlight.lit_visibility_scale
+
+	if scale <= 1.02:
+		return ""
+	if scale <= 1.25:
+		return "S E E N   S O O N E R"
+	if scale <= 1.6:
+		return "S E E N   F U R T H E R"
+	return "S E E N   F R O M   A N Y W H E R E"
 
 
 func _on_health_changed(current: float, maximum: float) -> void:
@@ -1157,8 +1181,13 @@ func map_cell_count() -> int:
 ##   * it is HUNTING — it can see the player and is tracking them live. The
 ##     information is symmetric: it knows where you are, so you know where it
 ##     is. That is what makes the marker a warning rather than an advantage.
-##   * it is inside contact_radius — close enough that the player can hear it.
-##     The marker confirms a direction they already half know.
+##   * it has been alerted — INVESTIGATING, SEARCHING or RETREATING — and is
+##     inside contact_radius. It is already looking for the player and close
+##     enough to hear, so the marker confirms a direction they half know.
+##
+## A zombie that has noticed nothing is never drawn, however close it comes:
+## that was a proximity radar, and it let a patient player track a crowd that
+## had no idea they were there.
 ##
 ## Everything else is invisible. A Stalker circling two rooms away, or a
 ## Shambler that has noticed nothing, stays off the map, because the moment the
@@ -1167,6 +1196,13 @@ func map_cell_count() -> int:
 ## Separately, a zombie that made a noise leaves a stale mark for
 ## contact_ping_lifetime seconds — where it *was*, not where it is.
 func contact_rule(awareness: int, distance: float) -> bool:
+	# UNAWARE is never drawn, at any range. Allowing it inside contact_radius
+	# turned the dial into a proximity radar: a patient player could stand
+	# still and watch wanderers flicker across the ring, which is a map of
+	# where things are rather than a warning that something is coming.
+	if awareness == Zombie.Awareness.UNAWARE:
+		return false
+
 	return awareness == Zombie.Awareness.HUNTING or distance <= contact_radius
 
 
@@ -1233,7 +1269,31 @@ func _draw_minimap() -> void:
 	_draw_map_caches(centre, radius, pixels_per_cell, player_cell, right, forward)
 	_draw_map_contacts(centre, radius, pixels_per_cell, player_cell, right, forward)
 	_draw_map_north(centre, radius, right, forward)
+	_draw_map_exposure(centre, pixels_per_cell)
 	_draw_map_player(centre)
+
+
+## The torch, drawn as the pool of light it actually is.
+##
+## This is the cost of the light said without saying it: while the torch is on
+## the dial carries a soft amber bloom around the player, sized by the same
+## lit_visibility_scale the zombies read when they decide how far off a lit
+## target registers. Turning the torch off collapses it to nothing, and that
+## collapse — not a percentage — is what teaches the player that the dark is
+## worth something.
+func _draw_map_exposure(centre: Vector2, pixels_per_cell: float) -> void:
+	if _player == null or _player.flashlight == null or not _player.flashlight.is_on:
+		return
+
+	var colour := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	var reach := minimap_sight_cells * _player.flashlight.lit_visibility_scale
+
+	# Three stacked discs rather than one hard edge: light does not stop, and a
+	# crisp circle would read as a range the player could step just outside of.
+	for step in 3:
+		var fraction := 1.0 - float(step) / 3.0
+		colour.a = 0.05
+		_minimap.draw_circle(centre, reach * fraction * pixels_per_cell, colour)
 
 
 ## One floor tile, turned with the map so the grid reads as a room rather than
