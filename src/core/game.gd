@@ -190,6 +190,12 @@ func _on_medkit_used(_healed: float, kit: Medkit) -> void:
 ## what a magazine is.
 func _wire_caches() -> void:
 	for cache in arena.ammo_caches:
+		# Game is the only thing that knows both the crate and the gun, so it
+		# is where the two are introduced. Without this a crate empties itself
+		# into a full reserve and is destroyed for nothing.
+		cache.capacity_handler = func() -> int:
+			return weapon.reserve_capacity()
+
 		cache.collected.connect(func(rounds: int) -> void:
 			var added := weapon.add_reserve_ammo(rounds)
 			if added > 0:

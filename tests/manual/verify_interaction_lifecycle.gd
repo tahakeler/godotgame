@@ -49,6 +49,7 @@ func _process(_delta: float) -> bool:
 	test_a_cache_cannot_be_looted_after_the_player_dies()
 	test_looting_works_again_once_a_new_round_begins()
 	test_a_hold_does_not_survive_a_restart()
+	test_caches_are_not_destroyed_by_a_full_player()
 
 	_report()
 	return true
@@ -188,3 +189,46 @@ func _report() -> void:
 	for failure in _failures:
 		printerr("FAIL: %s" % failure)
 	quit(1)
+
+
+## A crate must never be spent on a player who cannot carry what is in it.
+##
+## Found by the QA pass and reported rather than fixed, because the obvious
+## repairs all had the crate asking what a magazine is. The drain and the 55
+## second recharge used to run unconditionally, while every piece of feedback —
+## the resupply sound, the pickup chime, the world noise the zombies hunt by —
+## was gated behind "did the reserve actually go up". So a full player emptied
+## a crate, heard nothing at all, and had no way to tell that from a good loot.
+func test_caches_are_not_destroyed_by_a_full_player() -> void:
+	# Arrange
+	var cache: AmmoCache = _game.arena.ammo_caches[0]
+	cache.reset()
+	var weapon := _game.weapon
+	weapon.reserve_ammo = weapon.max_reserve
+
+	# Act
+	var offered := cache.can_interact(_game.player)
+	cache.interact(_game.player)
+	var left_when_full := cache.stock()
+
+	# Now make room for exactly two rounds and try again.
+	weapon.reserve_ammo = weapon.max_reserve - 2
+	cache.interact(_game.player)
+	var left_when_nearly_full := cache.stock()
+
+	weapon.reserve_ammo = 0
+
+	# Assert
+	if offered:
+		_failures.append("a full player was still offered a resupply prompt")
+	elif left_when_full < cache.capacity:
+		_failures.append(
+			"a full player drained a cache to %d of %d" % [left_when_full, cache.capacity]
+		)
+	elif left_when_nearly_full != cache.capacity - 2:
+		_failures.append(
+			"a cache gave %d rounds to a player with room for 2"
+			% [cache.capacity - left_when_nearly_full]
+		)
+	else:
+		print("PASS: a cache gives only what fits and keeps the rest")
