@@ -89,9 +89,31 @@ func begin(arena: Arena, target: Node3D) -> void:
 	_spawn_remaining = 0.0
 	_active = true
 
+	# Symmetry with stop(). A restart normally clears the population first, so
+	# there is usually nothing here to thaw — but begin() must not be the thing
+	# that leaves a frozen zombie standing in a live round if it is ever called
+	# without a reset in between.
+	for zombie in _alive:
+		if is_instance_valid(zombie):
+			zombie.resume_fighting()
 
+
+## End the round: stop producing zombies, and stop the ones already out there.
+##
+## This used to set the flag and nothing else, which stopped the spawn tick and
+## left the existing horde untouched — still pathing, still biting, still
+## groaning behind the results overlay. The flag governs whether new zombies
+## arrive; it never governed the ones that already had.
+##
+## Deliberately fixed here rather than in game.gd. "The round is over, so the
+## horde stops" is a fact about the horde, and a caller that has to remember to
+## walk the population itself is a caller that will eventually forget.
 func stop() -> void:
 	_active = false
+
+	for zombie in _alive:
+		if is_instance_valid(zombie):
+			zombie.stop_fighting()
 
 
 ## How much danger the player is actually in, from 0 to 1.
