@@ -390,6 +390,11 @@ func start_round() -> void:
 	player.set_look_enabled(true)
 	weapon.reset_state()
 	weapon.set_input_enabled(true)
+	# A hold is paid in one uninterrupted stretch, and a restart is the largest
+	# interruption there is. Without this a hold at 1.1s of 1.2 completed on the
+	# first frame of the new round.
+	player.interactor.reset()
+	player.interactor.set_input_enabled(true)
 
 	progression.reset()
 
@@ -514,6 +519,7 @@ func _toggle_pause() -> void:
 		pause_menu.open()
 		weapon.set_input_enabled(false)
 		player.set_look_enabled(false)
+		player.interactor.set_input_enabled(false)
 
 
 func _on_resumed() -> void:
@@ -523,6 +529,7 @@ func _on_resumed() -> void:
 
 	weapon.set_input_enabled(true)
 	player.set_look_enabled(true)
+	player.interactor.set_input_enabled(true)
 
 
 func _on_zombie_died(death_position: Vector3, experience: int, ammo: int) -> void:
@@ -559,6 +566,7 @@ func _on_levelled_up(level: int, choices: Array[Dictionary]) -> void:
 
 	weapon.set_input_enabled(false)
 	player.set_look_enabled(false)
+	player.interactor.set_input_enabled(false)
 	upgrade_menu.open(level, choices)
 
 
@@ -573,6 +581,9 @@ func _end_round(result: RoundState) -> void:
 	spawner.stop()
 	weapon.set_input_enabled(false)
 	player.set_look_enabled(false)
+	# The interact key goes with them, or the results screen is a place where
+	# the map can still be looted.
+	player.interactor.set_input_enabled(false)
 
 	var difficulty: GameSettings.Difficulty = (
 		_settings.difficulty if _settings != null else GameSettings.Difficulty.SOLDIER
