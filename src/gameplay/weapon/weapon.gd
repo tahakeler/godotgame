@@ -833,25 +833,93 @@ func reserve_capacity() -> int:
 ## land entirely on the gun being holstered. Spilling means the rounds are
 ## still the player's either way.
 func distribute_reserve_ammo(amount: int) -> int:
-	var taken := add_reserve_ammo(amount)
-	var spare := amount - taken
+	var taken := 0
 
-	for slot_kind in _slots:
-		if spare <= 0:
+	# One round at a time, re-asking each time. Amounts here are small — a kill
+	# is worth a handful — and handing them out individually is what stops a
+	# single award overfilling one weapon past the point where another became
+	# the needier one.
+	for _index in maxi(amount, 0):
+		var target := _neediest_kind()
+		if target < 0:
 			break
-		if slot_kind == kind:
-			continue
-
-		var slot: Dictionary = _slots[slot_kind]
-		var ceiling := int(slot.stats.max_reserve)
-		var before := int(slot.reserve)
-		var after: int = clampi(before + spare, 0, ceiling)
-
-		slot.reserve = after
-		spare -= after - before
-		taken += after - before
+		_award_one(target)
+		taken += 1
 
 	return taken
+
+
+## The weapon most in need of the next round.
+##
+## Emptiest *relative to its own ceiling*, not in absolute rounds, with the
+## weapon in hand breaking ties.
+##
+## The relative test is the load-bearing part. Ranked by absolute reserve the
+## shotgun is always bottom — it starts at 16 against the rifle's 60 — so it
+## would take the first sixteen rounds of every round's income and shells would
+## be the *easiest* thing to come by. That is backwards: the shotgun is the
+## expensive committal answer, and its small magazine and small ceiling are how
+## it says so. By fill fraction all three start level at half full, so income
+## follows what was actually spent.
+##
+## This is what keeps the fallback from starving. Rewarding the weapon in hand
+## sounds natural and creates a trap: you do not hold the pistol, so it never
+## refills, so you cannot fall back to it, so you never hold it. Rewarding the
+## emptiest means switching to the pistol to save shells is also what refills
+## the pistol. Nothing can self-fund either — a weapon at its ceiling stops
+## drawing income entirely, which is how the shotgun's ceiling of 32 keeps
+## shells scarce without anyone tuning a reward for it.
+##
+## Returns -1 when every weapon is full.
+func _neediest_kind() -> int:
+	var best := -1
+	var best_fill := INF
+
+	for slot_kind in _slots:
+		var ceiling := _kind_ceiling(slot_kind)
+		var reserve := _kind_reserve(slot_kind)
+		if reserve >= ceiling:
+			continue
+
+		var fill := float(reserve) / maxf(float(ceiling), 1.0)
+		# Strictly less, so an equal fill leaves the incumbent in place; the
+		# held weapon is seeded first below to make that tie-break deliberate.
+		if fill < best_fill:
+			best_fill = fill
+			best = slot_kind
+
+	# Tie-break to the weapon in hand: if it is exactly as empty as the winner,
+	# the rounds go where the player is actually shooting from.
+	var held_ceiling := _kind_ceiling(kind)
+	var held_reserve := _kind_reserve(kind)
+	if held_reserve < held_ceiling:
+		var held_fill := float(held_reserve) / maxf(float(held_ceiling), 1.0)
+		if is_equal_approx(held_fill, best_fill):
+			best = kind
+
+	return best
+
+
+## Reserve for any kind, reading the live field for the weapon in hand — its
+## reserve lives in `reserve_ammo`, not in its slot, until it is put away.
+func _kind_reserve(slot_kind: WeaponTypes.Kind) -> int:
+	if slot_kind == kind:
+		return reserve_ammo
+	return int(_slots[slot_kind].reserve)
+
+
+func _kind_ceiling(slot_kind: WeaponTypes.Kind) -> int:
+	if slot_kind == kind:
+		return max_reserve
+	return int(_slots[slot_kind].stats.max_reserve)
+
+
+func _award_one(slot_kind: WeaponTypes.Kind) -> void:
+	if slot_kind == kind:
+		reserve_ammo += 1
+		ammo_changed.emit(magazine_ammo, reserve_ammo)
+		return
+	_slots[slot_kind].reserve = int(_slots[slot_kind].reserve) + 1
 
 
 func add_reserve_ammo(amount: int) -> int:
