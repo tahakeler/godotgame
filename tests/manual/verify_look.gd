@@ -51,6 +51,7 @@ func _process(_delta: float) -> bool:
 			test_look_pitch_is_clamped()
 			test_look_invert_reverses_pitch_only()
 			test_look_sensitivity_scales_the_turn()
+			test_look_uses_unscaled_screen_motion()
 			test_look_disabled_releases_the_cursor_and_ignores_input()
 
 		Step.DONE:
@@ -221,6 +222,58 @@ func test_look_sensitivity_scales_the_turn() -> void:
 		)
 	else:
 		print("PASS: sensitivity scales the turn proportionally")
+
+
+## The trackpad bug this branch was opened for.
+##
+## This project stretches its canvas, and Godot divides `relative` by that
+## stretch scale before the event arrives while leaving `screen_relative` in
+## physical pixels. Fullscreen on a Retina MacBook the two disagree by about a
+## third, so a hand that moved one distance turns the camera by another — and
+## the symptom is "the trackpad feels sluggish in fullscreen", which points the
+## investigation at the device instead of at the window.
+##
+## Asserted by making the two properties disagree outright, because the ratio
+## between them is a property of the window and cannot be reproduced headlessly.
+## The second half guards the fallback: a synthesised event may fill only
+## `relative`, and dropping it would be a camera that does not turn at all,
+## which is the older bug this file already exists to catch.
+func test_look_uses_unscaled_screen_motion() -> void:
+	# Arrange
+	var player := _game.player
+	player.set_look_enabled(true)
+	player.rotation.y = 0.0
+
+	# Act
+	player._unhandled_input(_split_motion(Vector2(100.0, 0.0), Vector2(30.0, 0.0)))
+	var from_screen := absf(player.rotation.y)
+
+	player.rotation.y = 0.0
+	player._unhandled_input(_split_motion(Vector2.ZERO, Vector2(100.0, 0.0)))
+	var from_fallback := absf(player.rotation.y)
+
+	var expected: float = 100.0 * player.mouse_sensitivity
+
+	# Assert
+	if not is_equal_approx(from_screen, expected):
+		_failures.append(
+			"look followed the stretch-scaled delta: %.4f rad against %.4f"
+			% [from_screen, expected]
+		)
+	elif not is_equal_approx(from_fallback, expected):
+		_failures.append(
+			"motion carrying only `relative` was dropped: %.4f rad" % from_fallback
+		)
+	else:
+		print("PASS: look follows unscaled screen motion, and still falls back")
+
+
+## A motion event whose two deltas disagree, as a stretched viewport produces.
+func _split_motion(screen: Vector2, scaled: Vector2) -> InputEventMouseMotion:
+	var event := InputEventMouseMotion.new()
+	event.screen_relative = screen
+	event.relative = scaled
+	return event
 
 
 func test_look_disabled_releases_the_cursor_and_ignores_input() -> void:
