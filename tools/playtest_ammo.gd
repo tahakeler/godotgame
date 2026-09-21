@@ -121,7 +121,7 @@ func _instrument() -> void:
 	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
 		_per_weapon[weapon.kind].fired += 1
 	)
-	weapon.melee_swung.connect(func(hit: bool, _at: Vector3) -> void:
+	weapon.melee_swung.connect(func(hit: bool, _staggered: bool, _at: Vector3) -> void:
 		_melee_swings += 1
 		if hit:
 			_melee_hits += 1

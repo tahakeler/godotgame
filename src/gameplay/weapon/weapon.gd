@@ -129,6 +129,10 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## Camera shake per swing. Above a gunshot's 0.2 because the swing is the whole
 ## body, and because a hit you cannot hear over a fight still has to land.
 @export var melee_trauma := 0.28
+## Shake for a hit that lands on something that cannot be staggered. Higher
+## than a normal swing and near the 0.6 of being hit, because the swing went
+## nowhere and the player needs to feel that rather than infer it.
+@export var melee_unmoved_trauma := 0.42
 
 @export_group("Decoy")
 @export var throw_speed := 14.0
@@ -732,6 +736,13 @@ func try_melee() -> bool:
 	var collider: Node = result.get("collider")
 	var is_flesh := collider != null and collider.has_method("take_damage")
 
+	# Read rather than assumed, and read through `get` so the weapon layer does
+	# not take a hard dependency on the zombie class to answer it. A kind with
+	# no stagger duration is one that will not flinch, and the player has to be
+	# told that it did not flinch *because it cannot*, not because the swing
+	# failed to register.
+	var staggered := is_flesh and float(collider.get("stagger_duration")) > 0.0
+
 	if is_flesh:
 		# The stagger comes free with this call. A zombie flinches and drops a
 		# wind-up whenever it is damaged, which is exactly the breathing room a
@@ -742,7 +753,7 @@ func try_melee() -> bool:
 		collider.take_damage(melee_damage, result.position, direction)
 
 	impacted.emit(result.position, result.get("normal", Vector3.UP), is_flesh)
-	melee_swung.emit(is_flesh, result.position)
+	melee_swung.emit(is_flesh, staggered, result.position)
 	return true
 
 
@@ -1115,7 +1126,12 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	material.emission_energy_multiplier = 4.0
 	mesh_instance.material_override = material
 
-	get_tree().current_scene.add_child(mesh_instance)
+	# `current_scene` is null when the game is driven by a --script tool rather
+	# than run normally, and a tracer is spawned on every pellet — so under a
+	# headless probe this produced one engine error per pellet and drowned the
+	# output it was there to read. _world_parent already answers this question
+	# correctly for the decoy; the tracer should have been asking it too.
+	_world_parent().add_child(mesh_instance)
 	mesh_instance.global_position = from.lerp(to, 0.5)
 	# CylinderMesh runs along local Y, so aim that axis down the shot.
 	mesh_instance.look_at_from_position(

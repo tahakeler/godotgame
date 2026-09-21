@@ -38,6 +38,9 @@ const EVENTS := {
 	# it is not responding.
 	"melee_swing": ["cloth3"],
 	"melee_hit": ["chop"],
+	# Layered over melee_hit when the thing struck cannot be staggered. Dead and
+	# heavy: the sound of a blow being absorbed rather than landing.
+	"melee_unmoved": ["bookClose"],
 	"zombie_death": ["cloth3"],
 	"zombie_groan": ["creak1", "creak2", "creak3"],
 	"player_hurt": ["cloth1"],
@@ -100,6 +103,7 @@ const MIX := {
 	# between the two mixes is doing the work the two clips cannot.
 	"melee_swing": {"volume": -13.0, "pitch": Vector2(1.15, 1.3)},
 	"melee_hit": {"volume": -6.0, "pitch": Vector2(0.75, 0.9)},
+	"melee_unmoved": {"volume": -4.0, "pitch": Vector2(0.55, 0.65)},
 	"zombie_death": {"volume": -6.0, "pitch": Vector2(0.65, 0.8)},
 	"zombie_groan": {"volume": -12.0, "pitch": Vector2(0.55, 0.7)},
 	"player_hurt": {"volume": -2.0, "pitch": Vector2(0.7, 0.85)},
