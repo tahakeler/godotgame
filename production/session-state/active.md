@@ -71,7 +71,10 @@ Task: qa-lead agent hunting cross-system defects; lead reviewing
 
 ## Known open items
 
-- The ceiling reads as flat black in gameplay screenshots.
+- Ceiling checked with a pitched capture: faceted rock, warm lamp pools,
+  stalactites and hanging fixtures. The earlier "flat black" note was wrong —
+  it came from a forward-facing shot where the ceiling is simply out of the
+  light, which is correct for a cave. No work needed.
 - `corridor-wide*`, `stairs-wide`, `template-wall-*` remain unused kit pieces.
 - The four ring-corner gates were verified from above, not at eye height.
 - 191 duplicate asset files (`* 2.glb`, 3.5MB) gitignored and still on disk.
