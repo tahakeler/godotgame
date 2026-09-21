@@ -282,19 +282,21 @@ func _test_relay_noise_routes_through_game() -> void:
 		_failures.append("relay noise is not wired to Game._make_noise")
 		return
 
-	var pulses := 0
+	# GDScript lambdas capture locals by value, so the counter has to live in
+	# something the closure can reach through a reference.
+	var pulses := [0]
 	relay.noise_pulsed.connect(
 		func(_at: Vector3, loudness: float) -> void:
 			if loudness > 0.0:
-				pulses += 1
+				pulses[0] += 1
 	)
 	_chain().force_hold(relay, relay.relay_hold_duration)
 
-	if pulses <= 0:
+	if pulses[0] <= 0:
 		_failures.append("arming a relay emitted no noise at all")
 		return
 
-	print("PASS: arming emitted %d pulses, all routed through Game._make_noise" % pulses)
+	print("PASS: arming emitted %d pulses, all routed through Game._make_noise" % pulses[0])
 
 
 ## Cheap regression. Mode.RELAY is appended last, so nothing before it may move.
