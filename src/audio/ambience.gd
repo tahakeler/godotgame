@@ -80,7 +80,12 @@ func _build_layer(path: String, volume_db: float) -> AudioStreamPlayer:
 		stream.loop_begin = 0
 		stream.loop_end = 0
 
+	# The bed and the pulse are this game's score — there is no other music —
+	# so they answer to the music slider rather than the effects one.
+	GameSettings.ensure_buses()
+
 	var player := AudioStreamPlayer.new()
+	player.bus = GameSettings.MUSIC_BUS
 	player.stream = stream
 	player.volume_db = volume_db
 	player.autoplay = false

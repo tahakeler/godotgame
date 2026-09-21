@@ -72,8 +72,15 @@ func _ready() -> void:
 	_rng.randomize()
 	_preload_streams()
 
+	# Every effect rides the SFX bus so the effects slider has something to
+	# move. The buses are created here as well as by GameSettings, because a
+	# tool that boots this scene without the autoload still has to produce
+	# sound rather than errors about a missing bus.
+	GameSettings.ensure_buses()
+
 	for i in voice_count:
 		var voice := AudioStreamPlayer.new()
+		voice.bus = GameSettings.SFX_BUS
 		add_child(voice)
 		_voices.append(voice)
 
@@ -115,6 +122,7 @@ func play_at(event: String, position: Vector3) -> void:
 		return
 
 	var player := AudioStreamPlayer3D.new()
+	player.bus = GameSettings.SFX_BUS
 	add_child(player)
 
 	var mix: Dictionary = MIX.get(event, {})

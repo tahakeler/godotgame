@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://src/ui/main_menu.gd" id="1_menu"]
 [ext_resource type="PackedScene" path="res://src/arena/arena.tscn" id="2_arena"]
 [ext_resource type="PackedScene" path="res://src/ui/settings_panel.tscn" id="3_settings"]
 [ext_resource type="PackedScene" path="res://src/ui/credits_panel.tscn" id="5_credits"]
 [ext_resource type="Theme" path="res://src/ui/theme/game_theme.tres" id="4_theme"]
+[ext_resource type="PackedScene" path="res://src/ui/controls_panel.tscn" id="6_controls"]
 
 [node name="MainMenu" type="Node3D"]
 script = ExtResource("1_menu")
@@ -126,6 +127,12 @@ custom_minimum_size = Vector2(0, 50)
 text = "SETTINGS"
 alignment = 0
 
+[node name="ControlsButton" type="Button" parent="UI/MainPanel/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+text = "CONTROLS"
+alignment = 0
+
 [node name="BottomRow" type="HBoxContainer" parent="UI/MainPanel/Buttons"]
 custom_minimum_size = Vector2(0, 50)
 theme_override_constants/separation = 10
@@ -143,9 +150,9 @@ text = "QUIT"
 [node name="ModeBlurb" type="Label" parent="UI/MainPanel"]
 unique_name_in_owner = true
 offset_left = 92.0
-offset_top = 876.0
+offset_top = 930.0
 offset_right = 570.0
-offset_bottom = 920.0
+offset_bottom = 974.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.55, 0.58, 0.64, 1)
 theme_override_font_sizes/font_size = 15
@@ -154,9 +161,9 @@ autowrap_mode = 3
 
 [node name="DifficultyRow" type="HBoxContainer" parent="UI/MainPanel"]
 offset_left = 92.0
-offset_top = 840.0
+offset_top = 894.0
 offset_right = 392.0
-offset_bottom = 866.0
+offset_bottom = 920.0
 theme_override_constants/separation = 10
 
 [node name="Caption" type="Label" parent="UI/MainPanel/DifficultyRow"]
@@ -177,28 +184,28 @@ vertical_alignment = 1
 [node name="RecordLabel" type="Label" parent="UI/MainPanel"]
 unique_name_in_owner = true
 offset_left = 92.0
-offset_top = 926.0
+offset_top = 984.0
 offset_right = 620.0
-offset_bottom = 952.0
+offset_bottom = 1010.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 0.85)
 theme_override_font_sizes/font_size = 15
 text = ""
 
-[node name="Controls" type="Label" parent="UI/MainPanel"]
+[node name="ControlsHint" type="Label" parent="UI/MainPanel"]
+unique_name_in_owner = true
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 92.0
-offset_top = -76.0
+offset_top = -60.0
 offset_right = -48.0
 offset_bottom = -30.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.376, 0.4, 0.443, 1)
 theme_override_font_sizes/font_size = 15
-text = "WASD MOVE     MOUSE LOOK     SHIFT SPRINT     CTRL CROUCH     SPACE JUMP     LMB FIRE     R RELOAD     F LIGHT     G THROW     ENTER RESTART     ESC PAUSE
-STICKS MOVE / LOOK     L3 SPRINT     B CROUCH     A JUMP     RT FIRE     X RELOAD     LB LIGHT     RB THROW     Y RESTART     START PAUSE"
+text = ""
 
 [node name="Version" type="Label" parent="UI/MainPanel"]
 anchors_preset = 3
@@ -221,6 +228,10 @@ unique_name_in_owner = true
 visible = false
 
 [node name="CreditsPanel" parent="UI" instance=ExtResource("5_credits")]
+unique_name_in_owner = true
+visible = false
+
+[node name="ControlsPanel" parent="UI" instance=ExtResource("6_controls")]
 unique_name_in_owner = true
 visible = false
 

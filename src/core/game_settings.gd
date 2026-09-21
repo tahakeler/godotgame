@@ -141,8 +141,24 @@ var mouse_sensitivity := 0.0022
 ## pixel moved, the other radians per second held.
 var gamepad_sensitivity := 2.7
 var invert_look_y := false
+## Stick deadzone, applied to every bound action. Sticks wear out, and a worn
+## one walks the player into a wall on its own; raising this is the only repair
+## a player has short of buying a new pad.
+var gamepad_deadzone := 0.2
 var master_volume := 0.8
+## Music and effects ride separate buses under Master, created at runtime by
+## ensure_buses(). Split because the ambience bed is the thing players most
+## often want quieter without also going deaf to the footsteps behind them.
+var music_volume := 0.8
+var sfx_volume := 0.9
 var fullscreen := true
+## Windowed size, used only when `fullscreen` is off. Stored rather than derived
+## so a player who picked a small window keeps it across restarts.
+var window_size := Vector2i(1600, 900)
+## Vertical field of view in degrees for the first-person camera. Wide FOV is a
+## motion-sickness remedy as much as a preference, which is why it is offered
+## rather than fixed.
+var field_of_view := 78.0
 var difficulty: Difficulty = Difficulty.SOLDIER
 var mode: Mode = Mode.EXTRACTION
 var quality: Quality = Quality.HIGH
@@ -193,10 +209,12 @@ static func instance(from: Node) -> GameSettings:
 
 
 func _ready() -> void:
+	ensure_buses()
 	load_settings()
 	apply_audio()
 	apply_window()
 	apply_interface_scale()
+	apply_deadzone()
 
 
 func get_profile() -> Dictionary:
@@ -219,17 +237,59 @@ func get_mode_blurb() -> String:
 	return MODE_BLURBS[mode]
 
 
+## Names of the two buses created under Master. Playback code addresses them by
+## name, so the mixer layout lives here rather than in a .tres nobody reads.
+const MUSIC_BUS := "Music"
+const SFX_BUS := "SFX"
+
+
+## Create the Music and SFX buses if the project has no bus layout defining
+## them. Built at runtime rather than shipped as a default_bus_layout.tres so
+## that headless tools, which boot without the project's audio configuration,
+## still find the buses the sliders claim to control.
+static func ensure_buses() -> void:
+	for bus_name in [MUSIC_BUS, SFX_BUS]:
+		if AudioServer.get_bus_index(bus_name) >= 0:
+			continue
+
+		var index := AudioServer.bus_count
+		AudioServer.add_bus(index)
+		AudioServer.set_bus_name(index, bus_name)
+		AudioServer.set_bus_send(index, "Master")
+
+
 func apply_audio() -> void:
-	var bus := AudioServer.get_bus_index("Master")
+	ensure_buses()
+	_apply_bus_volume("Master", master_volume)
+	_apply_bus_volume(MUSIC_BUS, music_volume)
+	_apply_bus_volume(SFX_BUS, sfx_volume)
+
+
+## Silence is a real choice, so mute the bus rather than feeding it -inf dB:
+## the conversion produces a number the mixer handles badly.
+func _apply_bus_volume(bus_name: String, linear: float) -> void:
+	var bus := AudioServer.get_bus_index(bus_name)
 	if bus < 0:
 		return
 
-	# Silence is a real choice, so mute the bus rather than feeding it -inf dB.
-	if master_volume <= 0.001:
+	if linear <= 0.001:
 		AudioServer.set_bus_mute(bus, true)
-	else:
-		AudioServer.set_bus_mute(bus, false)
-		AudioServer.set_bus_volume_db(bus, linear_to_db(master_volume))
+		return
+
+	AudioServer.set_bus_mute(bus, false)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(linear))
+
+
+## Push the chosen deadzone onto every bound action.
+##
+## Applied to game actions only. Raising the deadzone on the built-in ui_*
+## actions would make the menus themselves harder to drive with the same stick,
+## which is the opposite of what a player reaching for this setting wants.
+func apply_deadzone() -> void:
+	for action in InputMap.get_actions():
+		if String(action).begins_with("ui_"):
+			continue
+		InputMap.action_set_deadzone(action, gamepad_deadzone)
 
 
 func apply_window() -> void:
@@ -243,6 +303,13 @@ func apply_window() -> void:
 		else DisplayServer.WINDOW_MODE_WINDOWED
 	)
 
+	if fullscreen:
+		return
+
+	# Resizing a fullscreen window does nothing visible and fights the mode on
+	# the way back out, so the size is only ever pushed while windowed.
+	DisplayServer.window_set_size(window_size)
+
 
 ## Push look preferences onto a player that just entered the scene.
 func apply_to_player(player: Player) -> void:
@@ -250,6 +317,7 @@ func apply_to_player(player: Player) -> void:
 	player.gamepad_sensitivity = gamepad_sensitivity
 	player.shake_scale = shake_scale
 	player.invert_look_y = invert_look_y
+	player.set_base_fov(field_of_view)
 
 
 func save_settings() -> void:
@@ -257,8 +325,13 @@ func save_settings() -> void:
 	config.set_value(SECTION, "mouse_sensitivity", mouse_sensitivity)
 	config.set_value(SECTION, "gamepad_sensitivity", gamepad_sensitivity)
 	config.set_value(SECTION, "invert_look_y", invert_look_y)
+	config.set_value(SECTION, "gamepad_deadzone", gamepad_deadzone)
 	config.set_value(SECTION, "master_volume", master_volume)
+	config.set_value(SECTION, "music_volume", music_volume)
+	config.set_value(SECTION, "sfx_volume", sfx_volume)
 	config.set_value(SECTION, "fullscreen", fullscreen)
+	config.set_value(SECTION, "window_size", window_size)
+	config.set_value(SECTION, "field_of_view", field_of_view)
 	config.set_value(SECTION, "difficulty", int(difficulty))
 	config.set_value(SECTION, "mode", int(mode))
 	config.set_value(SECTION, "quality", int(quality))
@@ -280,8 +353,13 @@ func load_settings() -> void:
 	mouse_sensitivity = config.get_value(SECTION, "mouse_sensitivity", mouse_sensitivity)
 	gamepad_sensitivity = config.get_value(SECTION, "gamepad_sensitivity", gamepad_sensitivity)
 	invert_look_y = config.get_value(SECTION, "invert_look_y", invert_look_y)
+	gamepad_deadzone = config.get_value(SECTION, "gamepad_deadzone", gamepad_deadzone)
 	master_volume = config.get_value(SECTION, "master_volume", master_volume)
+	music_volume = config.get_value(SECTION, "music_volume", music_volume)
+	sfx_volume = config.get_value(SECTION, "sfx_volume", sfx_volume)
 	fullscreen = config.get_value(SECTION, "fullscreen", fullscreen)
+	window_size = config.get_value(SECTION, "window_size", window_size)
+	field_of_view = config.get_value(SECTION, "field_of_view", field_of_view)
 	difficulty = config.get_value(SECTION, "difficulty", difficulty) as Difficulty
 	mode = config.get_value(SECTION, "mode", mode) as Mode
 	quality = config.get_value(SECTION, "quality", quality) as Quality
