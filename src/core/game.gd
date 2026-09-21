@@ -102,7 +102,7 @@ func _ready() -> void:
 
 	# Look preferences are otherwise only read when a round starts, so a player
 	# adjusting sensitivity from the pause menu would change nothing until they
-	# restarted â and the whole reason to open that slider mid-round is that the
+	# restarted — and the whole reason to open that slider mid-round is that the
 	# current setting feels wrong right now.
 	if _settings != null:
 		_settings.changed.connect(func() -> void: _settings.apply_to_player(player))
@@ -120,7 +120,7 @@ func _ready() -> void:
 	# Game decides that lines go to the HUD.
 	objective_changed.connect(hud.set_objective)
 
-	# The interactor never touches the HUD itself â it emits text and Game
+	# The interactor never touches the HUD itself — it emits text and Game
 	# decides where text goes, the same rule audio and effects follow here.
 	player.interactor.prompt_changed.connect(hud.show_prompt)
 	start_round()
@@ -162,7 +162,7 @@ func _wire_audio() -> void:
 
 	# The one sound that means something changed about you rather than about
 	# them. Played where the zombie is, so it carries a direction. A Screamer
-	# gets its own alarm and a Stalker gets silence â see SoundBank.notice_event.
+	# gets its own alarm and a Stalker gets silence — see SoundBank.notice_event.
 	spawner.zombie_noticed_player.connect(
 		func(at: Vector3, kind: ZombieTypes.Kind) -> void:
 			sounds.play_at(SoundBank.notice_event(kind), at)
@@ -277,7 +277,7 @@ func _wire_caches() -> void:
 
 
 ## A gunshot is heard by anything nearby, and what it draws is a crowd to the
-## place the shot came from â not to the player.
+## place the shot came from — not to the player.
 ##
 ## This is what makes the game's first pillar literally true. Ammunition
 ## scarcity alone means a bullet costs a bullet; with noise it also costs your
@@ -307,7 +307,7 @@ func _wire_noise() -> void:
 	)
 
 	# The throw is silent; only the landing speaks. That is the whole reason a
-	# decoy is worth a round â it moves the horde without moving you, and
+	# decoy is worth a round — it moves the horde without moving you, and
 	# without telling them where you threw it from.
 	weapon.decoy_thrown.connect(func(decoy: Decoy) -> void:
 		decoy.landed.connect(func(at: Vector3, loudness: float) -> void:
@@ -321,7 +321,7 @@ func _wire_noise() -> void:
 ##
 ## Sampled several times a second rather than every frame. The figure walks
 ## every living zombie, and the mix it feeds is smoothed over more than a
-## second anyway â so a tenth of a second of staleness is not something anyone
+## second anyway — so a tenth of a second of staleness is not something anyone
 ## can hear, while the per-frame walk is cost paid for nothing.
 ##
 ## The accumulated time is handed to the smoothing rather than the frame delta,
@@ -393,7 +393,7 @@ func _wire_effects() -> void:
 
 ## Opening the pause menu is taken as an input event rather than polled in
 ## _process, because this node stops processing the instant the tree pauses.
-## Polling meant the control that opened the menu could not close it again â
+## Polling meant the control that opened the menu could not close it again —
 ## the only way out was clicking Resume, with a mouse. Closing is handled by
 ## PauseMenu itself, which is the node still awake at that point.
 func _unhandled_input(event: InputEvent) -> void:
@@ -404,7 +404,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_pause()
 	else:
 		# There is nothing to pause once the round is over, so the same control
-		# leaves for the menu â which is what the results screen offers.
+		# leaves for the menu — which is what the results screen offers.
 		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 	get_viewport().set_input_as_handled()
@@ -441,7 +441,7 @@ func _process(delta: float) -> void:
 
 
 ## Restore every system to its opening state and begin a fresh round. This is
-## the restart control â nothing is reloaded, so there is no scene transition
+## the restart control — nothing is reloaded, so there is no scene transition
 ## and no chance of a stale node surviving into the new round.
 func start_round() -> void:
 	_apply_difficulty()
@@ -604,7 +604,7 @@ func _apply_mode() -> void:
 			round_duration = 0.0
 
 	# Endless keeps escalating rather than settling at its floor, so the run
-	# always ends eventually â a survival mode you cannot lose is a screensaver.
+	# always ends eventually — a survival mode you cannot lose is a screensaver.
 	spawner.endless = mode == GameSettings.Mode.ENDLESS
 
 

@@ -226,6 +226,10 @@ func _build() -> void:
 	mast.mesh = mesh
 	mast.position = Vector3(0.0, BEACON_HEIGHT * 0.5, 0.0)
 	add_child(mast)
+	# Solid, like the crate. A prop the player and the crowd can both walk
+	# straight through is scenery, and the beacon is meant to be a thing you
+	# stand at — tools/audit_collision.gd enforces exactly this.
+	MeshCollision.fit(mast)
 
 	_light = OmniLight3D.new()
 	_light.position = Vector3(0.0, BEACON_HEIGHT, 0.0)
