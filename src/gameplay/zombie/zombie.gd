@@ -913,32 +913,30 @@ func _begin_break_off() -> void:
 
 ## The direction this zombie's body is actually pointing.
 ##
-## Deliberately +Z and not Godot's usual -Z. Steering sets the yaw with
-## `atan2(velocity.x, velocity.z)`, which puts +Z along the direction of
-## travel, and _hold_still_and_track() turns toward the player with the same
-## expression — so +Z is what "forward" has always meant for a zombie body, and
-## it is what the model is built around.
+## Godot's standard: an imported character model, look_at(), the sight cone and
+## the lunge all treat -Z as the front of a body, and all four already agreed.
 ##
-## Sight and the lunge did not agree with it. Both used -Z, so every zombie
-## carried its 140-degree vision cone pointing directly behind itself: it could
-## only ever see what it had already walked past, and it lunged away from
-## whatever it had just turned to face. Measured on a Shambler walking straight
-## at a stationary player, the dot product between "facing" and "direction to
-## the player" sat at exactly -1.00 for the entire approach.
+## The steering did not. _move_toward_target() set the yaw with
+## `atan2(velocity.x, velocity.z)`, which puts *+Z* along the direction of
+## travel, so every zombie in the game was turned exactly 180 degrees from
+## where it was going — walking backwards, with its 140-degree vision cone
+## pointing at the ground it had already crossed. Measured with a probe on a
+## Shambler closing on a stationary player, the dot product between facing and
+## the direction to the player sat at -1.00 for the whole approach.
 ##
-## That one sign was quietly holding down most of this class. HUNTING is only
-## ever entered by seeing the player, so zombies arrived, attacked and killed
-## while still INVESTIGATING — which meant the hunting tell never lit, the
-## spawner's threat meter (hunters only) read near-zero during a mauling, a
-## Screamer could not raise an alarm because alarms require HUNTING, and a
-## Stalker could not break off because break-off is reached from a successful
-## sight check. Every one of those looked like a separate design problem.
+## That one sign was quietly holding down most of this class, because HUNTING
+## is only ever entered by *seeing* the player. Zombies arrived, attacked and
+## killed while still INVESTIGATING, which meant the hunting tell never lit,
+## the spawner's threat meter (which counts hunters only) read near-zero during
+## a mauling, a Screamer could not raise an alarm because alarms require
+## HUNTING, and a Stalker could not break off because break-off is reached from
+## a successful sight check. Each of those looked like a separate design
+## problem and none of them was.
 ##
-## Fixed here rather than by rotating the body, because the body is what the
-## art, the animation and the steering all already agree on; the two callers
-## below were the only dissenters.
+## This accessor exists so there is one place that answers the question, rather
+## than four call sites each spelling out a sign that is easy to get wrong.
 func facing() -> Vector3:
-	return global_transform.basis.z
+	return -global_transform.basis.z
 
 
 func _can_see_target() -> bool:
@@ -1150,7 +1148,10 @@ func _move_toward_target(delta: float) -> void:
 
 	# Face travel direction. Interpolated so zombies do not snap around when
 	# the path bends around a crate.
-	var desired_yaw := atan2(desired_velocity.x, desired_velocity.z)
+	# Negated on both axes so that -Z, not +Z, ends up along the direction of
+	# travel. Without the signs a zombie walks backwards: the model faces the
+	# way it came and the sight cone looks at ground already crossed.
+	var desired_yaw := atan2(-desired_velocity.x, -desired_velocity.z)
 	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * _turn_scale * delta)
 
 
@@ -1377,7 +1378,8 @@ func _hold_still_and_track(delta: float) -> void:
 	if to_target.length() <= 0.01:
 		return
 
-	var desired_yaw := atan2(to_target.x, to_target.z)
+	# Same sign convention as _move_toward_target: -Z is the front of a body.
+	var desired_yaw := atan2(-to_target.x, -to_target.z)
 	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * _turn_scale * delta)
 
 
