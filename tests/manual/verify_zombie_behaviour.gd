@@ -18,6 +18,9 @@ extends SceneTree
 ##   Godot --headless --script tests/manual/verify_zombie_behaviour.gd
 
 const ZOMBIE_SCENE := "res://src/gameplay/zombie/zombie.tscn"
+## Read-only: the melee assertion below checks an invariant that spans both
+## sides of the fight, so it has to see the weapon's numbers as well.
+const WEAPON_SCENE := "res://src/gameplay/weapon/weapon.tscn"
 
 ## Directions a zombie might approach a stationary player from. Sixteen points
 ## on a circle, fixed rather than random, so the flanking comparison below is
@@ -55,6 +58,7 @@ func _process(_delta: float) -> bool:
 	test_a_watched_stalker_keeps_one_retreat_direction()
 	test_a_screamer_is_silent_while_it_draws_breath()
 	test_a_stalker_that_is_already_on_you_ignores_being_looked_at()
+	test_a_cornered_player_can_answer_a_stalker_with_one_swing()
 
 	_report()
 	return true
@@ -978,6 +982,56 @@ func test_a_stalker_that_is_already_on_you_ignores_being_looked_at() -> void:
 
 	_free_targeted(near)
 	_free_targeted(far)
+
+
+## The Stalker was made deliberately harder to shake, and the reason that was
+## safe to do is an arithmetic coincidence nobody owns.
+##
+## A Stalker has exactly as much health as the emergency melee does damage, and
+## the melee reaches slightly further than a Stalker can. Those two facts are
+## why a committed Stalker is a fight the player can win with an empty gun
+## rather than a death sentence — and both are one balance tweak away from
+## quietly ceasing to be true, on either side of the fight, with no symptom
+## until someone dies to it in playtest.
+##
+## Stated as the design rule rather than as the numbers, and read from both
+## sources rather than written down here, so it fails if either side drifts.
+func test_a_cornered_player_can_answer_a_stalker_with_one_swing() -> void:
+	# Arrange
+	var weapon := _weapon()
+	var stalker := _zombie(ZombieTypes.Kind.STALKER)
+
+	# Act: what each side brings to arm's length.
+	var swing: float = weapon.melee_damage
+	var reach: float = weapon.melee_range
+	var stalker_health: float = stalker.health.max_health
+	var stalker_reach: float = stalker.attack_range
+
+	# Assert
+	if swing < stalker_health:
+		_failures.append(
+			"one melee swing does %.0f against a Stalker's %.0f health — a player "
+			% [swing, stalker_health]
+			+ "out of ammo can no longer answer the enemy that hunts them"
+		)
+	elif reach <= stalker_reach:
+		_failures.append(
+			"melee reaches %.2fm and a Stalker reaches %.2fm — the player no "
+			% [reach, stalker_reach]
+			+ "longer wins the exchange on reach and must trade a hit to land one"
+		)
+	else:
+		print("PASS: one swing (%.0f) kills a Stalker (%.0f hp) from %.2fm beyond its %.2fm reach"
+			% [swing, stalker_health, reach - stalker_reach, stalker_reach])
+
+	weapon.free()
+	stalker.free()
+
+
+func _weapon() -> Weapon:
+	var weapon: Weapon = (load(WEAPON_SCENE) as PackedScene).instantiate()
+	root.add_child(weapon)
+	return weapon
 
 
 ## A Stalker at the given multiple of its commitment range, facing a player who
