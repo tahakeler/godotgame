@@ -11,6 +11,9 @@ extends SceneTree
 ##
 ##   Godot --headless --script tests/manual/verify_input_map.gd
 
+## The camera verbs. Mouse and right stick only, never the keyboard.
+const LOOK_ACTIONS := ["look_left", "look_right", "look_up", "look_down"]
+
 const PREFIX := "input/"
 const PROJECT_FILE := "res://project.godot"
 
@@ -26,6 +29,7 @@ func _initialize() -> void:
 	test_input_map_every_action_has_a_keyboard_or_mouse_binding(actions)
 	test_input_map_every_action_has_a_gamepad_binding(actions)
 	test_input_map_stick_axes_are_bound_in_opposing_pairs(actions)
+	test_input_map_looking_is_never_bound_to_the_keyboard(actions)
 
 	_report()
 
@@ -36,6 +40,15 @@ func test_input_map_every_action_has_a_keyboard_or_mouse_binding(
 	var missing := _actions_without(actions, [
 		"InputEventKey", "InputEventMouseButton",
 	])
+
+	# Looking is deliberately exempt. It is served by the mouse, which never
+	# goes through the InputMap at all — Player._unhandled_input reads
+	# InputEventMouseMotion directly — and by the right stick. Requiring a
+	# keyboard binding here is what put the arrow keys on the camera in the
+	# first place, and a camera you turn with arrow keys is not the game this
+	# is. The rule below asserts the opposite for these four.
+	for action in LOOK_ACTIONS:
+		missing.erase(action)
 
 	# Assert
 	if missing.is_empty():
@@ -152,3 +165,51 @@ func _report() -> void:
 	for failure in _failures:
 		printerr("FAIL: %s" % failure)
 	quit(1)
+
+
+## The camera is turned with the mouse, or with the right stick on a pad.
+##
+## It is never turned with the keyboard. Arrow keys were bound to these four
+## only to satisfy the "every action needs a keyboard binding" rule above, and
+## the result was a camera that could be driven from the arrow keys — which is
+## the wrong game. Mouse look does not appear here at all, because it is read
+## as InputEventMouseMotion in Player._unhandled_input rather than as an action.
+##
+## Asserted rather than left as a comment because the exemption above would
+## otherwise let a keyboard binding drift back in unnoticed.
+func test_input_map_looking_is_never_bound_to_the_keyboard(
+		actions: Dictionary) -> void:
+	# Arrange / Act
+	var keyboard_bound: Array[String] = []
+	var stickless: Array[String] = []
+
+	for action in LOOK_ACTIONS:
+		if not actions.has(action):
+			continue
+
+		var has_key := false
+		var has_stick := false
+
+		for event in actions[action]:
+			if event == null:
+				continue
+			if event.get_class() == "InputEventKey":
+				has_key = true
+			elif event.get_class() == "InputEventJoypadMotion":
+				has_stick = true
+
+		if has_key:
+			keyboard_bound.append(action)
+		if not has_stick:
+			stickless.append(action)
+
+	# Assert
+	if not keyboard_bound.is_empty():
+		_failures.append(
+			"the camera is bound to the keyboard on: %s — looking is mouse and "
+			% ", ".join(keyboard_bound) + "stick only"
+		)
+	elif not stickless.is_empty():
+		_failures.append("no right-stick binding for: %s" % ", ".join(stickless))
+	else:
+		print("PASS: the camera is mouse and stick only, never the keyboard")
