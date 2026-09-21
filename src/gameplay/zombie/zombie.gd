@@ -911,6 +911,34 @@ func _begin_break_off() -> void:
 	_set_awareness(Awareness.RETREATING)
 
 
+## The direction this zombie's body is actually pointing.
+##
+## Godot's standard: an imported character model, look_at(), the sight cone and
+## the lunge all treat -Z as the front of a body, and all four already agreed.
+##
+## The steering did not. _move_toward_target() set the yaw with
+## `atan2(velocity.x, velocity.z)`, which puts *+Z* along the direction of
+## travel, so every zombie in the game was turned exactly 180 degrees from
+## where it was going — walking backwards, with its 140-degree vision cone
+## pointing at the ground it had already crossed. Measured with a probe on a
+## Shambler closing on a stationary player, the dot product between facing and
+## the direction to the player sat at -1.00 for the whole approach.
+##
+## That one sign was quietly holding down most of this class, because HUNTING
+## is only ever entered by *seeing* the player. Zombies arrived, attacked and
+## killed while still INVESTIGATING, which meant the hunting tell never lit,
+## the spawner's threat meter (which counts hunters only) read near-zero during
+## a mauling, a Screamer could not raise an alarm because alarms require
+## HUNTING, and a Stalker could not break off because break-off is reached from
+## a successful sight check. Each of those looked like a separate design
+## problem and none of them was.
+##
+## This accessor exists so there is one place that answers the question, rather
+## than four call sites each spelling out a sign that is easy to get wrong.
+func facing() -> Vector3:
+	return -global_transform.basis.z
+
+
 func _can_see_target() -> bool:
 	if _target == null:
 		return false
@@ -936,7 +964,7 @@ func _can_see_target() -> bool:
 
 	# Behind counts as unseen, so breaking line of sight by getting behind one
 	# actually works.
-	var facing := -global_transform.basis.z
+	var facing := facing()
 	if distance > 0.01 and facing.dot(to_target / distance) < cos(deg_to_rad(sight_cone_degrees * 0.5)):
 		return false
 
@@ -1120,7 +1148,10 @@ func _move_toward_target(delta: float) -> void:
 
 	# Face travel direction. Interpolated so zombies do not snap around when
 	# the path bends around a crate.
-	var desired_yaw := atan2(desired_velocity.x, desired_velocity.z)
+	# Negated on both axes so that -Z, not +Z, ends up along the direction of
+	# travel. Without the signs a zombie walks backwards: the model faces the
+	# way it came and the sight cone looks at ground already crossed.
+	var desired_yaw := atan2(-desired_velocity.x, -desired_velocity.z)
 	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * _turn_scale * delta)
 
 
@@ -1333,7 +1364,7 @@ func _begin_lunge() -> void:
 	# Locked in at the moment the lunge starts. Committing to the direction
 	# faced right now, rather than continuing to track the target, is what
 	# makes stepping aside during the lunge actually work.
-	_lunge_direction = -global_transform.basis.z
+	_lunge_direction = facing()
 
 
 func _hold_still_and_track(delta: float) -> void:
@@ -1347,7 +1378,8 @@ func _hold_still_and_track(delta: float) -> void:
 	if to_target.length() <= 0.01:
 		return
 
-	var desired_yaw := atan2(to_target.x, to_target.z)
+	# Same sign convention as _move_toward_target: -Z is the front of a body.
+	var desired_yaw := atan2(-to_target.x, -to_target.z)
 	rotation.y = lerp_angle(rotation.y, desired_yaw, turn_speed * _turn_scale * delta)
 
 
