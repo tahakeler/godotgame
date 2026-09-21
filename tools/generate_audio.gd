@@ -22,6 +22,10 @@ func _initialize() -> void:
 	)
 
 	_write("gunshot", _build_gunshot())
+	_write("fire_pistol", _build_fire_pistol())
+	_write("fire_shotgun", _build_fire_shotgun())
+	_write("fire_rifle", _build_fire_rifle())
+	_write("screamer_alarm", _build_screamer_alarm())
 	_write("brute_growl", _build_brute_growl())
 	_write("decoy_land", _build_decoy_land())
 	_write("zombie_alerted", _build_zombie_alerted())
@@ -232,6 +236,199 @@ func _build_brute_growl() -> PackedFloat32Array:
 		previous = lerpf(previous, noise, 0.08)
 
 		samples[index] = clampf((tone + previous * 0.5) * envelope * 0.7, -1.0, 1.0)
+
+	return samples
+
+
+## The pistol: 26 damage, ten rounds, the quietest thing you can fire.
+##
+## Short and bright, with almost no tail. It has to read as *cheap* — the shot
+## you can afford to take — so it is the only one of the three that is over
+## before the cave has a chance to answer.
+func _build_fire_pistol() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2611
+
+	var duration := 0.24
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var previous := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+
+		# Less lowpass than the shotgun gets: the pistol lives in the top of
+		# the mix, which is where a crack has to sit to stay legible under a
+		# rifle firing beside it.
+		var noise := rng.randf_range(-1.0, 1.0)
+		previous = lerpf(previous, noise, 0.72)
+		var crack: float = previous * exp(-t * 62.0)
+
+		# A quick fall rather than a drop. A pistol has a body, but a small one.
+		var pitch := lerpf(240.0, 105.0, minf(t / 0.05, 1.0))
+		var body: float = sin(TAU * pitch * t) * exp(-t * 38.0)
+
+		samples[index] = clampf(crack * 0.82 + body * 0.6, -1.0, 1.0)
+
+	return samples
+
+
+## The shotgun: eight pellets, four shells, noise 2.2 — the loudest thing on
+## the map by a factor of two and a half.
+##
+## This is the sound that tells the player they have just called the cave down
+## on themselves, so it has to cost something to hear. Everything about it is
+## long: a slow pitch drop into sub-bass, and a tail that keeps going for most
+## of a second so the room is still ringing while the next zombie turns round.
+func _build_fire_shotgun() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8822
+
+	var duration := 0.9
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var previous := 0.0
+	var rumble_previous := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+
+		var noise := rng.randf_range(-1.0, 1.0)
+
+		# Two lowpasses at very different corners. The fast one is the blast,
+		# the slow one is the room — separating them is what stops a long tail
+		# from turning into hiss.
+		previous = lerpf(previous, noise, 0.40)
+		rumble_previous = lerpf(rumble_previous, noise, 0.035)
+
+		var blast: float = previous * exp(-t * 20.0)
+
+		# Down to 42 Hz, below anything else in the game. A Brute growls at 58;
+		# the shotgun goes under even that, which is what makes it feel like the
+		# floor moved rather than like a loud noise happened.
+		var pitch := lerpf(150.0, 42.0, minf(t / 0.16, 1.0))
+		var body: float = sin(TAU * pitch * t) * exp(-t * 9.0)
+
+		# The tail decays at a third of the blast's rate. Long enough that the
+		# player cannot fire again inside it and pretend nothing happened.
+		var tail: float = rumble_previous * exp(-t * 3.2) * 0.75
+
+		samples[index] = clampf(blast * 0.7 + body * 0.85 + tail, -1.0, 1.0)
+
+	return samples
+
+
+## The rifle: 17 damage every 0.09 seconds.
+##
+## The constraint here is repetition, not impact. Eleven of these land per
+## second, so anything with a tail stacks into mud and the player stops being
+## able to hear the cave over their own weapon. It is therefore the shortest of
+## the three by a wide margin: all attack, a hard cut, no room tone at all.
+func _build_fire_rifle() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1735
+
+	# Shorter than the 0.09s fire interval doubled, so consecutive shots overlap
+	# only briefly and each one still reads as a separate event.
+	var duration := 0.15
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var previous := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+
+		var noise := rng.randf_range(-1.0, 1.0)
+		previous = lerpf(previous, noise, 0.62)
+		var snap: float = previous * exp(-t * 95.0)
+
+		# A higher, faster body than the pistol. Higher survives being stacked;
+		# low frequencies are what smear when shots overlap.
+		var pitch := lerpf(330.0, 165.0, minf(t / 0.03, 1.0))
+		var body: float = sin(TAU * pitch * t) * exp(-t * 55.0)
+
+		# A hard fade over the last 12ms. Truncating a decaying sample clicks,
+		# and a click repeated eleven times a second is a buzz.
+		var fade: float = minf((duration - t) / 0.012, 1.0)
+
+		samples[index] = clampf((snap * 0.9 + body * 0.55) * fade, -1.0, 1.0)
+
+	return samples
+
+
+## The Screamer's alarm — the most important sound in the game.
+##
+## A Screamer is harmless in a fight and recruits every zombie within 36 metres
+## when it notices you. Without a cue, the player never learns that the death
+## thirty seconds later was caused by something they could have shot. The
+## mechanic is entirely carried by this sound, so it is built to violate every
+## rule the rest of the mix follows:
+##
+##   - it is long (2.1s) where everything else is under a second, so it cannot
+##     be missed inside a firefight;
+##   - it *rises and holds* where zombie sounds fall and fade, which is what
+##     makes it read as an alarm rather than as a creature;
+##   - it is built on a high fundamental with a hard-saturated harmonic stack,
+##     because high and harsh is what survives distance and a shotgun tail.
+##
+## The pitch sweeps up, wobbles on a siren vibrato, then lands on a held note.
+## The held part is deliberate: it gives the player a full second in which the
+## correct play — turn, find it, kill it — is still available.
+func _build_screamer_alarm() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6660
+
+	var duration := 2.1
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var previous := 0.0
+	var phase := 0.0
+	var sub_phase := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+
+		# Fast in, long hold, decay only over the final third. The shape of a
+		# siren, not of an impact.
+		var envelope: float = minf(t / 0.06, 1.0) * minf(1.0, exp(-maxf(0.0, t - 1.35) * 2.6))
+
+		# Up to 880 Hz over the first 0.45s and then held. Integrating the
+		# instantaneous frequency rather than writing sin(TAU * f * t) matters
+		# here: with a sweeping f the latter smears the phase and the sweep
+		# arrives at the wrong pitch.
+		var sweep: float = lerpf(300.0, 880.0, minf(t / 0.45, 1.0))
+		# A 5.5 Hz wobble. A steady tone reads as an electronic alert; the
+		# waver is what keeps it attached to a throat.
+		var frequency: float = sweep * (1.0 + 0.055 * sin(TAU * 5.5 * t))
+
+		phase = fmod(phase + TAU * frequency / SAMPLE_RATE, TAU)
+		sub_phase = fmod(sub_phase + TAU * frequency * 0.5 / SAMPLE_RATE, TAU)
+
+		# Saturated hard. pow(|x|, 0.3) is close to a square wave, which is a
+		# stack of odd harmonics — that stack is what still gets through when
+		# the sound has been attenuated by forty metres of distance.
+		var cry: float = sin(phase)
+		cry = signf(cry) * pow(absf(cry), 0.3)
+
+		# An octave below, kept quiet. It carries no information; it is there so
+		# the scream has a body and does not sound like a whistle.
+		var sub: float = sin(sub_phase) * 0.35
+
+		# A rasp of breath over the top.
+		var noise := rng.randf_range(-1.0, 1.0)
+		previous = lerpf(previous, noise, 0.35)
+
+		samples[index] = clampf(
+			(cry * 0.62 + sub * 0.28 + previous * 0.22) * envelope, -1.0, 1.0
+		)
 
 	return samples
 
