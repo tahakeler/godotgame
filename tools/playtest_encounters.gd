@@ -35,6 +35,8 @@ const SCENARIOS := {
 	## specific risk: one scream pulling the map, or worse, a scream that
 	## recruits a second Screamer which screams again.
 	"cascade": [4, 4, 4, 0, 0, 0, 0, 0, 1, 1, 2, 3],
+	## One Screamer among eight sleepers: how far does a single scream reach?
+	"one_screamer": [4, 0, 0, 0, 0, 1, 1, 2, 3],
 	## One Stalker, and a player who keeps looking straight at it.
 	"stalker_watch": [3],
 	## One Shambler, instrumented gate by gate. Every run above showed zombies
@@ -190,10 +192,36 @@ func _begin_next() -> void:
 			"closest": point.distance_to(player.global_position),
 		})
 
-	# Everything starts genuinely unaware, so "when did it notice you" is a
-	# real measurement rather than a consequence of the setup. A wave that is
-	# woken on spawn cannot show which kind finds you first.
 	spawner._alive.assign(_tracked.map(func(entry: Dictionary) -> Zombie: return entry.zombie))
+
+	if name == "cascade" or name == "one_screamer":
+		_send_everything_but_screamers_to_sleep()
+
+
+## Put every non-Screamer back to sleep, so recruitment can be counted.
+##
+## set_target() deliberately hands a fresh zombie a belief about where the
+## player is — that is the safeguard that stops real spawns wandering off into
+## empty chambers. It also means a cascade run starts with the entire
+## population already awake, nobody in UNAWARE, and therefore *nothing left to
+## recruit*: the first measured attempt reported 36 alarms and 0 recruits of 11,
+## which said nothing about the Screamer and everything about the fixture.
+##
+## Clearing the belief is not enough on its own. An UNAWARE zombie still walks
+## to last_known_position, so it would stroll to the player's start anyway;
+## pointing the belief at its own feet is what actually leaves it standing in
+## its chamber the way an undisturbed zombie should.
+##
+## The Screamers keep their spawn belief, so they walk in, see the player, hunt
+## and shout — which is the only honest way to ask how far one scream travels.
+func _send_everything_but_screamers_to_sleep() -> void:
+	for entry in _tracked:
+		if entry.kind == ZombieTypes.Kind.SCREAMER:
+			continue
+
+		var zombie: Zombie = entry.zombie
+		zombie.awareness = Zombie.Awareness.UNAWARE
+		zombie.last_known_position = zombie.global_position
 
 
 ## One zombie's shout, relayed to everything in its own alarm radius.
@@ -296,6 +324,19 @@ func _sample_sight(player_position: Vector3) -> void:
 func _sample_stalker(player: Node3D) -> void:
 	_stalker_samples += 1
 
+	# Is it orbiting a goal that keeps moving, or parked on a goal it has
+	# already reached? Those look identical from the outside and want opposite
+	# fixes, so print the goal alongside the body once a second.
+	if _queue[0] == "stalker_watch" and roundi(_elapsed * 4.0) % 4 == 0:
+		var goal: Vector3 = _stalker._move_goal()
+		print("  %4.0fs  to player %5.1fm   to its own goal %5.1fm   goal %6.1f,%6.1f   %s" % [
+			_elapsed,
+			_stalker.global_position.distance_to(player.global_position),
+			_stalker.global_position.distance_to(goal),
+			goal.x, goal.z,
+			Zombie.Awareness.keys()[_stalker.awareness],
+		])
+
 	var to_stalker := _stalker.global_position - player.global_position
 	to_stalker.y = 0.0
 	var facing := -player.global_transform.basis.z
@@ -353,7 +394,7 @@ func _report() -> void:
 	var reached := order.filter(func(e: Dictionary) -> bool: return e.contact_at >= 0.0)
 	print("  reached the player: %d / %d" % [reached.size(), _tracked.size()])
 
-	if _alarms > 0 or name == "cascade":
+	if _alarms > 0 or name.ends_with("screamer") or name == "cascade":
 		print("")
 		print("  alarms raised:      %d (first at %s)"
 			% [_alarms, _seconds_or_never(_first_alarm_at)])
