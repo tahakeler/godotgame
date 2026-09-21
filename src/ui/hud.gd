@@ -137,6 +137,7 @@ func _ready() -> void:
 	_throw_arc.draw.connect(_draw_throw_arc)
 	_compass.draw.connect(_draw_compass)
 	_health_delta.draw.connect(_draw_health_delta)
+	_ready_minimap()
 
 	# The arms are moved relative to where the scene put them, so the authored
 	# gap between the reticle and its centre survives the spread maths.
@@ -157,6 +158,7 @@ func _process(delta: float) -> void:
 	_tick_noise_ring(delta)
 	_tick_crosshair(delta)
 	_tick_health_delta(delta)
+	_tick_map(delta)
 
 	# The bearing changes every time the player turns, which is constantly.
 	_compass.queue_redraw()
@@ -197,6 +199,9 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	spawner.population_changed.connect(_on_population_changed)
 	spawner.zombie_died.connect(_on_zombie_killed)
 
+	# The map needs the cave and the crowd, both read-only.
+	_bind_minimap(game, spawner)
+
 	# Seeded from the real value, or the pale bar drains from zero on the first
 	# frame and reads as damage the player never took.
 	_health_delta_value = player.health.current_health
@@ -225,6 +230,11 @@ func _on_round_started() -> void:
 	_damage_flash.color.a = 0.0
 	_weapon_status_label.text = ""
 	_damage_indicator.queue_redraw()
+
+	# A new round is a new cave to learn: nothing carries over.
+	_revealed.clear()
+	_discovered_caches.clear()
+	_contact_pings.clear()
 
 
 ## Endless has no deadline, so its clock counts up and never turns amber —
@@ -278,7 +288,16 @@ func _on_population_changed(alive: int) -> void:
 ## being spent, and light is the loudest thing the player owns that is not a
 ## gun.
 func _on_flashlight_toggled(is_on: bool) -> void:
-	_torch_label.text = "T O R C H   O N" if is_on else "T O R C H   O F F"
+	# Lit is a state; "seen further" is what the state costs. The cost is read
+	# off the torch itself rather than typed here, so tuning the bargain in one
+	# place cannot leave the HUD quoting an old figure.
+	var cost := 45
+	if _player != null and _player.flashlight != null:
+		cost = roundi((_player.flashlight.lit_visibility_scale - 1.0) * 100.0)
+	_torch_label.text = (
+		"T O R C H   O N   \u00b7   S E E N   + %d%%" % cost if is_on
+		else "T O R C H   O F F"
+	)
 	_torch_label.modulate = (
 		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
 		if is_on else Color(1.0, 1.0, 1.0)
@@ -361,6 +380,12 @@ func _on_reload_started(_duration: float) -> void:
 
 ## Name the weapon whose magazine and reserve the counts belong to.
 func _on_weapon_switched(_kind: WeaponTypes.Kind, display_name: String) -> void:
+	_build_weapon_chips()
+
+	# Flash the caption so the change is seen rather than discovered later.
+	_switch_flash = 1.0
+	_apply_switch_flash()
+
 	if _ammo_caption == null:
 		return
 	# Letter-spaced to match the caption it replaces.
@@ -859,3 +884,465 @@ func _draw_compass() -> void:
 ## to look away from the world to read is a prompt they will miss.
 func show_prompt(text: String) -> void:
 	_prompt_label.text = text
+
+
+# --- Minimap -----------------------------------------------------------------
+#
+# Drawn from the arena's own cell grid rather than from a second camera: the
+# layout is already a dictionary of Vector2i, so a map costs a dictionary
+# lookup per cell instead of a render pass, and it can never disagree with the
+# geometry the player is standing in.
+#
+# ORIENTATION — heading-up. The map rotates so that forward is up. The compass
+# strip already answers "which way is north"; the question the map has to
+# answer is "is that opening on my left the one I came in by", and a north-up
+# map makes the player do that rotation in their head while something is
+# chasing them. North stays findable: a tick rides the rim.
+#
+# REVEAL — nothing is given away at the start. A cell is remembered once the
+# player has either been next to it (minimap_touch_cells — feeling your way
+# along a wall in the dark) or looked at it down an unbroken line of open cells
+# inside minimap_sight_arc_degrees. Sight reaches further with the torch lit,
+# which is the bargain the torch makes everywhere else: you see more of the
+# cave and the cave sees more of you.
+#
+# CONTACTS — see contact_rule(). Never a wallhack.
+
+## How often the reveal sweep runs. Cheap, but not free, and the map does not
+## change meaningfully between frames at walking pace.
+const MAP_SAMPLE_INTERVAL := 0.2
+
+## Steps per cell when walking a sight line. Finer than this only finds corners
+## the player could not shoot through anyway.
+const MAP_LINE_STEP := 0.34
+
+@export_group("Minimap")
+## How many cells fit across the dial. Smaller is a closer, more legible map.
+@export var minimap_visible_cells := 13.0
+## Cells around the player revealed without needing line of sight — what you
+## would know by touch.
+@export var minimap_touch_cells := 1.6
+## How far an unlit player sees, in cells, and what the torch adds.
+@export var minimap_sight_cells := 4.0
+@export var minimap_torch_bonus_cells := 3.0
+## The cone the player is considered to be looking down.
+@export var minimap_sight_arc_degrees := 110.0
+
+@export_group("Contacts")
+## Anything nearer than this is on the map whatever it is doing: at this range
+## the player can hear it, and a marker only confirms what the mix already said.
+@export var contact_radius := 8.0
+## How long a noise a zombie made stays on the map as a stale mark.
+@export var contact_ping_lifetime := 3.5
+
+var _arena: Arena
+var _spawner: ZombieSpawner
+## The arena's cell grid, fetched once. Read-only here.
+var _occupied: Dictionary = {}
+## Vector2i -> true for every cell the player has earned.
+var _revealed: Dictionary = {}
+## Index into arena.ammo_caches -> true, once its cell has been revealed.
+var _discovered_caches: Dictionary = {}
+## Stale marks: { "position": Vector3, "remaining": float }.
+var _contact_pings: Array[Dictionary] = []
+var _map_sample_cooldown := 0.0
+## Fades the weapon caption back to normal after a switch, so the change is seen.
+var _switch_flash := 0.0
+
+@onready var _minimap: Control = %MiniMap
+@onready var _weapon_row: HBoxContainer = %WeaponRow
+
+
+## Wire the map up. Called from _ready(), after the scene exists.
+func _ready_minimap() -> void:
+	_minimap.draw.connect(_draw_minimap)
+
+
+## Take the arena and the spawner from the round being bound.
+##
+## Both are read, never written: the map is a view of the cave, and a view that
+## could move a zombie would be a bug with a very long tail.
+func _bind_minimap(game: Game, spawner: ZombieSpawner) -> void:
+	_arena = game.arena
+	_spawner = spawner
+	_revealed.clear()
+	_discovered_caches.clear()
+	_contact_pings.clear()
+
+	if _arena != null and _arena.has_method("_occupied_cells"):
+		_occupied = _arena.call("_occupied_cells")
+
+	# A groan, or a zombie noticing you, is the moment it gave its position
+	# away. That is the only reason the map is allowed to know where it was.
+	spawner.zombie_groaned.connect(_on_contact_noise)
+	spawner.zombie_noticed_player.connect(_on_contact_noise)
+
+	_build_weapon_chips()
+
+
+func _on_contact_noise(at: Vector3, _kind: ZombieTypes.Kind) -> void:
+	_contact_pings.append({"position": at, "remaining": contact_ping_lifetime})
+
+
+func _tick_map(delta: float) -> void:
+	if not _contact_pings.is_empty():
+		for ping in _contact_pings:
+			ping.remaining -= delta
+		_contact_pings = _contact_pings.filter(
+			func(ping: Dictionary) -> bool: return ping.remaining > 0.0
+		)
+
+	_map_sample_cooldown -= delta
+	if _map_sample_cooldown <= 0.0:
+		_map_sample_cooldown = MAP_SAMPLE_INTERVAL
+		sample_visibility()
+
+	if _switch_flash > 0.0:
+		_switch_flash = maxf(0.0, _switch_flash - delta)
+		_apply_switch_flash()
+
+	_minimap.queue_redraw()
+
+
+## Remember whatever the player can currently touch or see.
+##
+## Public because it is the whole reveal rule, and a test that cannot step it
+## deterministically cannot prove the map does not start fully drawn.
+func sample_visibility() -> void:
+	if _player == null or _occupied.is_empty():
+		return
+
+	var here := _player.global_position
+	var centre := _world_to_cell(here)
+	var facing := -_player.global_transform.basis.z
+	var heading := Vector2(facing.x, facing.z)
+	if heading.length_squared() < 0.0001:
+		heading = Vector2(0.0, -1.0)
+	heading = heading.normalized()
+
+	var sight := minimap_sight_cells
+	if _player.flashlight != null and _player.flashlight.is_on:
+		sight += minimap_torch_bonus_cells
+
+	var cone := cos(deg_to_rad(minimap_sight_arc_degrees * 0.5))
+	var reach := int(ceil(maxf(sight, minimap_touch_cells)))
+
+	for dx in range(-reach, reach + 1):
+		for dy in range(-reach, reach + 1):
+			var cell := centre + Vector2i(dx, dy)
+			if _revealed.has(cell) or not _occupied.has(cell):
+				continue
+
+			var offset := Vector2(float(dx), float(dy))
+			var distance := offset.length()
+			if distance <= minimap_touch_cells:
+				_revealed[cell] = true
+				continue
+
+			if distance > sight:
+				continue
+			if heading.dot(offset / maxf(distance, 0.001)) < cone:
+				continue
+			if _map_line_is_open(centre, cell):
+				_revealed[cell] = true
+
+	_discover_caches()
+
+
+## True when every cell between two cells is open floor.
+##
+## Walls in this arena are the absence of a cell, so an unbroken line of
+## occupied cells is exactly a line of sight.
+func _map_line_is_open(from: Vector2i, to: Vector2i) -> bool:
+	var start := Vector2(from)
+	var end := Vector2(to)
+	var steps := int(ceil(start.distance_to(end) / MAP_LINE_STEP))
+
+	for index in range(1, steps):
+		var point := start.lerp(end, float(index) / float(steps))
+		if not _occupied.has(Vector2i(roundi(point.x), roundi(point.y))):
+			return false
+
+	return true
+
+
+## A cache is on the map once the player has revealed the ground it stands on.
+func _discover_caches() -> void:
+	if _arena == null:
+		return
+
+	for index in _arena.ammo_caches.size():
+		if _discovered_caches.has(index):
+			continue
+		var cache: AmmoCache = _arena.ammo_caches[index]
+		if cache != null and _revealed.has(_world_to_cell(cache.global_position)):
+			_discovered_caches[index] = true
+
+
+func _world_to_cell(point: Vector3) -> Vector2i:
+	return Vector2i(roundi(point.x / Arena.CELL), roundi(point.z / Arena.CELL))
+
+
+## How many cells the player has earned so far. For tests, and nothing else.
+func revealed_cell_count() -> int:
+	return _revealed.size()
+
+
+## How many cells the cave has in total.
+func map_cell_count() -> int:
+	return _occupied.size()
+
+
+## THE MARKER RULE. A zombie is on the map only when it has already given
+## itself away:
+##
+##   * it is HUNTING — it can see the player and is tracking them live. The
+##     information is symmetric: it knows where you are, so you know where it
+##     is. That is what makes the marker a warning rather than an advantage.
+##   * it is inside contact_radius — close enough that the player can hear it.
+##     The marker confirms a direction they already half know.
+##
+## Everything else is invisible. A Stalker circling two rooms away, or a
+## Shambler that has noticed nothing, stays off the map, because the moment the
+## map shows those the game stops being about not knowing.
+##
+## Separately, a zombie that made a noise leaves a stale mark for
+## contact_ping_lifetime seconds — where it *was*, not where it is.
+func contact_rule(awareness: int, distance: float) -> bool:
+	return awareness == Zombie.Awareness.HUNTING or distance <= contact_radius
+
+
+## Everything the map is currently allowed to show.
+## Entries: { "position": Vector3, "live": bool, "age": float }.
+func visible_contacts() -> Array[Dictionary]:
+	var contacts: Array[Dictionary] = []
+
+	if _player != null and _spawner != null:
+		for child in _spawner.get_children():
+			var zombie := child as Zombie
+			if zombie == null or zombie.health.is_dead:
+				continue
+			var distance := zombie.global_position.distance_to(_player.global_position)
+			if contact_rule(zombie.awareness, distance):
+				contacts.append({
+					"position": zombie.global_position, "live": true, "age": 0.0,
+				})
+
+	for ping in _contact_pings:
+		contacts.append({
+			"position": ping.position,
+			"live": false,
+			"age": 1.0 - ping.remaining / maxf(contact_ping_lifetime, 0.001),
+		})
+
+	return contacts
+
+
+func _draw_minimap() -> void:
+	var extent: float = minf(_minimap.size.x, _minimap.size.y)
+	var centre := _minimap.size * 0.5
+	var radius := extent * 0.5 - 2.0
+
+	# The dial is drawn even with no round behind it, so the corner never looks
+	# like a piece of interface that failed to load.
+	_minimap.draw_circle(centre, radius, Color(0.03, 0.035, 0.05, 0.62))
+	_minimap.draw_arc(centre, radius, 0.0, TAU, 64, Color(0.55, 0.6, 0.7, 0.35), 1.0, true)
+
+	if _player == null or _occupied.is_empty():
+		return
+
+	var pixels_per_cell := extent / maxf(minimap_visible_cells, 1.0)
+	var here := _player.global_position
+	var player_cell := Vector2(here.x / Arena.CELL, here.z / Arena.CELL)
+
+	var facing := -_player.global_transform.basis.z
+	var forward := Vector2(facing.x, facing.z)
+	if forward.length_squared() < 0.0001:
+		forward = Vector2(0.0, -1.0)
+	forward = forward.normalized()
+	# Screen right, in world-XZ terms. With forward up this puts east on the
+	# right when the player faces north.
+	var right := Vector2(-forward.y, forward.x)
+
+	var floor_colour := Color(0.62, 0.68, 0.78, 0.3)
+	for cell in _revealed:
+		var offset := Vector2(cell) - player_cell
+		var screen := centre + Vector2(offset.dot(right), -offset.dot(forward)) * pixels_per_cell
+		if screen.distance_to(centre) > radius - pixels_per_cell * 0.62:
+			continue
+		_draw_map_cell(screen, right, forward, pixels_per_cell, floor_colour)
+
+	_draw_map_caches(centre, radius, pixels_per_cell, player_cell, right, forward)
+	_draw_map_contacts(centre, radius, pixels_per_cell, player_cell, right, forward)
+	_draw_map_north(centre, radius, right, forward)
+	_draw_map_player(centre)
+
+
+## One floor tile, turned with the map so the grid reads as a room rather than
+## as a scatter of dots.
+func _draw_map_cell(screen: Vector2, right: Vector2, forward: Vector2,
+		pixels_per_cell: float, colour: Color) -> void:
+	var half := pixels_per_cell * 0.46
+	var across := Vector2(right.dot(right), -right.dot(forward)) * half
+	var along := Vector2(forward.dot(right), -forward.dot(forward)) * half
+	_minimap.draw_colored_polygon(PackedVector2Array([
+		screen - across - along, screen + across - along,
+		screen + across + along, screen - across + along,
+	]), colour)
+
+
+## Where a world point falls on the dial, pinned to the rim when it is off the
+## edge. Returns the point and whether it had to be pinned — a pinned marker is
+## a bearing, not a position, and is drawn dimmer to say so.
+func _map_project(world: Vector3, centre: Vector2, radius: float,
+		pixels_per_cell: float, player_cell: Vector2,
+		right: Vector2, forward: Vector2) -> Dictionary:
+	var offset := Vector2(world.x / Arena.CELL, world.z / Arena.CELL) - player_cell
+	var screen := Vector2(offset.dot(right), -offset.dot(forward)) * pixels_per_cell
+	var limit := radius - 7.0
+
+	if screen.length() > limit:
+		return {"point": centre + screen.normalized() * limit, "pinned": true}
+
+	return {"point": centre + screen, "pinned": false}
+
+
+func _draw_map_caches(centre: Vector2, radius: float, pixels_per_cell: float,
+		player_cell: Vector2, right: Vector2, forward: Vector2) -> void:
+	if _arena == null:
+		return
+
+	var colour := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+
+	for index in _discovered_caches:
+		if index >= _arena.ammo_caches.size():
+			continue
+		var cache: AmmoCache = _arena.ammo_caches[index]
+		if cache == null:
+			continue
+
+		var projected := _map_project(
+			cache.global_position, centre, radius, pixels_per_cell,
+			player_cell, right, forward
+		)
+		var point: Vector2 = projected.point
+		colour.a = 0.45 if projected.pinned else 0.9
+
+		# A diamond, filled while it has rounds and hollow once it is spent.
+		# Shape rather than colour, so an empty cache reads without relying on
+		# hue — the same rule the rest of the HUD follows.
+		var diamond := PackedVector2Array([
+			point + Vector2(0.0, -5.0), point + Vector2(5.0, 0.0),
+			point + Vector2(0.0, 5.0), point + Vector2(-5.0, 0.0),
+		])
+		if cache.has_stock():
+			_minimap.draw_colored_polygon(diamond, colour)
+		else:
+			var outline := diamond.duplicate()
+			outline.append(diamond[0])
+			_minimap.draw_polyline(outline, colour, 1.5, true)
+
+
+func _draw_map_contacts(centre: Vector2, radius: float, pixels_per_cell: float,
+		player_cell: Vector2, right: Vector2, forward: Vector2) -> void:
+	var danger := GameSettings.colour(self, "danger", Color(0.9, 0.28, 0.24))
+
+	for contact in visible_contacts():
+		var projected := _map_project(
+			contact.position, centre, radius, pixels_per_cell,
+			player_cell, right, forward
+		)
+		var point: Vector2 = projected.point
+		var colour := danger
+
+		if contact.live:
+			# A solid wedge: something is there now.
+			colour.a = 0.5 if projected.pinned else 0.95
+			_minimap.draw_colored_polygon(PackedVector2Array([
+				point + Vector2(0.0, -5.5), point + Vector2(4.8, 3.5),
+				point + Vector2(-4.8, 3.5),
+			]), colour)
+		else:
+			# A widening, fading ring: something was heard here, and the older
+			# the mark the less it is worth acting on.
+			var age: float = contact.age
+			colour.a = (1.0 - age) * 0.7
+			_minimap.draw_arc(
+				point, lerpf(3.0, 9.0, age), 0.0, TAU, 20, colour, 1.2, true
+			)
+
+
+## North on the rim, so heading-up never means lost.
+func _draw_map_north(centre: Vector2, radius: float, right: Vector2,
+		forward: Vector2) -> void:
+	var north := Vector2(0.0, -1.0)
+	var direction := Vector2(north.dot(right), -north.dot(forward))
+	var point := centre + direction * (radius - 9.0)
+	_minimap.draw_string(
+		ThemeDB.fallback_font, point + Vector2(-4.0, 4.0), "N",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.886, 0.914, 0.965, 0.55)
+	)
+
+
+## The player sits at the centre pointing up, because the map turns and they
+## do not. Amber while the torch is lit, matching the torch caption.
+func _draw_map_player(centre: Vector2) -> void:
+	var colour := Color(0.95, 0.96, 0.98, 0.95)
+	if _player != null and _player.flashlight != null and _player.flashlight.is_on:
+		colour = GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+
+	_minimap.draw_colored_polygon(PackedVector2Array([
+		centre + Vector2(0.0, -6.0), centre + Vector2(4.5, 5.0),
+		centre, centre + Vector2(-4.5, 5.0),
+	]), colour)
+
+
+# --- Arsenal -----------------------------------------------------------------
+
+
+## One chip per weapon, with the slot key that selects it.
+##
+## Three separate reserves mean the counts above are only meaningful next to
+## the name of the gun they belong to, and the row also answers "what else do I
+## have" — which, with the shotgun dry, is the only question that matters. The
+## active chip is marked by a caret and by brightness, never by colour alone.
+func _build_weapon_chips() -> void:
+	if _weapon_row == null:
+		return
+
+	var kinds: Array = WeaponTypes.order()
+	if _weapon_row.get_child_count() != kinds.size():
+		for child in _weapon_row.get_children():
+			child.queue_free()
+		for index in kinds.size():
+			var chip := Label.new()
+			chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			chip.add_theme_font_size_override("font_size", 11)
+			chip.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
+			chip.add_theme_constant_override("outline_size", 2)
+			_weapon_row.add_child(chip)
+
+	for index in mini(_weapon_row.get_child_count(), kinds.size()):
+		var chip: Label = _weapon_row.get_child(index)
+		var kind: WeaponTypes.Kind = kinds[index]
+		var active := _weapon != null and _weapon.kind == kind
+		chip.text = "%s%d %s" % [
+			"▸" if active else " ", index + 1, WeaponTypes.display_name(kind)
+		]
+		chip.modulate = (
+			Color(0.96, 0.96, 0.97, 1.0) if active else Color(0.55, 0.58, 0.64, 0.6)
+		)
+
+
+## Fade the weapon caption back from the accent colour after a switch.
+##
+## Switching is the one moment the ammo counts change meaning rather than
+## value, and a number that silently becomes a different number is the easiest
+## way to fire four rounds you thought you had. The flash is short and moves
+## nothing, so it reads as confirmation rather than as an alert.
+func _apply_switch_flash() -> void:
+	if _ammo_caption == null:
+		return
+
+	var accent := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	_ammo_caption.modulate = Color(1.0, 1.0, 1.0).lerp(accent, _switch_flash)
