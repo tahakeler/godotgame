@@ -235,6 +235,15 @@ theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 15
 text = "HOSTILES  0"
 
+[node name="ObjectiveLabel" type="Label" parent="ObjectiveBlock"]
+unique_name_in_owner = true
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+text = ""
+
 [node name="TorchLabel" type="Label" parent="."]
 unique_name_in_owner = true
 anchors_preset = 2
@@ -396,7 +405,7 @@ theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.5)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 11
-text = "M A G   ·   R E S E R V E"
+text = "M A G   Â·   R E S E R V E"
 horizontal_alignment = 2
 
 

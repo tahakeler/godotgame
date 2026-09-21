@@ -30,18 +30,26 @@ enum Mode {
 	TIMED,
 	## No clock and no win. Zombies keep coming until they finish you.
 	ENDLESS,
+	## Arm three signal relays at the deep ends of the cave, then run home.
+	##
+	## Appended rather than inserted on purpose: load_settings() reads the mode
+	## back as a raw int from user://settings.cfg, so inserting an entry would
+	## silently reassign the saved preference on every existing install.
+	RELAY,
 }
 
 const MODE_NAMES := {
 	Mode.EXTRACTION: "Extraction",
 	Mode.TIMED: "Last Stand",
 	Mode.ENDLESS: "Endless",
+	Mode.RELAY: "Signal",
 }
 
 const MODE_BLURBS := {
 	Mode.EXTRACTION: "Every kill drags the rescue clock closer. Fight your way out.",
 	Mode.TIMED: "A fixed five minutes. Kills buy you nothing but breathing room.",
 	Mode.ENDLESS: "They never stop coming. Survive as long as you can.",
+	Mode.RELAY: "Three relays at the deep ends. Arming one is the loudest thing you can do.",
 }
 
 ## Graphics presets. Measured with tools/benchmark.gd at 1920x1080 with 25
@@ -104,6 +112,8 @@ const MODE_DURATIONS := {
 	Mode.EXTRACTION: 0.0,
 	Mode.TIMED: 300.0,
 	Mode.ENDLESS: 0.0,
+	# No clock. elapsed_time counts up and is the score.
+	Mode.RELAY: 0.0,
 }
 
 const DIFFICULTY_NAMES := {
