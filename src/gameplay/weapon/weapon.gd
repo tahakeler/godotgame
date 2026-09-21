@@ -41,7 +41,12 @@ signal impacted(position: Vector3, normal: Vector3, is_flesh: bool)
 ## Deliberately not `target_hit`. Game counts shots_hit from that signal and
 ## shots_fired from `fired`, and a melee hit that reported through it would
 ## push a round's accuracy above 100% without a bullet ever being spent.
-signal melee_swung(hit: bool, at: Vector3)
+## `staggered` is false when the swing landed on something that cannot be
+## staggered — a Brute. That case has to be presentable as its own thing: a
+## last resort that visibly does nothing against the enemy most likely to have
+## cornered you reads as a broken game unless the game says otherwise. The
+## weapon reports the distinction; Game decides what it sounds like.
+signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 
 @export_group("Arsenal")
 ## What the player starts a round holding.
@@ -721,7 +726,7 @@ func try_melee() -> bool:
 	if result.is_empty():
 		# A swing through empty air still reports, so the sound and the shake
 		# fire. Feedback that only exists on a hit reads as a dropped input.
-		melee_swung.emit(false, destination)
+		melee_swung.emit(false, false, destination)
 		return true
 
 	var collider: Node = result.get("collider")
