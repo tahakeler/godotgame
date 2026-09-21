@@ -500,3 +500,20 @@ text = "PLAY AGAIN"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(230, 52)
 text = "MAIN MENU"
+
+[node name="MiniMap" type="Control" parent="."]
+unique_name_in_owner = true
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -196.0
+offset_top = 24.0
+offset_right = -28.0
+offset_bottom = 192.0
+mouse_filter = 2
+
+[node name="WeaponRow" type="HBoxContainer" parent="AmmoBlock"]
+unique_name_in_owner = true
+mouse_filter = 2
+alignment = 2
+theme_override_constants/separation = 10
