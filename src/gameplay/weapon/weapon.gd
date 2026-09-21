@@ -518,7 +518,11 @@ func _tick_focus_lock(delta: float) -> void:
 ## The timer only runs while completely dry and resets the moment anything is
 ## picked up, so it can never top a player up during a fight they are winning.
 func _tick_dry_resupply(delta: float) -> void:
-	if not is_fully_dry():
+	# The floor asks the arsenal, not the hand. is_fully_dry() answers "the
+	# thing I am holding is empty", which is the HUD's question. Using it here
+	# meant an empty pistol refilled itself for free while a loaded shotgun sat
+	# in the other slot: hold the dry gun, wait, and the run never runs out.
+	if not is_arsenal_dry():
 		_dry_remaining = dry_resupply_interval
 		return
 
@@ -708,6 +712,26 @@ func is_reloading() -> bool:
 ## True when the weapon cannot fire and cannot be reloaded back into use.
 func is_fully_dry() -> bool:
 	return magazine_ammo <= 0 and reserve_ammo <= 0
+
+
+## True when nothing in the whole arsenal can be fired, in hand or holstered.
+##
+## The slot dictionary is only written back on a swap, so the weapon currently
+## equipped is asked through its live fields and the rest through their slots.
+## Reading the slot for the equipped kind would answer with whatever it held at
+## the last swap, which is the state the player has spent the round changing.
+func is_arsenal_dry() -> bool:
+	if not is_fully_dry():
+		return false
+
+	for slot_kind in _slots:
+		if slot_kind == kind:
+			continue
+		var slot: Dictionary = _slots[slot_kind]
+		if int(slot.magazine) > 0 or int(slot.reserve) > 0:
+			return false
+
+	return true
 
 
 func set_input_enabled(enabled: bool) -> void:
