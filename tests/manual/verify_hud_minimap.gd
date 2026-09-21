@@ -97,8 +97,12 @@ func test_marker_rule_only_covers_hunters_and_close_contacts() -> void:
 		_failures.append("an unaware zombie across the map was shown — that is a wallhack")
 	elif hud.contact_rule(Zombie.Awareness.INVESTIGATING, 40.0):
 		_failures.append("an investigating zombie across the map was shown")
-	elif not hud.contact_rule(Zombie.Awareness.UNAWARE, 2.0):
-		_failures.append("a zombie at arm's length was not shown")
+	elif hud.contact_rule(Zombie.Awareness.UNAWARE, 2.0):
+		_failures.append(
+			"an unaware zombie at arm's length was shown — the dial is a radar"
+		)
+	elif not hud.contact_rule(Zombie.Awareness.INVESTIGATING, 2.0):
+		_failures.append("a zombie hunting for the player nearby was not shown")
 	else:
 		print("PASS: markers cover hunters and close contacts, and nothing else")
 
