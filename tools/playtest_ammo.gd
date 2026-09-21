@@ -110,6 +110,13 @@ func _process(delta: float) -> bool:
 		# won, which is how it reported an ammunition supply that never ran out.
 		_game.mode = GameSettings.Mode.ENDLESS
 		_game.start_round()
+		# start_round calls _apply_mode, which puts the mode back to whatever the
+		# settings say — so asking for endless before it is not enough. Pushing
+		# the win clock past the measurement window is what actually stops the
+		# round ending and the spawner freezing mid-measurement. A previous run
+		# spent its last sixty seconds on a round that had already been won.
+		_game.round_duration = _seconds * 4.0
+		_game.time_remaining = _game.round_duration
 		_instrument()
 		return false
 
@@ -117,10 +124,7 @@ func _process(delta: float) -> bool:
 	# time scale, so the clock and the game agree without a correction here.
 	_elapsed += delta
 
-	if _pending_upgrade >= 0:
-		var upgrade := _pending_upgrade
-		_pending_upgrade = -1
-		_game._apply_upgrade(upgrade)
+	_keep_playing()
 
 	_last_delta = delta
 	_drive(delta)
@@ -131,6 +135,31 @@ func _process(delta: float) -> bool:
 
 	_report()
 	return true
+
+
+## Refuse to sit in a paused tree.
+##
+## A level-up pauses the game and waits for a choice nobody is here to make.
+## Taking the offer a frame late was not enough: the menu can re-pause, and a
+## paused tree stops `Weapon._process`, so `_cooldown_remaining` never ticks and
+## every shot is refused. Twice now that has shown up as a run reporting 93%
+## engaged time and 25 rounds fired in three minutes — the probe looked busy and
+## was frozen. Checking the condition every frame rather than reacting to the
+## event is the difference between handling the case and hoping.
+##
+## This is a probe, so it is allowed to be blunt about it.
+func _keep_playing() -> void:
+	if _pending_upgrade >= 0:
+		var upgrade := _pending_upgrade
+		_pending_upgrade = -1
+		_game._apply_upgrade(upgrade)
+
+	if not paused:
+		return
+
+	paused = false
+	_game.weapon.set_input_enabled(true)
+	_game.player.set_look_enabled(true)
 
 
 func _instrument() -> void:
@@ -277,14 +306,41 @@ func _drive(_unused: float) -> void:
 		_blocked_cooldown += _last_delta
 
 
-## True when nothing solid sits between the eye and the aim point.
+## True when a shot taken now would reach something worth hitting.
+##
+## Asks the question the same way the weapon does — mask `1 | 4`, the owner
+## excluded — rather than inventing a second rule. The previous version used
+## mask 1 and treated "nothing hit" as visible, which was wrong twice over: a
+## nearer zombie between you and the one you picked counted as a clear shot,
+## and, far worse, a zombie standing *on* you counted as cover.
+##
+## That second case is why an earlier run reported 9.4 engaged seconds out of
+## 180 while nineteen of twenty zombies were hunting and within three metres.
+## `intersect_ray` does not report a shape whose interior the ray starts in
+## unless `hit_from_inside` is set, so a target close enough to be touching the
+## player was invisible to a query that worked perfectly at ten metres — the
+## probe was blind at exactly the range the game is most dangerous.
 func _can_see(aim: Vector3) -> bool:
 	var origin: Vector3 = _game.player.head.global_position
+
+	# A ray this short is degenerate, and anything this close is in contact.
+	if origin.distance_to(aim) < 0.2:
+		return true
+
 	var query := PhysicsRayQueryParameters3D.create(origin, aim)
-	# World geometry only. Anything it stops on is cover.
-	query.collision_mask = 1
+	query.collision_mask = 1 | 4
 	query.exclude = [_game.player.get_rid()]
-	return _game.get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	query.hit_from_inside = true
+
+	var hit := _game.get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return true
+
+	# Whatever the ray stopped on is what the bullet would stop on. If that is
+	# something that can be damaged, the shot is worth taking even when it is
+	# not the zombie that was aimed at.
+	var collider: Node = hit.get("collider")
+	return collider != null and collider.has_method("take_damage")
 
 
 ## Which weapon the autopilot reaches for, given the range and what is loaded.
