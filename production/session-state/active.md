@@ -2,67 +2,70 @@
 
 <!-- STATUS -->
 Epic: Early Access push
-Feature: Map connectivity + arsenal + zombie archetypes
-Task: Three agents running in parallel; lead reviewing
+Feature: HUD/minimap and cave dressing
+Task: Two agents running; lead reviewing and integrating
 <!-- /STATUS -->
 
-## Where the project is
+## Landed on main
 
-Phases 1-3 of the 42-phase brief are merged to `main`:
+| Commit | What |
+|---|---|
+| `a7ac207` | Phase 2 movement: stance system, step assist, speed ladder |
+| `e2fb635` | Phase 3 collision: dressing solid, collision audit gated |
+| `0254195` | tools: route + containment audits |
+| `882ed56` | tools: zombie stress test across every spawn point |
+| weapons | three guns, three separate reserves |
+| `26b616d` | map: outer ring, chokepoints 22 -> 14 |
+| `eaba3bc` | interaction: E, medkits, cache resupply as a hold |
+| `e794e80` | zombies: Stalker + Screamer, per-kind rules |
+| menus | controls screen generated from the InputMap |
+| `ed58f4a` | flashlight now costs 45% more sight range |
 
-- Phase 1 camera — merged `3ad9a52`
-- Phase 2 movement (stance system, step assist, speed ladder) — merged `a7ac207`
-- Phase 3 collision (dressing made solid, collision audit gated) — merged `e2fb635`
+## Current measurements
 
-## Baselines measured before the map rebuild
-
-Recorded so the map agent's work can be judged against numbers rather than
-against a screenshot.
-
-| Measure | Value | Tool |
-|---|---|---|
-| walkable cells | 190 | `tools/map_graph.gd` |
-| connected areas | 1 | `tools/map_graph.gd` |
-| dead-end cells | 2 | `tools/map_graph.gd` |
-| terminal arms (must backtrack) | 4 | read from the ASCII map |
-| chokepoints (no way round) | 22 — 12% of cells | `tools/audit_routes.gd` |
-| zombie spawns that reach the player | 55/55 | `tools/audit_routes.gd` |
-| caches the player can reach | 6/6 | `tools/audit_routes.gd` |
-| worst detour | 1.5x straight line | `tools/audit_routes.gd` |
-| containment | 184 cells x 16 sweeps, 0 escapes | `tools/audit_collision.gd` |
-| frame time | ~12.4ms mean at 22 zombies (budget 16.6) | `tools/benchmark.gd` |
-
-The headline problem is the four terminal arms and the 22 chokepoints: the map
-is a plus-shape with two rings, so most of it can only be entered and left the
-same way.
+| Measure | Value |
+|---|---|
+| walkable cells | 238 |
+| connected areas | 1 |
+| chokepoints | 14 (6% of cells) |
+| zombie spawns reaching player | 55/55 |
+| caches reachable | 8/8 |
+| containment | 232 cells x 16 sweeps, 0 escapes |
+| frame time | 6.92ms mean (budget 16.6) |
+| stress: 55 zombies at once | 6.95ms mean, all close on player |
 
 ## Agents in flight
 
-Each in its own git worktree, on its own branch, with non-overlapping files.
+| Agent | Branch | Owns |
+|---|---|---|
+| ui-programmer | `feat/hud-minimap` | `src/ui/hud.*` |
+| godot-specialist | `feat/cave-dressing` | `src/arena/arena.gd` |
 
-| Agent | Branch | Owns | Must not touch |
-|---|---|---|---|
-| godot-specialist | `feat/map-connectivity` | `src/arena/arena.gd` | weapons, hud, zombies |
-| gameplay-programmer | `feat/weapon-arsenal` | `src/gameplay/weapon/*`, input map, ammo readout | arena, zombies |
-| ai-programmer | `feat/zombie-archetypes` | `src/gameplay/zombie/*` | arena, weapons, hud |
+## Lessons that changed how this is run
 
-Known merge hazard: all three may add a `run_step` line to `tools/check.sh`.
-Expect a small conflict there and resolve by keeping every step.
+- Agents have a hard ~20-turn ceiling. Three lost all work by hitting it with
+  nothing committed. Every brief now orders a commit the moment the gate is
+  green, and resumption messages repeat it.
+- A session-wide rate limit killed four agents simultaneously. Salvage by
+  committing their worktrees from the lead session with `git -C <worktree>`.
+- Open-ended design-and-explore tasks fail at this turn budget. The map agent
+  burned two full budgets producing nothing; the ring was implemented directly
+  by the lead in a fraction of the time. Briefs must be prescriptive.
 
-## Sequencing still to respect
+## Still to do
 
-- Navmesh and zombie traversal verification wait for the map to land.
-- Spawn-zone placement waits for the map.
-- Minimap waits for the map.
-- HUD/minimap pass waits for the arsenal, because it will own `hud.gd` after.
-- Combat feedback polish waits for the weapon systems to be reliable.
+- Objectives and progression (the round is currently a timed hold-out)
+- Exploration rewards beyond the two alcove medkits
+- Audio pass: weapon sounds per kind, zombie kind voices, spatial cues
+- Performance pass and a full playthrough
+- Bug hunt, final polish, readiness review
 
-## Decisions taken without asking
+## Known open items
 
-- The Kenney Modular Dungeon Kit was NOT downloaded. The cave kit has 25 unused
-  models (`corridor-junction`, the whole `corridor-wide-*` family,
-  `corridor-transition`, the three `gate*` pieces, `ladder`), which is far more
-  headroom than the map currently uses and carries no risk of clashing with the
-  established art direction. Revisit only if the cave kit runs out.
-- The user's colour grade, procedural stone shader and timber stairs are
-  treated as fixed art direction and preserved.
+- The pistol viewmodel is Kenney's default purple/white and clashes badly with
+  the grounded cave palette. Needs a tint pass.
+- The ceiling reads as flat black in gameplay screenshots.
+- `Medkit.spawn()` exists but nothing is placed in the level yet — assigned to
+  the cave dressing agent.
+- 191 duplicate asset files (`* 2.glb`, 3.5MB, byte-identical) are gitignored
+  and still on disk.

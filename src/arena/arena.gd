@@ -425,6 +425,79 @@ const PROPS := [
 	{"model": "crate-small", "position": Vector3(-2.0, 0, -1.5), "rotation": 88},
 ]
 
+## Thresholds. A gate frame standing where a corridor changes its mind about
+## where it is going — an arm leaving the arena, the ring turning a corner,
+## the last stretch before a terminal chamber.
+##
+## They carry no collider and sit in SHELL_BACKED on purpose, exactly as the
+## doorway lintels do: the kit's gate is a full cell wide, so its legs stand
+## inside the shell walls the corridor already has, and its arch is overhead.
+## Giving it a fitted collider would be worse than useless — MeshCollision.fit
+## boxes a mesh by its bounds, and the box around an arch is a wall. That would
+## seal the corridor the gate is supposed to announce.
+##
+## Probed openings (tools/probe_openings.gd): `gate`, `gate-rock` and
+## `gate-metal-bars` are all walled -X/+X and open -Z/+Z, so an unrotated one
+## frames a corridor running along Z and a quarter turn frames one along X.
+const LANDMARKS := [
+	# The four arm mouths. Rock arches, because leaving the arena should read
+	# as going deeper into the cave rather than through built structure.
+	{"model": "gate-rock", "cell": Vector2i(0, 3), "rotation": 0},
+	{"model": "gate-rock", "cell": Vector2i(0, -3), "rotation": 0},
+	{"model": "gate-rock", "cell": Vector2i(3, 0), "rotation": 90},
+	{"model": "gate-rock", "cell": Vector2i(-3, 0), "rotation": 90},
+
+	# The ring's four corners, marked one cell short of the turn so the frame
+	# is something you walk towards rather than something you are already
+	# standing in. Timbered rather than rock: the ring is the part of the map
+	# that was cut, and it should not read as the same place as the arms.
+	{"model": "gate", "cell": Vector2i(6, 7), "rotation": 90},
+	{"model": "gate", "cell": Vector2i(-6, 7), "rotation": 90},
+	{"model": "gate", "cell": Vector2i(6, -7), "rotation": 90},
+	{"model": "gate", "cell": Vector2i(-6, -7), "rotation": 90},
+
+	# The two long terminal branches. Barred gates, the only two in the cave:
+	# whatever was down here was worth shutting in, and seeing bars means you
+	# have committed to a walk with no way through at the end of it.
+	{"model": "gate-metal-bars", "cell": Vector2i(0, 9), "rotation": 0},
+	{"model": "gate-metal-bars", "cell": Vector2i(-8, 0), "rotation": 90},
+]
+
+## Flat floor slabs strewn along the ring, which is otherwise forty-eight
+## near-identical corridor cells and the most obviously modular run in the map.
+##
+## `template-floor-detail` probes open on all four sides — it is a floor tile,
+## not a wall — so it changes what the ground looks like without changing
+## where anything can walk. Scale and yaw vary per entry so no two read as the
+## same stamped piece, and they cluster rather than spacing evenly: an even
+## rhythm is just a different kind of repetition.
+const RING_DEBRIS := [
+	{"cell": Vector2i(-4, 7), "offset": Vector2(1.1, -0.9), "rotation": 14, "scale": 0.46},
+	{"cell": Vector2i(-3, 7), "offset": Vector2(-0.8, 1.2), "rotation": 122, "scale": 0.34},
+	{"cell": Vector2i(3, 7), "offset": Vector2(0.4, 1.0), "rotation": -63, "scale": 0.52},
+	{"cell": Vector2i(5, 7), "offset": Vector2(-1.2, -1.1), "rotation": 201, "scale": 0.29},
+	{"cell": Vector2i(7, 4), "offset": Vector2(0.9, 0.6), "rotation": 47, "scale": 0.44},
+	{"cell": Vector2i(7, -3), "offset": Vector2(-1.0, -0.7), "rotation": 158, "scale": 0.37},
+	{"cell": Vector2i(4, -7), "offset": Vector2(1.2, 0.8), "rotation": -28, "scale": 0.5},
+	{"cell": Vector2i(-2, -7), "offset": Vector2(-0.6, 1.1), "rotation": 96, "scale": 0.32},
+	{"cell": Vector2i(-5, -7), "offset": Vector2(0.7, -1.2), "rotation": 173, "scale": 0.48},
+	{"cell": Vector2i(-7, -3), "offset": Vector2(-1.1, 0.5), "rotation": -84, "scale": 0.36},
+	{"cell": Vector2i(-7, 3), "offset": Vector2(0.8, 1.0), "rotation": 33, "scale": 0.42},
+	{"cell": Vector2i(-7, 5), "offset": Vector2(-0.9, -0.8), "rotation": 141, "scale": 0.31},
+]
+
+## The alcoves, and what standing in one pays you.
+##
+## Both are a single cell at the end of a walk with nothing else on it. The two
+## long branches have supply crates; these two had nothing at all, which made
+## them a punishment for exploring. A medkit is the right size of payout —
+## it costs two seconds of standing still to use, so it is still a decision,
+## and it is worth the detour without making the detour compulsory.
+const MEDKIT_PLACEMENTS := [
+	{"cell": Vector2i(0, -12), "offset": Vector3(0.0, 0.0, -1.0)},
+	{"cell": Vector2i(16, 0), "offset": Vector3(1.0, 0.0, 0.0)},
+]
+
 ## Retain the atlas detail in neutral stone; world-space mottling spans seams.
 const STONE_SHADER := """
 shader_type spatial;
@@ -492,10 +565,14 @@ void fragment() {
 @export_group("Dressing")
 ## Overhead beams where corridors meet chambers.
 @export var doorways_enabled := true
+## Gate frames at the thresholds, and floor debris along the ring.
+@export var landmarks_enabled := true
 
 @export_group("Caches")
 ## The menu backdrop has no player to collect anything, so it skips them.
 @export var caches_enabled := true
+## Field dressings in the two alcoves. Off for the menu backdrop with them.
+@export var medkits_enabled := true
 
 var spawn_points: Array[Vector3] = []
 ## Chamber index for each entry in spawn_points, parallel array.
@@ -534,7 +611,10 @@ func _ready() -> void:
 		_build_ceiling()
 
 	_build_caches()
+	_build_medkits()
 	_build_doorways()
+	_build_landmarks()
+	_build_ring_debris()
 
 	if dust_enabled and quality >= GameSettings.Quality.MEDIUM:
 		_build_dust()
@@ -732,6 +812,33 @@ const CHAMBER_IDENTITY := {
 	Vector2i(0, -8): {"color": Color(1.0, 0.87, 0.72), "energy": 2.7},
 	Vector2i(12, 0): {"color": Color(0.91, 0.94, 1.0)},
 	Vector2i(-11, 0): {"color": Color(0.84, 0.90, 1.0), "energy": 2.5},
+
+	# The arena. The only genuinely warm light in the cave, and the brightest:
+	# every other place in the map is described by how it differs from here.
+	Vector2i(0, 0): {"color": Color(1.0, 0.86, 0.66), "energy": 3.8},
+
+	# The four crossroads where an arm meets the ring, each a different
+	# temperature. Standing in one and looking down the ring, the next corner
+	# is a visibly different colour from the one behind you, which is the whole
+	# point — a lap of the ring should never look like the same corner twice.
+	Vector2i(7, 0): {"color": Color(1.0, 0.94, 0.74), "energy": 2.4, "range": 10.0},
+	Vector2i(-7, 0): {"color": Color(0.78, 0.88, 1.0), "energy": 2.4, "range": 10.0},
+	Vector2i(0, 4): {"color": Color(0.88, 0.96, 0.92), "energy": 2.2, "range": 9.5},
+	Vector2i(0, -4): {"color": Color(1.0, 0.82, 0.70), "energy": 2.2, "range": 9.5},
+
+	# The ring's four corners. Paired by bearing rather than all four distinct:
+	# north reads cold and south reads warm, so a glance down a straight tells
+	# you which half of the map you are in before you can see the corner
+	# itself, and the east/west split within each pair tells you which corner.
+	Vector2i(7, 7): {"color": Color(0.82, 0.93, 1.0), "energy": 2.0, "range": 9.0},
+	Vector2i(-7, 7): {"color": Color(0.90, 0.92, 1.0), "energy": 1.7, "range": 8.5},
+	Vector2i(7, -7): {"color": Color(1.0, 0.88, 0.70), "energy": 2.0, "range": 9.0},
+	Vector2i(-7, -7): {"color": Color(1.0, 0.80, 0.62), "energy": 1.7, "range": 8.5},
+
+	# The alcoves. Dim and close, so a medkit's green glow is the brightest
+	# thing in them and carries down the corridor as the reason to walk it.
+	Vector2i(0, -12): {"color": Color(1.0, 0.85, 0.68), "energy": 0.7, "range": 5.0},
+	Vector2i(16, 0): {"color": Color(0.86, 0.90, 1.0), "energy": 0.7, "range": 5.0},
 }
 
 ## Combine a piece's model default with any chamber-specific override for its
@@ -966,6 +1073,64 @@ func _build_props() -> void:
 		# these are 0.35m. Without it they were scenery you walked through.
 		MeshCollision.fit(instance)
 
+
+## Stand a gate frame at each threshold.
+##
+## Built after the navmesh bake, like the lintels. These carry no collision and
+## contribute no walkable surface; they exist to be seen from down a corridor.
+func _build_landmarks() -> void:
+	if not landmarks_enabled:
+		return
+
+	for entry in LANDMARKS:
+		var instance := _instantiate(CAVE_PATH % entry.model)
+		if instance == null:
+			continue
+
+		instance.position = _cell_to_world(entry.cell)
+		instance.rotation.y = deg_to_rad(entry.rotation)
+		instance.name = "Landmark_%d_%d" % [entry.cell.x, entry.cell.y]
+		_geometry_root.add_child(instance)
+		# Tinted to the identity of the cell it stands in, so the frame belongs
+		# to the place it announces rather than floating free of it.
+		_tint_rock(instance, _lighting_profile_for(CORRIDOR, entry.cell).color)
+		instance.add_to_group(SHELL_BACKED)
+
+
+## Scatter floor slabs down the ring.
+##
+## Flat and lying on the floor the player already walks on, so they need no
+## collider of their own — the shell and the ground underneath carry it.
+func _build_ring_debris() -> void:
+	if not landmarks_enabled:
+		return
+
+	for entry in RING_DEBRIS:
+		var instance := _instantiate(CAVE_PATH % "template-floor-detail")
+		if instance == null:
+			continue
+
+		var centre := _cell_to_world(entry.cell)
+		instance.position = centre + Vector3(entry.offset.x, 0.0, entry.offset.y)
+		instance.rotation.y = deg_to_rad(entry.rotation)
+		instance.scale = Vector3.ONE * entry.scale
+		instance.name = "RingDebris_%d_%d" % [entry.cell.x, entry.cell.y]
+		_geometry_root.add_child(instance)
+		_tint_rock(instance, _lighting_profile_for(CORRIDOR, entry.cell).color)
+		instance.add_to_group(SHELL_BACKED)
+
+
+## Leave a field dressing in each alcove.
+##
+## After the bake, for the same reason the caches are: a pickup is a trigger
+## volume and a crate, and neither belongs in the walkable surface.
+func _build_medkits() -> void:
+	if not medkits_enabled:
+		return
+
+	for entry in MEDKIT_PLACEMENTS:
+		var kit := Medkit.spawn(self, _cell_to_world(entry.cell) + entry.offset)
+		kit.name = "Medkit_%d_%d" % [entry.cell.x, entry.cell.y]
 
 ## Place a resupply cache in each of the chambers that has one.
 ##
