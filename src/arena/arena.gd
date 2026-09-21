@@ -37,7 +37,7 @@ const CROSS := "corridor-intersection"
 const DEAD_END := "corridor-end"
 
 ## Interchangeable sculpts of the same chamber: identical footprint, identical
-## openings, different rock. Measured, not assumed — see tools/measure_models.
+## openings, different rock. Measured, not assumed â see tools/measure_models.
 const VARIANTS := {
 	CENTRE_ROOM: ["room-large", "room-large-variation"],
 	OUTER_ROOM: ["room-small", "room-small-variation"],
@@ -81,7 +81,7 @@ const SPAWN_SPREAD := [
 ## read off a render. The kit's rooms have decorative indentations that look
 ## like doorways from above and are solid rock, an unrotated corridor runs
 ## along X, and `corridor-corner` reads as walled on all four sides at head
-## height — which is why it is not used here despite being exactly the piece
+## height â which is why it is not used here despite being exactly the piece
 ## the layout would seem to want.
 ##
 ## Corridor footprints deliberately run longer than the 4m piece so they lap
@@ -194,7 +194,7 @@ const LAYOUT := [
 	# chambers they already pass through. It is what turns the arms into routes:
 	# you can run the long way round, come back at something from behind, or
 	# reach the east arm without ever entering the centre. The arm TIPS are
-	# still terminal, deliberately — those are the deep rooms worth the walk,
+	# still terminal, deliberately â those are the deep rooms worth the walk,
 	# and a map with no ends has nowhere to hide anything.
 	#
 	# It sits at radius 7 rather than further out because the ring has to be
@@ -248,8 +248,8 @@ const LAYOUT := [
 	{"model": CORRIDOR, "cell": Vector2i(-7, 5), "rotation": 90},
 	{"model": CORRIDOR, "cell": Vector2i(-7, 6), "rotation": 90},
 
-	# The ring's corners. corridor-corner is unusable — the probe reports it
-	# walled on all four sides — so the four-way piece stands in, with two of
+	# The ring's corners. corridor-corner is unusable â the probe reports it
+	# walled on all four sides â so the four-way piece stands in, with two of
 	# its mouths facing rock. The collision shell seals those, because it walls
 	# any cell edge whose neighbour is not walkable.
 	{"model": CROSS, "cell": Vector2i(7, 7), "rotation": 0},
@@ -269,7 +269,7 @@ const LAYOUT := [
 ## Chambers zombies arrive from.
 ##
 ## Every outer chamber, so pressure can come from any bearing. Which one is
-## used for a given spawn is decided at runtime — see pick_spawn_point.
+## used for a given spawn is decided at runtime â see pick_spawn_point.
 const SPAWN_CELLS := [
 	Vector2i(0, 7), Vector2i(0, 12), Vector2i(-5, 0), Vector2i(5, 0),
 	Vector2i(0, -8), Vector2i(-4, 4), Vector2i(5, 4), Vector2i(-4, -4),
@@ -302,13 +302,13 @@ const NAV_SOURCE_GROUP := "navmesh_source"
 const NAV_HEIGHT := 0.05
 
 ## Rock formations used as cover in the central room. Scaled below full wall
-## height so they break sightlines without turning the arena into a maze — the
+## height so they break sightlines without turning the arena into a maze â the
 ## concept's anti-pillars rule out anything that makes turtling viable.
 const COVER := [
 	# Moved clear of the south-east ramp, which it was standing 0.4m inside.
 	{"position": Vector3(-7.3, 0, -4.8), "rotation": 18, "scale": 0.62},
 	# Pulled south off the north ramp's landing, which it stood 0.3m inside.
-	# Invisible until all six of these were given distinct names — five of them
+	# Invisible until all six of these were given distinct names â five of them
 	# had been skipped by the placement audit entirely.
 	{"position": Vector3(7.2, 0, 2.0), "rotation": -110, "scale": 0.7},
 	# Moved clear of the raised decks below, which would otherwise have rock
@@ -343,8 +343,8 @@ const STRINGER_THICKNESS := 0.22
 ## The kit's doorway lintel. It hangs from 3.25m, clear of head height.
 const DOORWAY_BEAM := "gate-overhang"
 
-## Things that are drawn here but whose collision comes from somewhere else —
-## the cave's box shell, a deck body, a ramp body — or that are out of reach
+## Things that are drawn here but whose collision comes from somewhere else â
+## the cave's box shell, a deck body, a ramp body â or that are out of reach
 ## and need none at all.
 ##
 ## Declared rather than inferred so that tools/audit_collision.gd can hold
@@ -374,7 +374,7 @@ const PLATFORMS := [
 		"ramp_from": Vector2(-5.5, -5.0),
 	},
 	# There were three of these. The third sat in an outer chamber and kept
-	# landing on that chamber's spawn points and its supply crate — the outer
+	# landing on that chamber's spawn points and its supply crate â the outer
 	# rooms are 9m across and a deck plus its ramp is most of that. Two decks in
 	# the arena, where fights actually concentrate, is the better trade.
 ]
@@ -383,7 +383,7 @@ const PLATFORMS := [
 ##
 ## Deliberately not in the central arena. Ammunition has to be somewhere the
 ## player must travel to, or it is just a slower version of starting with more
-## — the point is that resupplying costs you the ground you were holding.
+## â the point is that resupplying costs you the ground you were holding.
 ##
 ## Spread across four bearings so no single loop collects them all, and none of
 ## them is in a dead-end alcove: a cache you can only reach down a corridor
@@ -426,13 +426,13 @@ const PROPS := [
 ]
 
 ## Thresholds. A gate frame standing where a corridor changes its mind about
-## where it is going — an arm leaving the arena, the ring turning a corner,
+## where it is going â an arm leaving the arena, the ring turning a corner,
 ## the last stretch before a terminal chamber.
 ##
 ## They carry no collider and sit in SHELL_BACKED on purpose, exactly as the
 ## doorway lintels do: the kit's gate is a full cell wide, so its legs stand
 ## inside the shell walls the corridor already has, and its arch is overhead.
-## Giving it a fitted collider would be worse than useless — MeshCollision.fit
+## Giving it a fitted collider would be worse than useless â MeshCollision.fit
 ## boxes a mesh by its bounds, and the box around an arch is a wall. That would
 ## seal the corridor the gate is supposed to announce.
 ##
@@ -466,8 +466,8 @@ const LANDMARKS := [
 ## Flat floor slabs strewn along the ring, which is otherwise forty-eight
 ## near-identical corridor cells and the most obviously modular run in the map.
 ##
-## `template-floor-detail` probes open on all four sides — it is a floor tile,
-## not a wall — so it changes what the ground looks like without changing
+## `template-floor-detail` probes open on all four sides â it is a floor tile,
+## not a wall â so it changes what the ground looks like without changing
 ## where anything can walk. Scale and yaw vary per entry so no two read as the
 ## same stamped piece, and they cluster rather than spacing evenly: an even
 ## rhythm is just a different kind of repetition.
@@ -490,9 +490,25 @@ const RING_DEBRIS := [
 ##
 ## Both are a single cell at the end of a walk with nothing else on it. The two
 ## long branches have supply crates; these two had nothing at all, which made
-## them a punishment for exploring. A medkit is the right size of payout —
+## them a punishment for exploring. A medkit is the right size of payout â
 ## it costs two seconds of standing still to use, so it is still a decision,
 ## and it is worth the detour without making the detour compulsory.
+## Where each signal relay stands, and what the HUD calls it.
+##
+## The three furthest terminal chambers from the origin. The south WIDE_ROOM at
+## (0,-8) is deliberately not one: it is only eight cells out and it sits on the
+## route to the southern ring, so it is the chamber the player passes through
+## anyway. Three relays that each require a dedicated trip is the point.
+##
+## Offsets mirror CACHE_OFFSET's reasoning — clear of every point in
+## SPAWN_SPREAD, and on the opposite side from the chamber's cache so the player
+## is never made to choose between standing in a crate and standing in a relay.
+const RELAY_PLACEMENTS := [
+	{"cell": Vector2i(0, 12), "offset": Vector3(-2.8, 0.0, 0.0), "label": "DEEP NORTH"},
+	{"cell": Vector2i(-11, 0), "offset": Vector3(0.0, 0.0, 2.8), "label": "WEST HALL"},
+	{"cell": Vector2i(12, 0), "offset": Vector3(0.0, 0.0, 2.8), "label": "EAST HALL"},
+]
+
 const MEDKIT_PLACEMENTS := [
 	{"cell": Vector2i(0, -12), "offset": Vector3(0.0, 0.0, -1.0)},
 	{"cell": Vector2i(16, 0), "offset": Vector3(1.0, 0.0, 0.0)},
@@ -579,6 +595,9 @@ var spawn_points: Array[Vector3] = []
 var spawn_chambers: Array[int] = []
 ## Resupply points, for Game to connect to.
 var ammo_caches: Array[AmmoCache] = []
+## Built unconditionally, because the objective controller decides whether the
+## mode uses them. A relay in a mode that does not need one is a cold prop.
+var signal_relays: Array[SignalRelay] = []
 
 var _rng := RandomNumberGenerator.new()
 var _geometry_root: Node3D
@@ -611,6 +630,7 @@ func _ready() -> void:
 		_build_ceiling()
 
 	_build_caches()
+	_build_relays()
 	_build_medkits()
 	_build_doorways()
 	_build_landmarks()
@@ -621,7 +641,7 @@ func _ready() -> void:
 
 
 ## Turn the post-processing that the benchmark showed to be expensive on or off.
-## The geometry and lighting layout stay identical across presets — only the
+## The geometry and lighting layout stay identical across presets â only the
 ## effects that cost frames change, so Performance looks flatter but never
 ## different enough to play differently.
 func _apply_quality() -> void:
@@ -653,8 +673,8 @@ func get_play_radius() -> float:
 ## Choose where the next zombie comes from.
 ##
 ## Uniform random across every chamber sounds fair and plays badly. It puts
-## roughly as many zombies in front of the player as behind — so they appear
-## out of nothing in plain view — and with no memory it will happily use the
+## roughly as many zombies in front of the player as behind â so they appear
+## out of nothing in plain view â and with no memory it will happily use the
 ## same doorway five times running, which reads as a spawn closet rather than a
 ## cave full of things.
 ##
@@ -786,7 +806,7 @@ func _turned(footprint: Vector2, rotation_degrees: float) -> Vector2:
 
 
 ## Fallback lighting per piece type, keyed by model. Used for every layout
-## cell that CHAMBER_IDENTITY does not name explicitly below — which is
+## cell that CHAMBER_IDENTITY does not name explicitly below â which is
 ## every plain corridor cell, and the safety net for any piece type this
 ## table has not been taught a chamber identity for.
 ##
@@ -820,7 +840,7 @@ const CHAMBER_IDENTITY := {
 	# The four crossroads where an arm meets the ring, each a different
 	# temperature. Standing in one and looking down the ring, the next corner
 	# is a visibly different colour from the one behind you, which is the whole
-	# point — a lap of the ring should never look like the same corner twice.
+	# point â a lap of the ring should never look like the same corner twice.
 	Vector2i(7, 0): {"color": Color(1.0, 0.94, 0.74), "energy": 2.4, "range": 10.0},
 	Vector2i(-7, 0): {"color": Color(0.78, 0.88, 1.0), "energy": 2.4, "range": 10.0},
 	Vector2i(0, 4): {"color": Color(0.88, 0.96, 0.92), "energy": 2.2, "range": 9.5},
@@ -859,7 +879,7 @@ func _add_lighting(model: String, cell: Vector2i, profile: Dictionary) -> void:
 	# Corridors are lit every few cells rather than every cell. With the map at
 	# its current size that is the difference between roughly ninety lights and
 	# nearly three hundred, and a run of evenly spaced lamps reads better than
-	# a continuous strip anyway — the dark stretches between them are what make
+	# a continuous strip anyway â the dark stretches between them are what make
 	# a corridor feel long.
 	if model == CORRIDOR and posmod(cell.x + cell.y, CORRIDOR_LIGHT_SPACING) != 0:
 		return
@@ -871,7 +891,7 @@ func _add_lighting(model: String, cell: Vector2i, profile: Dictionary) -> void:
 	light.omni_range = profile.range
 	light.shadow_enabled = false
 
-	# Only the arena itself casts shadows — tied to the cell rather than the
+	# Only the arena itself casts shadows â tied to the cell rather than the
 	# model, so the deep north chamber (the same room-large piece) does not
 	# quietly double that cost. The cost is worth it where the player actually
 	# fights, and invisible everywhere else.
@@ -1043,7 +1063,7 @@ func _build_cover() -> void:
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		instance.scale = Vector3.ONE * entry.scale
 		# Numbered, because add_child renames a duplicate name to something
-		# generated — and the tools that look for these in the live tree find
+		# generated â and the tools that look for these in the live tree find
 		# them by name. Naming all six "Cover" meant five of them vanished from
 		# tools/audit_placement.gd without the audit noticing it had stopped
 		# checking them.
@@ -1064,12 +1084,12 @@ func _build_props() -> void:
 		instance.rotation.y = deg_to_rad(entry.rotation)
 		# Named so tools/audit_placement.gd can find it in the live tree rather
 		# than re-deriving where it ought to be from the table, and numbered so
-		# that all three survive being added — see _build_cover.
+		# that all three survive being added â see _build_cover.
 		instance.name = "Prop_%d" % index
 		_geometry_root.add_child(instance)
 
 		# These are shin-high footlockers, so collision turns each one into a
-		# step rather than a wall — the player's step assist clears 0.45m and
+		# step rather than a wall â the player's step assist clears 0.45m and
 		# these are 0.35m. Without it they were scenery you walked through.
 		MeshCollision.fit(instance)
 
@@ -1100,7 +1120,7 @@ func _build_landmarks() -> void:
 ## Scatter floor slabs down the ring.
 ##
 ## Flat and lying on the floor the player already walks on, so they need no
-## collider of their own — the shell and the ground underneath carry it.
+## collider of their own â the shell and the ground underneath carry it.
 func _build_ring_debris() -> void:
 	if not landmarks_enabled:
 		return
@@ -1131,6 +1151,25 @@ func _build_medkits() -> void:
 	for entry in MEDKIT_PLACEMENTS:
 		var kit := Medkit.spawn(self, _cell_to_world(entry.cell) + entry.offset)
 		kit.name = "Medkit_%d_%d" % [entry.cell.x, entry.cell.y]
+
+## Place the signal relays at the three deep terminal chambers.
+##
+## Built after the navmesh bake for the same reason the caches are: a relay is
+## a prop and a trigger, and neither should contribute walkable surface or be
+## carved out of it. The chambers themselves are already navmesh — every relay
+## cell carries an ammo cache and tools/audit_routes.gd reports all of them
+## reachable, so a crowd can follow the player to every relay.
+func _build_relays() -> void:
+	signal_relays.clear()
+
+	for entry in RELAY_PLACEMENTS:
+		var relay := SignalRelay.new()
+		relay.name = "SignalRelay_%d_%d" % [entry.cell.x, entry.cell.y]
+		relay.label = entry.label
+		relay.position = _cell_to_world(entry.cell) + entry.offset
+		add_child(relay)
+		signal_relays.append(relay)
+
 
 ## Place a resupply cache in each of the chambers that has one.
 ##
@@ -1214,7 +1253,7 @@ func _build_deck_blocks(centre: Vector2, tiles: Vector2i) -> void:
 
 
 ## One box for the whole deck rather than one per block. The blocks are only
-## scenery — a stack of separate colliders meeting edge to edge gives a
+## scenery â a stack of separate colliders meeting edge to edge gives a
 ## character something to catch on as it walks across the seams.
 func _add_deck_collision(centre: Vector2, deck_size: Vector2) -> void:
 	var body := StaticBody3D.new()
@@ -1232,7 +1271,7 @@ func _add_deck_collision(centre: Vector2, deck_size: Vector2) -> void:
 ## A ramp from the floor up to the nearest edge of the deck.
 ##
 ## Its slope is whatever the run works out to, which is around 25 degrees for
-## the distances used here — well inside the navmesh baker's 45 degree limit,
+## the distances used here â well inside the navmesh baker's 45 degree limit,
 ## so zombies path up it exactly like any other floor. That matters more than
 ## it sounds: a deck they cannot reach is not a tactical position, it is a
 ## place to stand and win.
@@ -1310,7 +1349,7 @@ func _build_ramp(centre: Vector2, deck_size: Vector2, ramp_from: Vector2) -> voi
 ## The ramp is solid geometry the player walks up, but the *baked* surfaces at
 ## its two ends refuse to merge into one region. The baker erodes every
 ## walkable area inward by the agent radius, and it also discards floor beneath
-## anything with less than standing headroom above it — so the ramp carves a
+## anything with less than standing headroom above it â so the ramp carves a
 ## strip of unwalkable floor out from under itself and then fails to reach
 ## across it. Widening, lengthening and overlapping the strip all move the gap
 ## around without closing it.
@@ -1678,7 +1717,7 @@ func _bake() -> void:
 	nav_mesh.geometry_source_group_name = NAV_SOURCE_GROUP
 	navigation_mesh = nav_mesh
 
-	# Synchronous — zombies query the mesh on their first frame.
+	# Synchronous â zombies query the mesh on their first frame.
 	bake_navigation_mesh(false)
 
 
@@ -1687,7 +1726,7 @@ func _bake() -> void:
 ## The cave read as tunnels bored through rock with nothing to say who bored
 ## them. A lintel where a corridor meets a chamber does two jobs at once: it
 ## makes the place look worked rather than natural, and it gives the eye a
-## frame that marks a threshold — which matters in a game where knowing which
+## frame that marks a threshold â which matters in a game where knowing which
 ## opening something is about to come through is the whole problem.
 ##
 ## Derived from the layout rather than hand-placed. A hand-placed list would

@@ -72,6 +72,10 @@ static func describe(mode: GameSettings.Mode, record: Dictionary) -> String:
 			return "Extracted in %s  ·  %d kills" % [duration, record.kills]
 		GameSettings.Mode.TIMED:
 			return "%d kills" % record.kills
+		GameSettings.Mode.RELAY:
+			if not record.won:
+				return "%d kills" % record.kills
+			return "Signal complete in %s  �  %d kills" % [duration, record.kills]
 		_:
 			return "Survived %s  ·  %d kills" % [duration, record.kills]
 
@@ -89,6 +93,15 @@ static func _is_better(
 				return candidate.duration < previous.duration
 			return candidate.kills > previous.kills
 		GameSettings.Mode.TIMED:
+			return candidate.kills > previous.kills
+		GameSettings.Mode.RELAY:
+			# A relay run is a race, not an endurance test. The fallback below
+			# rewards the longer duration, which for this mode would record the
+			# slowest completion as the best one.
+			if candidate.won != previous.won:
+				return candidate.won
+			if candidate.won:
+				return candidate.duration < previous.duration
 			return candidate.kills > previous.kills
 		_:
 			return candidate.duration > previous.duration
