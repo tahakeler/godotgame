@@ -109,8 +109,15 @@ func _ready() -> void:
 ## Route gameplay signals to sound events. Audio lives here rather than inside
 ## the systems, so none of them hold a reference to a player or a stream.
 func _wire_audio() -> void:
+	# Three weapons, three shots. The bank decides which, so adding a weapon
+	# never means editing Game.
 	weapon.fired.connect(func(_from: Vector3, _to: Vector3) -> void:
-		sounds.play("fire")
+		sounds.play(SoundBank.fire_event(weapon.kind))
+	)
+	# A swap costs real time. Without a sound the wait reads as the game
+	# ignoring the input rather than as the player handling a weapon.
+	weapon.switch_started.connect(func(_duration: float) -> void:
+		sounds.play("weapon_switch")
 	)
 	weapon.dry_fired.connect(func() -> void: sounds.play("dry_fire"))
 	weapon.scrounged.connect(func(_amount: int) -> void: sounds.play("ammo_gained"))
@@ -126,13 +133,19 @@ func _wire_audio() -> void:
 	player.damage_taken.connect(func(_amount: float, _angle: float) -> void:
 		sounds.play("player_hurt")
 	)
-	player.footstep_taken.connect(func() -> void: sounds.play("footstep"))
+	# Footsteps follow stance for the same reason their noise does: a sprint
+	# and a crouch are the two ends of one trade, and the player should hear
+	# which end they chose.
+	player.footstep_taken.connect(func() -> void:
+		sounds.play(SoundBank.footstep_event(player.stance()))
+	)
 
 	# The one sound that means something changed about you rather than about
-	# them. Played where the zombie is, so it carries a direction.
+	# them. Played where the zombie is, so it carries a direction. A Screamer
+	# gets its own alarm and a Stalker gets silence — see SoundBank.notice_event.
 	spawner.zombie_noticed_player.connect(
-		func(at: Vector3, _kind: ZombieTypes.Kind) -> void:
-			sounds.play_at("zombie_alerted", at)
+		func(at: Vector3, kind: ZombieTypes.Kind) -> void:
+			sounds.play_at(SoundBank.notice_event(kind), at)
 	)
 
 	# A Brute announces itself with something lower than the crowd, so it can be
@@ -152,6 +165,25 @@ func _wire_audio() -> void:
 		func(_kills: int, _time: float, _record: bool) -> void: sounds.play("round_lost")
 	)
 
+	# Medkits are placed by the arena's dressing pass rather than handed to
+	# Game, so they are found instead of injected. Anything that spawns one
+	# later should call wire_medkit_audio itself.
+	for node in arena.find_children("*", "Medkit", true, false):
+		wire_medkit_audio(node as Medkit)
+
+
+## Give a medkit its voice. The heal is two seconds of standing still with
+## nothing on screen to show for it; the sound is the only thing that confirms
+## the hold paid off rather than being interrupted.
+func wire_medkit_audio(kit: Medkit) -> void:
+	if kit == null or kit.used.is_connected(_on_medkit_used):
+		return
+	kit.used.connect(_on_medkit_used.bind(kit))
+
+
+func _on_medkit_used(_healed: float, kit: Medkit) -> void:
+	sounds.play_at("medkit_used", kit.global_position)
+
 
 ## Caches hand their rounds to the weapon through Game, for the same reason
 ## audio and effects route through here: a crate in the arena should not know
@@ -161,6 +193,10 @@ func _wire_caches() -> void:
 		cache.collected.connect(func(rounds: int) -> void:
 			var added := weapon.add_reserve_ammo(rounds)
 			if added > 0:
+				# The crate first, then the rounds: the resupply is a thing
+				# that happened over there, the ammunition is a thing that
+				# happened to you.
+				sounds.play_at("cache_resupply", cache.global_position)
 				sounds.play("ammo_gained")
 				# Rummaging through a crate is not silent, and a cache is
 				# exactly the place you least want a crowd arriving at.
