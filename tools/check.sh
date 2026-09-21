@@ -21,6 +21,27 @@ LOG_DIR="${TMPDIR:-/tmp}/lastmagazine-check-$(printf '%s' "$PROJECT_DIR" | cksum
 export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
 export PATH="$DOTNET_ROOT:$PATH"
 
+# Give this checkout its own user:// directory.
+#
+# Every Godot process on the machine otherwise shares one
+# app_userdata/<project> folder, so settings.cfg and records.cfg are global
+# mutable state. Agents working in git worktrees run this gate concurrently,
+# and a records test that passes alone fails in the gate because another run
+# wrote the file underneath it. It is the same shape of bug as the shared log
+# directory below, and it produced the same kind of false alarm.
+#
+# Godot has no --userdir flag, so the only lever is HOME (and XDG on Linux).
+# The directory has to be created all the way down first: Godot will not build
+# the nested path itself, and a bare HOME override makes --import fail trying.
+#
+# The project name is read from project.godot rather than written twice, so
+# renaming the game cannot silently un-isolate the gate.
+GATE_HOME="$LOG_DIR/home"
+GAME_NAME="$(sed -n 's/^config\/name="\(.*\)"$/\1/p' "$PROJECT_DIR/project.godot" | head -1)"
+GATE_USERDATA="$GATE_HOME/Library/Application Support/Godot/app_userdata/${GAME_NAME:-LAST MAGAZINE}"
+mkdir -p "$GATE_USERDATA"
+export HOME="$GATE_HOME"
+
 mkdir -p "$LOG_DIR"
 cd "$PROJECT_DIR" || exit 1
 
@@ -40,7 +61,14 @@ ERROR_PATTERN='SCRIPT ERROR|Parse Error|ERROR:|Failed to load|Cannot open|error 
 # mid-playback: the AudioServer holds them even after the nodes release them.
 # A teardown artifact of --script runs, not a fault in the game. This is the
 # only message excluded, and it is excluded by exact text.
-BENIGN_PATTERN='resources still in use at exit'
+#
+# The second is a debug-only feature and appears only because the gate gives
+# itself a private user:// above. Godot 4.7 writes ObjectDB snapshots to
+# user:// joined with the project's absolute path and will not create that
+# tree itself; pre-creating it does not satisfy it either. The import still
+# exits 0 and still imports everything, and nothing in the game reads those
+# snapshots — they exist for the remote debugger.
+BENIGN_PATTERN='resources still in use at exit|Could not create ObjectDB Snapshots directory'
 
 run_step() {
   local name="$1"
