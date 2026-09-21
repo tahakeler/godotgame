@@ -847,7 +847,29 @@ func _tick_senses(delta: float) -> void:
 		# Being seen is not the same as being caught, for one kind. A Stalker
 		# that finds itself in the player's view gives up the approach and
 		# goes round again rather than trading its advantage for a few metres.
-		if breaks_off_when_watched and _is_being_watched():
+		# Being seen is not the same as being caught, for one kind — right up
+		# until it is too close to back out of.
+		#
+		# Withdrawing whenever it was looked at made staring at a Stalker a
+		# free, total and permanent counter: measured over 30s of continuous
+		# observation it broke off at 7.6-8.4m every single time, never once got
+		# inside 7.3m, and its retreat goals drifted outward from 15.3m to 24.3m
+		# until it had removed itself from the encounter. Faithful to the spec,
+		# and trivia rather than counterplay — it cost the player nothing but
+		# looking.
+		#
+		# So the commitment threshold cuts both ways. flank_commit_distance is
+		# already the range at which a Stalker stops manoeuvring and strikes,
+		# justified as "one that has got behind you has already won its game";
+		# this is the same sentence from the other side, and it reuses the same
+		# constant rather than inventing a second one to drift against.
+		# Vigilance still beats a Stalker, but it has to be early vigilance,
+		# which is a skill rather than a reflex.
+		var too_close_to_back_out := (
+			global_position.distance_to(_target.global_position) <= flank_commit_distance
+		)
+
+		if breaks_off_when_watched and not too_close_to_back_out and _is_being_watched():
 			_begin_break_off()
 			return
 
