@@ -33,6 +33,20 @@ enum Awareness {
 	INVESTIGATING,
 	## Can see the player. Tracks them live.
 	HUNTING,
+	## Arrived at the believed position, found nothing, and is now working the
+	## area around it.
+	##
+	## This used to live inside INVESTIGATING as a countdown, and the result
+	## was a zombie that walked to a spot and then stood on it vibrating for
+	## four seconds. Searching that does not move does not look like searching;
+	## it looks like a state machine waiting for a timer. Splitting it out gives
+	## it its own goals, its own tell, and its own exit.
+	SEARCHING,
+	## Deliberately withdrawing. Only kinds that break off when watched ever
+	## enter this — for everything else it is unreachable, and that is fine:
+	## a state no zombie can enter costs nothing, and a Stalker's whole
+	## character is that it has one.
+	RETREATING,
 }
 
 @export_group("Movement")
@@ -106,6 +120,17 @@ enum Awareness {
 @export var search_duration := 4.0
 ## How far from the arrival point it searches.
 @export var search_radius := 5.0
+## Longest a zombie will walk toward one search waypoint before picking
+## another. A search leg that ran to completion every time would send a zombie
+## on a long straight march away from the only place the player might plausibly
+## be; cutting it short keeps it circling the believed position.
+@export var search_leg_duration := 1.4
+## How far past the believed position the first search leg carries.
+##
+## Walking *through* the spot rather than stopping on it is most of what makes
+## a search read as a search. A body that arrives, halts, and pivots on the
+## spot looks like a machine consulting a timer.
+@export var search_overshoot := 3.0
 
 @export_group("Sight")
 ## How far it can see. Generous, because a zombie that cannot see across a
@@ -122,6 +147,60 @@ enum Awareness {
 ## behind a rock would be trivial to shake and would read as stupid rather
 ## than as something you outmanoeuvred.
 @export var lose_sight_duration := 3.5
+## How many seconds ahead of the player's last observed motion a zombie aims
+## once the line breaks.
+##
+## Losing sight used to freeze the belief on the exact spot the player was
+## standing, which meant the reliable way to shake anything was to keep
+## walking in a straight line: it would arrive behind you every time. A zombie
+## that just lost you now keeps leading you for a moment, so the seconds right
+## after you break line of sight are the *most* dangerous ones rather than the
+## safest. Guessing wrong is fine and frequently happens — that is what makes
+## cutting back the other way work.
+@export var sight_lead_time := 1.1
+
+@export_group("Archetype")
+## Seconds of flinch when shot. Zero means this kind cannot be interrupted at
+## all — see the Brute. Set per kind by configure().
+@export var stagger_duration := 0.22
+## Loudness beneath this kind's notice, regardless of range.
+@export var noise_floor := 0.0
+## Seconds of uncontrolled run-on after a lunge ends, during which the zombie
+## cannot steer, stop, or attack. Set per kind by configure(); only the Runner
+## has it.
+@export var overrun_duration := 0.0
+## Pull toward nearby zombies of the same kind, as a fraction of move_speed.
+@export_range(0.0, 1.0) var cohesion_strength := 0.0
+## How far apart two zombies can be and still travel together.
+@export var cohesion_radius := 9.0
+## Metres behind the player this kind approaches from. Zero walks straight in.
+@export var flank_distance := 0.0
+## Whether being looked at makes this kind withdraw and try again elsewhere.
+@export var breaks_off_when_watched := false
+## Half-angle, in degrees, within which the player counts as looking at this
+## zombie. Deliberately narrower than a monitor's field of view: a Stalker that
+## broke off whenever it was anywhere on screen could never close at all.
+@export var watched_cone_degrees := 55.0
+## Beyond this it does not care whether it is being looked at — a distant shape
+## in the dark has not been spotted just because you faced its direction.
+@export var watched_range := 16.0
+@export var break_off_duration := 2.6
+## How far it withdraws to. Far enough to leave the player's light, not so far
+## that it disengages from the fight entirely.
+@export var break_off_distance := 9.0
+## Seconds between deliberate alarms while hunting. Zero means this kind only
+## alerts others when it happens to groan.
+@export var alarm_interval := 0.0
+## How far this zombie's shout reaches. Set by the spawner from its own alert
+## radius and the kind's multiplier, so one tuning knob still governs the crowd
+## and a Screamer is expressed as a multiple of it rather than a second number
+## that can drift out of step. Zero means this kind never tells anyone.
+@export var alarm_radius := 14.0
+## Whether hunting means running toward other zombies rather than at the
+## player.
+@export var flees_to_allies := false
+## Multiplier on the awareness tell's brightness.
+@export var glow_scale := 1.0
 
 @export_group("Feel")
 @export var groan_interval := Vector2(3.5, 9.0)
@@ -136,6 +215,14 @@ enum AttackState {
 	WINDING_UP,
 	## Committed to the direction faced when the windup ended. Cannot re-aim.
 	LUNGING,
+	## Still travelling in the lunge direction after the lunge itself is over,
+	## unable to steer or attack. Only kinds with overrun_duration reach this.
+	##
+	## This is the Runner's cost of admission. Something that fast needs a way
+	## to be wrong, and "it cannot stop" is a far more readable weakness than
+	## a number on a sheet: you sidestep, it goes past, and for four tenths of
+	## a second its back is to you.
+	OVERRUNNING,
 }
 
 var _target: Node3D
@@ -182,6 +269,38 @@ var _search_remaining := 0.0
 var _sight_remaining := 0.0
 var _lost_sight_remaining := 0.0
 
+## Where the current search is centred: the place the player was last believed
+## to be, kept separate from last_known_position because the search moves the
+## goal around while the reason for searching stays put.
+var _search_origin := Vector3.ZERO
+var _search_leg_remaining := 0.0
+## Which way the last search leg went, so the next one is picked somewhere
+## else. Sweeping a fresh random direction every leg lets a zombie re-check the
+## same patch of floor three times in a row, which looks worse than not
+## searching at all.
+var _search_heading := 0.0
+
+## The player's velocity as last observed, in metres per second, estimated
+## from two consecutive sightings. Drives the lead applied to the belief when
+## the line breaks — see sight_lead_time.
+var _seen_velocity := Vector3.ZERO
+var _previous_seen_position := Vector3.ZERO
+var _has_previous_sighting := false
+
+## Where a zombie that has broken off is withdrawing to, and how long it stays
+## withdrawn. Only kinds with breaks_off_when_watched use either.
+var _retreat_position := Vector3.ZERO
+var _retreat_remaining := 0.0
+var _alarm_remaining := 0.0
+## Nearest living neighbour, refreshed by the neighbour scan on the repath
+## cadence. Free, since that scan already visits every sibling — and it is what
+## a Screamer runs toward instead of at the player.
+var _nearest_ally_position := Vector3.INF
+## Seconds of stagger left. Separate from _hesitate_remaining so being shot
+## cannot be confused with idle hesitation, and so a stagger-immune kind's
+## timer is provably always zero.
+var _stagger_remaining := 0.0
+
 ## Set by configure(); read by the spawner when this zombie dies.
 var kind: ZombieTypes.Kind = ZombieTypes.Kind.SHAMBLER
 var experience_value := 1
@@ -198,6 +317,15 @@ const ARRIVAL_DISTANCE := 2.0
 ## What a zombie glows when it has heard something, and when it has seen you.
 const INVESTIGATING_GLOW := Color(1.0, 0.62, 0.2)
 const HUNTING_GLOW := Color(1.0, 0.2, 0.12)
+## Casting about, having found nothing. Cooler and weaker than the amber of a
+## zombie walking purposefully toward a belief, because they are genuinely
+## different situations to walk into: one is heading somewhere, the other has
+## given up on heading anywhere and is sweeping the room you are standing in.
+const SEARCHING_GLOW := Color(0.72, 0.78, 0.35)
+## Withdrawing. Cold, and the faintest tell in the game — a Stalker that has
+## just broken off is supposed to be most of the way to invisible, and the
+## information the player gets is "it was there a moment ago".
+const RETREATING_GLOW := Color(0.35, 0.55, 1.0)
 
 ## Deliberately faint. Emission adds on top of the skin, so anything stronger
 ## floods the whole body and flattens a zombie into a glowing silhouette —
@@ -207,8 +335,14 @@ const HUNTING_GLOW := Color(1.0, 0.2, 0.12)
 ## already see what it is doing.
 const INVESTIGATING_GLOW_ENERGY := 0.09
 const HUNTING_GLOW_ENERGY := 0.32
+const SEARCHING_GLOW_ENERGY := 0.06
+const RETREATING_GLOW_ENERGY := 0.04
 
 var base_attack_range := 1.9
+## The unmodified sight memory the per-kind multiplier is applied to. Mirrors
+## base_attack_range: the exported value is what a kind's scale multiplies,
+## and keeping the baseline separate makes configure() idempotent.
+var base_lose_sight_duration := 3.5
 
 @onready var health: Health = $Health
 @onready var _agent: NavigationAgent3D = $NavigationAgent3D
@@ -238,6 +372,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_attack_remaining = maxf(0.0, _attack_remaining - delta)
+	_stagger_remaining = maxf(0.0, _stagger_remaining - delta)
 	_tick_groan(delta)
 	_visual.update_locomotion(Vector2(velocity.x, velocity.z).length())
 
@@ -278,6 +413,30 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	turn_speed = definition.turn_speed
 	attack_windup = definition.attack_windup
 	lunge_speed = definition.lunge_speed
+
+	# The behaviour block. Everything below changes what this zombie *does*
+	# rather than how well it does it, which is the difference between five
+	# enemies and one enemy with five health bars.
+	attack_commit_duration = definition.attack_commit
+	stagger_duration = definition.stagger_duration
+	noise_floor = definition.noise_floor
+	overrun_duration = definition.overrun_duration
+	cohesion_strength = definition.cohesion_strength
+	flank_distance = definition.flank_distance
+	breaks_off_when_watched = definition.breaks_off_when_watched
+	alarm_interval = definition.alarm_interval
+	flees_to_allies = definition.flees_to_allies
+	glow_scale = definition.glow_scale
+	groan_interval = definition.groan_interval
+	# Scaled from the untouched baseline rather than from the current value, so
+	# configuring a zombie twice cannot compound the multiplier.
+	lose_sight_duration = base_lose_sight_duration * definition.sight_memory_scale
+
+	# alarm_radius is not set here: it is a multiple of the spawner's crowd
+	# alert radius, which this zombie has no business knowing about. The
+	# spawner applies the kind's multiplier itself right after configure().
+
+	_groan_remaining = randf_range(groan_interval.x, groan_interval.y)
 
 	health.max_health = definition.health
 	health.current_health = definition.health
@@ -339,6 +498,13 @@ func take_damage(amount: float, _hit_position: Vector3 = Vector3.ZERO,
 ## Returns true only when the noise actually told this zombie something.
 func hear_noise(noise_position: Vector3, loudness: float) -> bool:
 	if health.is_dead or awareness == Awareness.HUNTING:
+		return false
+
+	# Beneath notice. A Brute's floor sits above a thrown decoy and below a
+	# gunshot on purpose: the trick that peels every other kind off does not
+	# work on the one you most want to peel off, so a Brute in the room turns
+	# the decoy from an answer into a delaying tactic for everything *else*.
+	if loudness < noise_floor:
 		return false
 
 	if not _can_hear(noise_position, loudness):
@@ -416,9 +582,15 @@ func _apply_awareness_tell() -> void:
 
 	match awareness:
 		Awareness.HUNTING:
-			_visual.apply_glow(HUNTING_GLOW, HUNTING_GLOW_ENERGY)
+			_visual.apply_glow(HUNTING_GLOW, HUNTING_GLOW_ENERGY * glow_scale)
 		Awareness.INVESTIGATING:
-			_visual.apply_glow(INVESTIGATING_GLOW, INVESTIGATING_GLOW_ENERGY)
+			_visual.apply_glow(
+				INVESTIGATING_GLOW, INVESTIGATING_GLOW_ENERGY * glow_scale
+			)
+		Awareness.SEARCHING:
+			_visual.apply_glow(SEARCHING_GLOW, SEARCHING_GLOW_ENERGY * glow_scale)
+		Awareness.RETREATING:
+			_visual.apply_glow(RETREATING_GLOW, RETREATING_GLOW_ENERGY * glow_scale)
 		_:
 			_visual.apply_glow(Color.BLACK, 0.0)
 
@@ -431,22 +603,74 @@ func _believe(where: Vector3) -> void:
 	_set_awareness(Awareness.INVESTIGATING)
 
 
+## States in which new information is refused because the zombie is already
+## acting on better information, or is deliberately busy.
+##
+## Hunting is the original case: something with eyes on you does not wander off
+## because a gun went off nearby. Retreating is the same idea from the other
+## end — a Stalker that has just broken off knows perfectly well where you are,
+## and letting a stray noise pull it straight back into your view would undo
+## the one behaviour that makes it a Stalker.
+func _is_committed() -> bool:
+	return awareness == Awareness.HUNTING or awareness == Awareness.RETREATING
+
+
 ## Told by another zombie. Alerts spread through a crowd, which is what turns
 ## one noticed gunshot into a chamber emptying toward you rather than a single
 ## zombie taking an interest.
 func receive_alert(where: Vector3) -> void:
-	if health.is_dead or awareness == Awareness.HUNTING:
+	if health.is_dead or _is_committed():
 		return
 
 	_believe(where)
 
 
+## True while this zombie is acting on a belief, whether it is still walking to
+## it or already sweeping the area around it.
+##
+## Searching is a separate state internally because it needs its own goals and
+## its own tell, but to everything outside this class it is the same answer:
+## this zombie thinks you are somewhere and is doing something about it.
 func is_investigating() -> bool:
-	return awareness == Awareness.INVESTIGATING
+	return awareness == Awareness.INVESTIGATING or awareness == Awareness.SEARCHING
 
 
 func is_hunting() -> bool:
 	return awareness == Awareness.HUNTING
+
+
+## Working the area around a belief that turned out to be empty.
+func is_searching() -> bool:
+	return awareness == Awareness.SEARCHING
+
+
+## Deliberately withdrawing after being looked at. Stalkers only.
+func is_retreating() -> bool:
+	return awareness == Awareness.RETREATING
+
+
+## The point this zombie wants to reach in order to attack a player standing at
+## player_position and facing player_facing.
+##
+## Public and pure so the flanking behaviour can be asserted rather than
+## eyeballed: a Stalker's answer must sit outside the player's view far more
+## often than a Shambler's, and "far more often" is only meaningful if
+## something measures it.
+##
+## Everything except a Stalker answers "where the player is", which is the
+## correct answer for a creature with no plan.
+func preferred_approach_point(player_position: Vector3, player_facing: Vector3) -> Vector3:
+	if flank_distance <= 0.0:
+		return player_position
+
+	var facing := Vector3(player_facing.x, 0.0, player_facing.z)
+	if facing.length_squared() < 0.0001:
+		return player_position
+
+	# Directly behind them, measured against where they are looking rather
+	# than where they are moving. A player who backpedals while shooting is
+	# still watching the way they face, and it is the watching that matters.
+	return player_position - facing.normalized() * flank_distance
 
 
 ## Where this zombie is currently trying to get to.
@@ -454,10 +678,31 @@ func is_hunting() -> bool:
 ## Hunting tracks the player live; everything else walks to a belief, which may
 ## be wrong and usually is by the time it arrives.
 func _move_goal() -> Vector3:
-	if awareness == Awareness.HUNTING and _target != null:
-		return _target.global_position
+	if awareness == Awareness.RETREATING:
+		return _retreat_position
 
-	return last_known_position
+	if awareness != Awareness.HUNTING or _target == null:
+		return last_known_position
+
+	# A Screamer hunting the player does not go near the player. It runs to
+	# whatever else is alive and shouts from behind it, which is what turns
+	# "shoot the Screamer" from an aiming problem into a positioning one.
+	if flees_to_allies:
+		if _nearest_ally_position.is_finite():
+			return _nearest_ally_position
+
+		# Nothing to hide behind. Back away from the player instead — still
+		# not toward them, because a Screamer that charges when alone is just
+		# a bad Shambler.
+		var away := global_position - _target.global_position
+		away.y = 0.0
+		if away.length_squared() < 0.0001:
+			return last_known_position
+		return global_position + away.normalized() * break_off_distance
+
+	return preferred_approach_point(
+		_target.global_position, -_target.global_transform.basis.z
+	)
 
 
 ## Look for the player, and remember having seen them.
@@ -473,18 +718,116 @@ func _tick_senses(delta: float) -> void:
 	_sight_remaining = sight_interval
 
 	if _can_see_target():
+		_observe_target()
+
+		# Being seen is not the same as being caught, for one kind. A Stalker
+		# that finds itself in the player's view gives up the approach and
+		# goes round again rather than trading its advantage for a few metres.
+		if breaks_off_when_watched and _is_being_watched():
+			_begin_break_off()
+			return
+
 		_set_awareness(Awareness.HUNTING)
-		last_known_position = _target.global_position
 		_lost_sight_remaining = lose_sight_duration
 		return
 
-	# Sight is not lost the instant the line breaks. A zombie that forgot you
-	# the moment you stepped behind a rock would be trivial to shake off, and
-	# would read as stupid rather than as something you outmanoeuvred.
+	_has_previous_sighting = false
+
+	# Sight is not lost the instant the line breaks, and what the zombie holds
+	# on to is not a spot on the floor. It keeps leading the player along the
+	# motion it last saw, so the fade from certainty to a guess happens over
+	# seconds and at a position that is still roughly right at first.
+	#
+	# Freezing the belief on the exact spot instead made walking in a straight
+	# line the reliable way to shake anything: it would arrive behind you every
+	# time. Leading makes the moment just after you break line of sight the
+	# most dangerous one rather than the safest, and makes cutting back the
+	# other way the thing that actually works.
 	if awareness == Awareness.HUNTING:
 		_lost_sight_remaining -= sight_interval
+		last_known_position += _seen_velocity * sight_interval
+
 		if _lost_sight_remaining <= 0.0:
-			_believe(last_known_position)
+			var elapsed := lose_sight_duration
+			_believe(last_known_position + _seen_velocity * sight_lead_time)
+			# Whatever is left of the memory is spent walking to the guess, so
+			# a long-memoried Brute keeps at it and a Runner gives up early.
+			_investigate_remaining = minf(investigate_duration, elapsed * 2.0)
+			_seen_velocity = Vector3.ZERO
+
+
+## Record where the player is, and how fast they were going when seen.
+##
+## Two consecutive sightings are enough for a usable velocity, and sightings
+## come in on the slow sight cadence rather than every frame, so this costs one
+## subtraction per zombie every sight_interval.
+func _observe_target() -> void:
+	var seen_at := _target.global_position
+
+	if _has_previous_sighting:
+		var motion := (seen_at - _previous_seen_position) / maxf(sight_interval, 0.001)
+		motion.y = 0.0
+		# Smoothed, or a single frame of strafing throws the prediction across
+		# the room and the zombie lurches after a direction the player never
+		# committed to.
+		_seen_velocity = _seen_velocity.lerp(motion, 0.5)
+	else:
+		_seen_velocity = Vector3.ZERO
+
+	_previous_seen_position = seen_at
+	_has_previous_sighting = true
+	last_known_position = seen_at
+
+
+## Whether the player is looking more or less straight at this zombie.
+##
+## Deliberately a narrower cone than the player's actual field of view, and
+## range-limited: a shape at the far end of an unlit corridor has not been
+## spotted merely because the player happened to face its direction, and a
+## Stalker that broke off whenever it was anywhere on screen could never
+## complete an approach at all.
+func _is_being_watched() -> bool:
+	if _target == null:
+		return false
+
+	var to_self := global_position - _target.global_position
+	to_self.y = 0.0
+	var distance := to_self.length()
+
+	if distance > watched_range or distance < 0.01:
+		return false
+
+	var facing := -_target.global_transform.basis.z
+	facing.y = 0.0
+	if facing.length_squared() < 0.0001:
+		return false
+
+	return facing.normalized().dot(to_self / distance) > cos(
+		deg_to_rad(watched_cone_degrees * 0.5)
+	)
+
+
+## Break contact and reposition, keeping what it knows.
+##
+## The withdrawal point is off to one side rather than straight backward: a
+## Stalker that reversed in a line would simply be walking away, and would
+## come back along the route the player is already watching.
+func _begin_break_off() -> void:
+	_retreat_remaining = break_off_duration
+
+	var away := global_position - _target.global_position
+	away.y = 0.0
+	if away.length_squared() < 0.0001:
+		away = Vector3.FORWARD
+
+	# Sideways component is drawn from this zombie's own stream, so two
+	# Stalkers backing off from the same spot do not peel the same way.
+	var sideways := away.normalized().cross(Vector3.UP) * _rng.randf_range(-1.0, 1.0)
+	_retreat_position = global_position + (
+		away.normalized() + sideways
+	).normalized() * break_off_distance
+
+	_set_awareness(Awareness.RETREATING)
 
 
 func _can_see_target() -> bool:
@@ -520,35 +863,108 @@ func _can_see_target() -> bool:
 
 ## Run down the belief: walk to it, search around it, then give up on it.
 func _tick_awareness(delta: float) -> void:
-	if awareness != Awareness.INVESTIGATING:
+	_tick_alarm(delta)
+
+	match awareness:
+		Awareness.SEARCHING:
+			_tick_search(delta)
+
+		Awareness.RETREATING:
+			_retreat_remaining -= delta
+			if _retreat_remaining <= 0.0:
+				# It never stopped knowing where you were; it only stopped
+				# walking at you. Coming back out of a break-off as a fresh
+				# belief is what makes a Stalker circle rather than flee.
+				_believe(last_known_position)
+
+		Awareness.INVESTIGATING:
+			_investigate_remaining -= delta
+
+			# Arrived, and nothing here. Work the area before losing interest
+			# — a zombie that snaps from "hunting" to "idle" on the spot reads
+			# as a switch being flipped.
+			if global_position.distance_to(last_known_position) <= ARRIVAL_DISTANCE:
+				_begin_search()
+			elif _investigate_remaining <= 0.0:
+				_begin_search()
+
+
+## Keep shouting while hunting, for the kinds that shout on purpose.
+##
+## Everything else raises the alarm incidentally, when a groan happens to land
+## while it can see the player. A Screamer is the only thing in the cave that
+## treats spreading the word as its job, which is why it is the only thing that
+## does it on a clock.
+func _tick_alarm(delta: float) -> void:
+	if alarm_interval <= 0.0 or awareness != Awareness.HUNTING:
 		return
 
-	if _search_remaining > 0.0:
-		_search_remaining -= delta
-		if _search_remaining <= 0.0:
-			_set_awareness(Awareness.UNAWARE)
+	_alarm_remaining -= delta
+	if _alarm_remaining > 0.0:
 		return
 
-	_investigate_remaining -= delta
+	_alarm_remaining = alarm_interval
+	if alarm_radius > 0.0:
+		raised_alarm.emit(self, last_known_position)
 
-	# Arrived, and nothing here. Cast about nearby before losing interest — a
-	# zombie that snaps from "hunting" to "idle" on the spot reads as a switch
-	# being flipped.
-	if global_position.distance_to(last_known_position) <= ARRIVAL_DISTANCE:
-		_begin_search()
+
+## Work the ground around a belief that turned out to be empty.
+##
+## Searching used to be a four-second countdown spent standing on one spot with
+## a single random destination picked at the start, which is not what searching
+## looks like from the outside — it looks like a body waiting for a timer. This
+## keeps the zombie moving through and around the place it thought you were,
+## re-picking a leg whenever it arrives or whenever a leg has run long enough,
+## and only gives up when the whole search budget is spent.
+##
+## The total budget is unchanged, so a belief still decays in search_duration
+## seconds however many legs it fits into that time.
+func _tick_search(delta: float) -> void:
+	_search_remaining -= delta
+	if _search_remaining <= 0.0:
+		_set_awareness(Awareness.UNAWARE)
 		return
 
-	if _investigate_remaining <= 0.0:
-		_begin_search()
+	_search_leg_remaining -= delta
+	var arrived := global_position.distance_to(last_known_position) <= ARRIVAL_DISTANCE
+
+	if _search_leg_remaining <= 0.0 or arrived:
+		_pick_search_leg()
 
 
 func _begin_search() -> void:
+	_search_origin = last_known_position
 	_search_remaining = search_duration
-	last_known_position = global_position + Vector3(
-		randf_range(-search_radius, search_radius),
-		0.0,
-		randf_range(-search_radius, search_radius)
+	_search_heading = _rng.randf() * TAU
+
+	_set_awareness(Awareness.SEARCHING)
+
+	# The first leg carries straight through the believed position rather than
+	# stopping on it. Walking through a place is how a body checks it; halting
+	# on the exact coordinate is how a cursor arrives.
+	var approach := _search_origin - global_position
+	approach.y = 0.0
+	if approach.length_squared() < 0.0001:
+		_pick_search_leg()
+		return
+
+	last_known_position = _search_origin + approach.normalized() * search_overshoot
+	_search_leg_remaining = search_leg_duration
+
+
+## Pick somewhere else near the believed position to go and look.
+##
+## Directions are stepped around a ring rather than drawn fresh each time.
+## Re-rolling would happily send a zombie back over the same patch of floor
+## three legs running, which looks worse than not searching at all.
+func _pick_search_leg() -> void:
+	_search_heading += _rng.randf_range(TAU * 0.25, TAU * 0.55)
+	var radius := search_radius * _rng.randf_range(0.45, 1.0)
+
+	last_known_position = _search_origin + Vector3(
+		cos(_search_heading) * radius, 0.0, sin(_search_heading) * radius
 	)
+	_search_leg_remaining = search_leg_duration
 
 
 ## Refresh the nav target and the things that only need to change this often:
@@ -577,6 +993,12 @@ func _tick_repath(delta: float) -> void:
 
 
 func _move_toward_target(delta: float) -> void:
+	# Reeling from a hit. Held still rather than merely slowed, because the
+	# point of a stagger is that it is unambiguous: you shot it, it stopped.
+	if _stagger_remaining > 0.0:
+		_accelerate_toward(Vector3.ZERO, delta)
+		return
+
 	if _hesitate_remaining > 0.0:
 		_hesitate_remaining -= delta
 		_accelerate_toward(Vector3.ZERO, delta)
@@ -631,8 +1053,19 @@ func _accelerate_toward(desired_velocity: Vector3, delta: float) -> void:
 ## response — nothing here can push a zombie backward off its goal, only
 ## sideways off another zombie, which is what keeps this from being able to
 ## stall a pursuit.
+## It also answers two other questions that need the same loop and would
+## otherwise each cost their own O(neighbours) scan: where the nearest living
+## zombie is (a Screamer runs toward it) and where the local group of this
+## zombie's own kind is heading (a Shambler drifts toward it). Folding all
+## three into one pass over the siblings is the only reason two new behaviours
+## cost nothing.
 func _compute_separation() -> Vector3:
 	var push := Vector3.ZERO
+	_nearest_ally_position = Vector3.INF
+	var nearest_distance := INF
+	var cohesion_sum := Vector3.ZERO
+	var cohesion_count := 0
+
 	var parent := get_parent()
 	if parent == null:
 		return push
@@ -650,6 +1083,23 @@ func _compute_separation() -> Vector3:
 		var distance := offset.length()
 		var combined_radius: float = _body_radius + other._body_radius + separation_margin
 
+		if distance < nearest_distance:
+			nearest_distance = distance
+			_nearest_ally_position = other.global_position
+
+		# Group up with your own kind, but only at a range where separation is
+		# not already shoving you apart. Overlapping the two forces would leave
+		# every zombie permanently fighting itself, and the result reads as
+		# jitter rather than as a crowd.
+		if (
+			cohesion_strength > 0.0
+			and other.kind == kind
+			and distance > combined_radius
+			and distance < cohesion_radius
+		):
+			cohesion_sum += other.global_position
+			cohesion_count += 1
+
 		if distance >= combined_radius or distance < 0.001:
 			continue
 
@@ -661,7 +1111,22 @@ func _compute_separation() -> Vector3:
 	if push.length_squared() > 1.0:
 		push = push.normalized()
 
-	return push * move_speed * separation_strength
+	var steering := push * move_speed * separation_strength
+
+	# Shamblers arrive in loose clumps rather than as a spread of individuals
+	# who happen to share a destination. It is the plainest kind in the game
+	# and the one the player sees most, so what makes it distinctive has to be
+	# something visible at a distance — and a drift of three or four bodies
+	# moving together is legible from across a chamber in a way that any stat
+	# on the sheet is not.
+	if cohesion_count > 0:
+		var centre: Vector3 = cohesion_sum / float(cohesion_count)
+		var toward := centre - global_position
+		toward.y = 0.0
+		if toward.length_squared() > 0.0001:
+			steering += toward.normalized() * move_speed * cohesion_strength
+
+	return steering
 
 
 ## Wind up, commit, and land — or whiff — a bite.
@@ -690,12 +1155,34 @@ func _tick_attack(delta: float) -> bool:
 			_try_land_hit()
 			_attack_state_remaining -= delta
 			if _attack_state_remaining <= 0.0:
-				_attack_state = AttackState.READY
 				_attack_remaining = attack_cooldown
+				if overrun_duration > 0.0:
+					_attack_state = AttackState.OVERRUNNING
+					_attack_state_remaining = overrun_duration
+				else:
+					_attack_state = AttackState.READY
+			return true
+
+		AttackState.OVERRUNNING:
+			# Same direction, same commitment, no attack left in it. A Runner
+			# that misses is briefly a projectile: it cannot steer, cannot
+			# stop, and cannot bite. That window is the whole counterplay
+			# against the fastest thing in the cave.
+			velocity.x = _lunge_direction.x * lunge_speed
+			velocity.z = _lunge_direction.z * lunge_speed
+			_attack_state_remaining -= delta
+			if _attack_state_remaining <= 0.0:
+				_attack_state = AttackState.READY
 			return true
 
 		_:
 			if _attack_remaining > 0.0:
+				return false
+
+			# A staggered zombie is not allowed to start a new wind-up, or
+			# being shot would only ever reset the animation rather than
+			# actually buy the player anything.
+			if _stagger_remaining > 0.0:
 				return false
 
 			var distance := global_position.distance_to(_target.global_position)
@@ -762,7 +1249,10 @@ func _tick_groan(delta: float) -> void:
 	# A zombie that has eyes on the player does not groan quietly to itself.
 	# This is the third channel information travels down, after sight and
 	# sound, and it is the one that makes a crowd behave like a crowd.
-	if awareness == Awareness.HUNTING:
+	# A Stalker's alarm_radius is zero, so it never does this. It is the only
+	# thing in the cave that keeps what it knows to itself, and a chamber with
+	# one in it is a chamber that sounds empty.
+	if awareness == Awareness.HUNTING and alarm_radius > 0.0:
 		raised_alarm.emit(self, last_known_position)
 
 
@@ -770,8 +1260,33 @@ func _tick_groan(delta: float) -> void:
 func _on_damaged(_amount: float, _current: float, _maximum: float) -> void:
 	_visual.flash()
 
+	_stagger()
+
 	if awareness != Awareness.HUNTING and _target != null:
 		_believe(_target.global_position)
+
+
+## Flinch, and drop whatever attack was being wound up.
+##
+## This is what makes shooting a zombie that is already on top of you worth
+## doing even when the shot will not kill it: the hit buys the attack back.
+## A Brute's zero-length stagger removes that answer entirely — you cannot
+## shoot your way out of a Brute's wind-up, you have to move — and a kind that
+## cannot be interrupted is a far more legible difference than any number on
+## the stat sheet.
+##
+## A lunge already in flight is never interrupted, for anyone. Once a zombie
+## has committed to a direction it is committed, which is the contract that
+## makes stepping aside work.
+func _stagger() -> void:
+	if stagger_duration <= 0.0 or _attack_state == AttackState.LUNGING:
+		return
+
+	_stagger_remaining = stagger_duration
+
+	if _attack_state == AttackState.WINDING_UP:
+		_attack_state = AttackState.READY
+		_attack_remaining = attack_cooldown
 
 
 func _on_died() -> void:
