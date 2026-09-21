@@ -683,12 +683,58 @@ func try_reload() -> bool:
 
 ## Award ammunition, clamped to the reserve ceiling. Returns the amount actually
 ## added, which is less than requested when the reserve is already full.
-## How many more rounds this weapon's reserve could hold.
+## How many more rounds the player could carry, across every weapon.
 ##
 ## Asked by an ammo cache before it drains itself, so a crate is never spent on
 ## a player who cannot carry what is in it.
+##
+## Across every weapon rather than only the one in hand. Counting just the
+## equipped gun meant a crate went silent and prompt-less while the pistol was
+## full and the shotgun was empty — visibly stocked, amber light on, and no way
+## to interact with it. That reads as broken rather than as a rule.
 func reserve_capacity() -> int:
-	return maxi(0, max_reserve - reserve_ammo)
+	var room := maxi(0, max_reserve - reserve_ammo)
+
+	for slot_kind in _slots:
+		if slot_kind == kind:
+			continue
+
+		var slot: Dictionary = _slots[slot_kind]
+		room += maxi(0, int(slot.stats.max_reserve) - int(slot.reserve))
+
+	return room
+
+
+## Take rounds into the equipped weapon first, then spill into the others.
+##
+## The gun in your hands is the one you are about to need, so it fills first.
+## What will not fit goes to the rest, which is a supply crate behaving like a
+## supply crate instead of like a magazine for whichever weapon happened to be
+## raised at the moment you reached it.
+##
+## This also settles the swap case: a resupply finished during a raise used to
+## land entirely on the gun being holstered. Spilling means the rounds are
+## still the player's either way.
+func distribute_reserve_ammo(amount: int) -> int:
+	var taken := add_reserve_ammo(amount)
+	var spare := amount - taken
+
+	for slot_kind in _slots:
+		if spare <= 0:
+			break
+		if slot_kind == kind:
+			continue
+
+		var slot: Dictionary = _slots[slot_kind]
+		var ceiling := int(slot.stats.max_reserve)
+		var before := int(slot.reserve)
+		var after: int = clampi(before + spare, 0, ceiling)
+
+		slot.reserve = after
+		spare -= after - before
+		taken += after - before
+
+	return taken
 
 
 func add_reserve_ammo(amount: int) -> int:

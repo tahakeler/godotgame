@@ -50,6 +50,7 @@ func _process(_delta: float) -> bool:
 	test_looting_works_again_once_a_new_round_begins()
 	test_a_hold_does_not_survive_a_restart()
 	test_caches_are_not_destroyed_by_a_full_player()
+	test_a_cache_fills_the_other_weapons_when_the_held_one_is_full()
 
 	_report()
 	return true
@@ -204,14 +205,18 @@ func test_caches_are_not_destroyed_by_a_full_player() -> void:
 	var cache: AmmoCache = _game.arena.ammo_caches[0]
 	cache.reset()
 	var weapon := _game.weapon
+	# Every weapon, not just the one in hand: a crate now spills into whichever
+	# still has room, so the player is only genuinely full when none do.
 	weapon.reserve_ammo = weapon.max_reserve
+	for slot_kind in weapon._slots:
+		weapon._slots[slot_kind].reserve = int(weapon._slots[slot_kind].stats.max_reserve)
 
 	# Act
 	var offered := cache.can_interact(_game.player)
 	cache.interact(_game.player)
 	var left_when_full := cache.stock()
 
-	# Now make room for exactly two rounds and try again.
+	# Now make room for exactly two rounds, in the held weapon, and try again.
 	weapon.reserve_ammo = weapon.max_reserve - 2
 	cache.interact(_game.player)
 	var left_when_nearly_full := cache.stock()
@@ -232,3 +237,52 @@ func test_caches_are_not_destroyed_by_a_full_player() -> void:
 		)
 	else:
 		print("PASS: a cache gives only what fits and keeps the rest")
+
+
+## A crate must keep working while the gun in your hands is full.
+##
+## The first version of the "only give what fits" fix asked the EQUIPPED weapon
+## how much room it had. That made a stocked crate stop offering a prompt at all
+## whenever the pistol was topped up and the shotgun was dry — amber light on,
+## crate visibly full, and nothing the player could do with it. Trading a crate
+## that is destroyed for nothing for a crate that refuses to open is not a fix.
+func test_a_cache_fills_the_other_weapons_when_the_held_one_is_full() -> void:
+	# Arrange: pistol full, everything else emptied.
+	var cache: AmmoCache = _game.arena.ammo_caches[0]
+	cache.reset()
+
+	var weapon := _game.weapon
+	weapon.reserve_ammo = weapon.max_reserve
+	var drained := 0
+	for slot_kind in weapon._slots:
+		if slot_kind == weapon.kind:
+			continue
+		weapon._slots[slot_kind].reserve = 0
+		drained += 1
+
+	# Act
+	var offered := cache.can_interact(_game.player)
+	var before := weapon.reserve_ammo
+	cache.interact(_game.player)
+
+	var spilled := 0
+	for slot_kind in weapon._slots:
+		if slot_kind != weapon.kind:
+			spilled += int(weapon._slots[slot_kind].reserve)
+
+	# Assert
+	if drained == 0:
+		_failures.append("the test found no other weapon to spill into")
+	elif not offered:
+		_failures.append(
+			"a stocked cache refused a player whose other weapons were empty"
+		)
+	elif weapon.reserve_ammo != before:
+		_failures.append("the full weapon took rounds it had no room for")
+	elif spilled <= 0:
+		_failures.append("nothing reached the empty weapons — the rounds vanished")
+	else:
+		print(
+			"PASS: a cache spills %d rounds into the weapons that have room"
+			% spilled
+		)
