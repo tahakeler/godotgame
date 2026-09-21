@@ -23,6 +23,27 @@ signal completed()
 ## what a medkit is.
 signal relay_armed(relay: SignalRelay)
 
+## Where each relay stands, and what the HUD calls it.
+##
+## The three furthest terminal chambers from the origin. The south WIDE_ROOM at
+## (0,-8) is deliberately not one: it is only eight cells out and it sits on the
+## route to the southern ring, so it is the chamber the player passes through
+## anyway. Three relays that each require a dedicated trip is the point.
+##
+## The table lives here rather than in Arena's placement tables on purpose. The
+## arena's cave layout is authored independently, and a chain that owns its own
+## cells is one file to edit when a chamber moves, instead of a change landing
+## in the middle of someone else's map.
+##
+## Offsets mirror Arena.CACHE_OFFSET's reasoning — clear of every point in
+## SPAWN_SPREAD, and on the opposite side from the chamber's cache so the player
+## is never made to choose between standing in a crate and standing in a relay.
+const RELAY_PLACEMENTS := [
+	{"cell": Vector2i(0, 12), "offset": Vector3(-2.8, 0.0, 0.0), "label": "DEEP NORTH"},
+	{"cell": Vector2i(-11, 0), "offset": Vector3(0.0, 0.0, 2.8), "label": "WEST HALL"},
+	{"cell": Vector2i(12, 0), "offset": Vector3(0.0, 0.0, 2.8), "label": "EAST HALL"},
+]
+
 @export_group("Chain")
 ## How many relays the chain needs. The session-length knob; two is the
 ## Recruit-difficulty cut.
@@ -51,14 +72,28 @@ var _finished := false
 var _last_text := ""
 
 
-## Hand the chain the world it works in. Called once, from Game._ready().
-func bind(relay_nodes: Array[SignalRelay], player: Node3D, interactor: Interactor) -> void:
-	relays = relay_nodes
+## Stand the relays up in the cave and hand the chain the world it works in.
+## Called once, from Game._ready().
+##
+## Placement happens here at runtime rather than from one of Arena's tables:
+## the beacons are parented under the arena so they move with it, but the cave
+## itself stays unaware that an objective exists. Built after the arena is
+## ready, which is also after its navmesh bake — a relay is a prop and a
+## trigger, and neither should contribute walkable surface or be carved out of
+## it.
+func bind(arena: Arena, player: Node3D, interactor: Interactor) -> void:
 	_player = player
 	_interactor = interactor
+	relays.clear()
 
-	for relay in relays:
+	for entry in RELAY_PLACEMENTS:
+		var relay := SignalRelay.new()
+		relay.name = "SignalRelay_%d_%d" % [entry.cell.x, entry.cell.y]
+		relay.label = entry.label
+		relay.position = arena._cell_to_world(entry.cell) + entry.offset
+		arena.add_child(relay)
 		relay.armed.connect(_on_relay_armed)
+		relays.append(relay)
 
 
 ## Whether this mode uses the chain at all. Off in EXTRACTION, TIMED, ENDLESS,

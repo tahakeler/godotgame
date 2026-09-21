@@ -4,7 +4,7 @@ extends CanvasLayer
 ## Round interface: extraction clock, health, ammunition, kills, and the
 ## end-of-round overlay.
 ##
-## The HUD only listens. Gameplay code never reaches into it — every value
+## The HUD only listens. Gameplay code never reaches into it â every value
 ## arrives through a signal, so the systems below can be tested without a
 ## viewport.
 
@@ -82,7 +82,7 @@ var _weapon: Weapon
 @onready var _hurt_vignette: TextureRect = %HurtVignette
 @onready var _magazine_pips: HBoxContainer = %MagazinePips
 ## The caption under the ammo counts. Doubles as the weapon name once there is
-## more than one weapon — with three separate reserves, a bare "12 / 34" does
+## more than one weapon â with three separate reserves, a bare "12 / 34" does
 ## not say which gun's 34 it is, and that is the number the player is deciding
 ## on. Reusing the caption keeps this to one line rather than a new HUD element;
 ## the full readout is a later pass.
@@ -93,6 +93,7 @@ var _weapon: Weapon
 @onready var _crosshair: Control = $Crosshair
 @onready var _top_bar: Control = $TopBar
 @onready var _objective_block: Control = $ObjectiveBlock
+@onready var _objective_label: Label = %ObjectiveLabel
 @onready var _vitals_block: Control = $VitalsBlock
 @onready var _ammo_block: Control = $AmmoBlock
 @onready var _noise_ring: Control = %NoiseRing
@@ -108,6 +109,9 @@ var _weapon: Weapon
 @onready var _crosshair_right: ColorRect = $Crosshair/Right
 
 var _damage_markers: Array[Dictionary] = []
+## Where the objective chevron points, in world space, and whether to draw it.
+var _objective_bearing := Vector3.ZERO
+var _objective_has_bearing := false
 var _flash_remaining := 0.0
 var _hitmarker_remaining := 0.0
 var _hurt_pulse := 0.0
@@ -237,7 +241,7 @@ func _on_round_started() -> void:
 	_contact_pings.clear()
 
 
-## Endless has no deadline, so its clock counts up and never turns amber —
+## Endless has no deadline, so its clock counts up and never turns amber â
 ## there is nothing imminent to warn about.
 func _on_time_changed(value: float, total: float) -> void:
 	var counts_up := is_zero_approx(total)
@@ -345,7 +349,7 @@ func _on_ammo_changed(magazine: int, reserve: int) -> void:
 ##
 ## A count has to be read; a row of pips is taken in at a glance, which is the
 ## difference between knowing you are nearly dry and noticing it afterwards.
-## The number stays for the exact figure — the pips are for peripheral vision.
+## The number stays for the exact figure â the pips are for peripheral vision.
 func _update_magazine_pips(magazine: int) -> void:
 	if _weapon == null:
 		return
@@ -395,7 +399,7 @@ func _on_weapon_switched(_kind: WeaponTypes.Kind, display_name: String) -> void:
 			spaced += " "
 		spaced += display_name[index]
 
-	_ammo_caption.text = "%s   ·   M A G   ·   R E S" % spaced
+	_ammo_caption.text = "%s   Â·   M A G   Â·   R E S" % spaced
 
 
 func _on_weapon_status_cleared() -> void:
@@ -406,7 +410,7 @@ func _on_dry_fired() -> void:
 	if _weapon == null:
 		return
 
-	# Tell the player *why* nothing happened — and whether reloading would help.
+	# Tell the player *why* nothing happened â and whether reloading would help.
 	if _weapon.is_fully_dry():
 		_weapon_status_label.text = "NO AMMUNITION"
 	else:
@@ -509,7 +513,7 @@ func _show_overlay(title: String, color: Color, kills: int, duration: float) -> 
 	_overlay_title.text = title
 	_overlay_title.modulate = color
 	_build_results(kills, duration)
-	_overlay_detail.text = "Enter to play again  ·  Esc for the menu"
+	_overlay_detail.text = "Enter to play again  Â·  Esc for the menu"
 	_overlay.visible = true
 	_set_round_readouts_visible(false)
 
@@ -593,7 +597,7 @@ func report_noise(loudness: float, heard_by: int, at := Vector3.INF) -> void:
 
 
 ## Where on screen a world position falls, or the centre when it cannot be
-## shown — behind the camera, off screen, or with no camera to ask.
+## shown â behind the camera, off screen, or with no camera to ask.
 func _noise_screen_position() -> Vector2:
 	var centre := _noise_ring.size * 0.5
 
@@ -635,7 +639,7 @@ func _draw_throw_arc() -> void:
 		var along := float(index) / float(arc.size() - 1)
 
 		# Dots rather than a line, thinning along the flight. A solid line
-		# reads as a laser sight — something the weapon projects — when this is
+		# reads as a laser sight â something the weapon projects â when this is
 		# the player's own estimate of a throw.
 		colour.a = 0.75 - 0.35 * along
 		_throw_arc.draw_circle(screen, lerpf(3.0, 1.5, along), colour)
@@ -705,8 +709,8 @@ func _tick_flash(delta: float) -> void:
 	_flash_remaining = maxf(0.0, _flash_remaining - delta)
 
 	# Damped rather than removed when the player has asked for less flashing.
-	# Taking damage still has to register — the flash is how a hit from behind
-	# is noticed at all — so it becomes a dim wash instead of vanishing.
+	# Taking damage still has to register â the flash is how a hit from behind
+	# is noticed at all â so it becomes a dim wash instead of vanishing.
 	var settings := GameSettings.instance(self)
 	var peak: float = (
 		REDUCED_FLASH_ALPHA if settings != null and settings.reduce_flashing
@@ -792,7 +796,7 @@ func _on_weapon_fired(_from: Vector3, _to: Vector3) -> void:
 ## A kill gets its own confirmation, distinct from a hit.
 ##
 ## Landing a shot and finishing something are different pieces of news, and a
-## game about ammunition needs the second one to be unmistakable — it is the
+## game about ammunition needs the second one to be unmistakable â it is the
 ## moment the bullet is confirmed to have been worth spending.
 func _on_zombie_killed(_at: Vector3, _experience: int, _ammo: int) -> void:
 	_hitmarker_remaining = hitmarker_duration * KILL_MARKER_DURATION_SCALE
@@ -839,6 +843,25 @@ func _draw_health_delta() -> void:
 	)
 
 
+## The single line telling the player what they are doing and where.
+##
+## One line, upper case, always present while the round runs. The bearing feeds
+## the compass and nothing else: it is a direction, never a route and never a
+## distance. A marker painted on the minimap would answer the navigation problem
+## outright, and the navigation problem is the cave.
+func set_objective(text: String, bearing_target: Vector3, has_bearing: bool) -> void:
+	_objective_bearing = bearing_target
+	_objective_has_bearing = has_bearing
+
+	if _objective_label == null:
+		return
+
+	_objective_label.text = text
+	# An empty line is a blank row pushing the rest of the block down, so the
+	# label leaves rather than sits there.
+	_objective_label.visible = not text.is_empty()
+
+
 ## A compass strip, so the cave can be navigated by memory.
 ##
 ## The map is a loop of chambers that look increasingly alike by design, and
@@ -877,6 +900,41 @@ func _draw_compass() -> void:
 		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
 	)
 
+	_draw_objective_chevron(bearing, centre)
+
+
+## A single chevron on the compass, at the bearing of the current objective.
+##
+## It rides the same strip as the cardinal letters, so it answers "which way"
+## in the place the player already looks for that answer, and it says nothing
+## about how far or by what route.
+func _draw_objective_chevron(bearing: float, centre: float) -> void:
+	if not _objective_has_bearing or _player == null:
+		return
+
+	var to_target := _objective_bearing - _player.global_position
+	to_target.y = 0.0
+	if to_target.length_squared() < 0.01:
+		return
+
+	var target_bearing := atan2(to_target.x, -to_target.z)
+	var offset := angle_difference(bearing, target_bearing)
+	var half_arc := deg_to_rad(COMPASS_VISIBLE_ARC * 0.5)
+
+	# Clamped to the edge of the strip rather than hidden when the objective is
+	# behind the player. A chevron that disappears reads as "arrived", and the
+	# one thing it must never do is stop telling the truth.
+	var clamped := clampf(offset, -half_arc, half_arc)
+	var x: float = centre + clamped / half_arc * centre
+	var colour := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+
+	_compass.draw_colored_polygon(
+		PackedVector2Array([
+			Vector2(x, 0.0), Vector2(x - 5.0, -7.0), Vector2(x + 5.0, -7.0)
+		]),
+		colour
+	)
+
 
 ## Show a contextual prompt, or clear it when given nothing.
 ##
@@ -893,20 +951,20 @@ func show_prompt(text: String) -> void:
 # lookup per cell instead of a render pass, and it can never disagree with the
 # geometry the player is standing in.
 #
-# ORIENTATION — heading-up. The map rotates so that forward is up. The compass
+# ORIENTATION â heading-up. The map rotates so that forward is up. The compass
 # strip already answers "which way is north"; the question the map has to
 # answer is "is that opening on my left the one I came in by", and a north-up
 # map makes the player do that rotation in their head while something is
 # chasing them. North stays findable: a tick rides the rim.
 #
-# REVEAL — nothing is given away at the start. A cell is remembered once the
-# player has either been next to it (minimap_touch_cells — feeling your way
+# REVEAL â nothing is given away at the start. A cell is remembered once the
+# player has either been next to it (minimap_touch_cells â feeling your way
 # along a wall in the dark) or looked at it down an unbroken line of open cells
 # inside minimap_sight_arc_degrees. Sight reaches further with the torch lit,
 # which is the bargain the torch makes everywhere else: you see more of the
 # cave and the cave sees more of you.
 #
-# CONTACTS — see contact_rule(). Never a wallhack.
+# CONTACTS â see contact_rule(). Never a wallhack.
 
 ## How often the reveal sweep runs. Cheap, but not free, and the map does not
 ## change meaningfully between frames at walking pace.
@@ -919,7 +977,7 @@ const MAP_LINE_STEP := 0.34
 @export_group("Minimap")
 ## How many cells fit across the dial. Smaller is a closer, more legible map.
 @export var minimap_visible_cells := 13.0
-## Cells around the player revealed without needing line of sight — what you
+## Cells around the player revealed without needing line of sight â what you
 ## would know by touch.
 @export var minimap_touch_cells := 1.6
 ## How far an unlit player sees, in cells, and what the torch adds.
@@ -1096,10 +1154,10 @@ func map_cell_count() -> int:
 ## THE MARKER RULE. A zombie is on the map only when it has already given
 ## itself away:
 ##
-##   * it is HUNTING — it can see the player and is tracking them live. The
+##   * it is HUNTING â it can see the player and is tracking them live. The
 ##     information is symmetric: it knows where you are, so you know where it
 ##     is. That is what makes the marker a warning rather than an advantage.
-##   * it is inside contact_radius — close enough that the player can hear it.
+##   * it is inside contact_radius â close enough that the player can hear it.
 ##     The marker confirms a direction they already half know.
 ##
 ## Everything else is invisible. A Stalker circling two rooms away, or a
@@ -1107,7 +1165,7 @@ func map_cell_count() -> int:
 ## map shows those the game stops being about not knowing.
 ##
 ## Separately, a zombie that made a noise leaves a stale mark for
-## contact_ping_lifetime seconds — where it *was*, not where it is.
+## contact_ping_lifetime seconds â where it *was*, not where it is.
 func contact_rule(awareness: int, distance: float) -> bool:
 	return awareness == Zombie.Awareness.HUNTING or distance <= contact_radius
 
@@ -1192,7 +1250,7 @@ func _draw_map_cell(screen: Vector2, right: Vector2, forward: Vector2,
 
 
 ## Where a world point falls on the dial, pinned to the rim when it is off the
-## edge. Returns the point and whether it had to be pinned — a pinned marker is
+## edge. Returns the point and whether it had to be pinned â a pinned marker is
 ## a bearing, not a position, and is drawn dimmer to say so.
 func _map_project(world: Vector3, centre: Vector2, radius: float,
 		pixels_per_cell: float, player_cell: Vector2,
@@ -1230,7 +1288,7 @@ func _draw_map_caches(centre: Vector2, radius: float, pixels_per_cell: float,
 
 		# A diamond, filled while it has rounds and hollow once it is spent.
 		# Shape rather than colour, so an empty cache reads without relying on
-		# hue — the same rule the rest of the HUD follows.
+		# hue â the same rule the rest of the HUD follows.
 		var diamond := PackedVector2Array([
 			point + Vector2(0.0, -5.0), point + Vector2(5.0, 0.0),
 			point + Vector2(0.0, 5.0), point + Vector2(-5.0, 0.0),
@@ -1304,7 +1362,7 @@ func _draw_map_player(centre: Vector2) -> void:
 ##
 ## Three separate reserves mean the counts above are only meaningful next to
 ## the name of the gun they belong to, and the row also answers "what else do I
-## have" — which, with the shotgun dry, is the only question that matters. The
+## have" â which, with the shotgun dry, is the only question that matters. The
 ## active chip is marked by a caret and by brightness, never by colour alone.
 func _build_weapon_chips() -> void:
 	if _weapon_row == null:
@@ -1327,7 +1385,7 @@ func _build_weapon_chips() -> void:
 		var kind: WeaponTypes.Kind = kinds[index]
 		var active := _weapon != null and _weapon.kind == kind
 		chip.text = "%s%d %s" % [
-			"▸" if active else " ", index + 1, WeaponTypes.display_name(kind)
+			"â¸" if active else " ", index + 1, WeaponTypes.display_name(kind)
 		]
 		chip.modulate = (
 			Color(0.96, 0.96, 0.97, 1.0) if active else Color(0.55, 0.58, 0.64, 0.6)

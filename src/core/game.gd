@@ -13,6 +13,10 @@ signal round_won(kills: int, time_taken: float, is_record: bool)
 signal round_lost(kills: int, time_survived: float, is_record: bool)
 signal time_changed(remaining: float, total: float)
 signal kills_changed(kills: int)
+## The objective line and its compass bearing. Game owns the routing; the relay
+## chain emits text and never touches the HUD, the same rule the interactor's
+## prompt already follows.
+signal objective_changed(text: String, bearing_target: Vector3, has_bearing: bool)
 
 enum RoundState { PLAYING, WON, LOST }
 
@@ -23,6 +27,13 @@ const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
 const RELOAD_LOUDNESS := 0.3
 const FOOTSTEP_LOUDNESS := 0.22
 const CACHE_LOUDNESS := 0.45
+## Where an armed relay drops its reward kit, relative to the beacon. Off to one
+## side so the kit is not inside the mast the player just spent three seconds
+## standing at.
+const RELAY_REWARD_OFFSET := Vector3(1.2, 0.0, 0.0)
+## Reward kits are spawned into the arena at runtime, so a restart has to clear
+## them or every retry leaves the map a little richer than the last one did.
+const RELAY_REWARD_GROUP := "relay_reward"
 
 ## How often danger is recomputed. Ten times a second is far finer than the
 ## mix it drives can respond to.
@@ -67,6 +78,10 @@ var _threat_elapsed := 0.0
 @onready var progression: Progression = $Progression
 @onready var upgrade_menu: UpgradeMenu = $UpgradeMenu
 
+## The relay chain. Created here rather than authored into game.tscn because it
+## needs the arena's relays, which only exist after the arena has built itself.
+var relays: RelayObjective
+
 ## Null when autoloads are unavailable (headless --script runs); the exported
 ## defaults above stand in for the difficulty profile in that case.
 var _settings: GameSettings
@@ -87,7 +102,7 @@ func _ready() -> void:
 
 	# Look preferences are otherwise only read when a round starts, so a player
 	# adjusting sensitivity from the pause menu would change nothing until they
-	# restarted — and the whole reason to open that slider mid-round is that the
+	# restarted â and the whole reason to open that slider mid-round is that the
 	# current setting feels wrong right now.
 	if _settings != null:
 		_settings.changed.connect(func() -> void: _settings.apply_to_player(player))
@@ -98,9 +113,14 @@ func _ready() -> void:
 	_wire_noise()
 	_wire_caches()
 	_wire_effects()
+	_wire_relays()
 	hud.bind(self, player, weapon, spawner)
 
-	# The interactor never touches the HUD itself — it emits text and Game
+	# Same routing rule as the interact prompt below: the chain emits a line,
+	# Game decides that lines go to the HUD.
+	objective_changed.connect(hud.set_objective)
+
+	# The interactor never touches the HUD itself â it emits text and Game
 	# decides where text goes, the same rule audio and effects follow here.
 	player.interactor.prompt_changed.connect(hud.show_prompt)
 	start_round()
@@ -142,7 +162,7 @@ func _wire_audio() -> void:
 
 	# The one sound that means something changed about you rather than about
 	# them. Played where the zombie is, so it carries a direction. A Screamer
-	# gets its own alarm and a Stalker gets silence — see SoundBank.notice_event.
+	# gets its own alarm and a Stalker gets silence â see SoundBank.notice_event.
 	spawner.zombie_noticed_player.connect(
 		func(at: Vector3, kind: ZombieTypes.Kind) -> void:
 			sounds.play_at(SoundBank.notice_event(kind), at)
@@ -185,6 +205,49 @@ func _on_medkit_used(_healed: float, kit: Medkit) -> void:
 	sounds.play_at("medkit_used", kit.global_position)
 
 
+## Stand the relay chain up and connect the three things it must not know about
+## itself: the noise system, the reward, and the end of the round.
+func _wire_relays() -> void:
+	relays = RelayObjective.new()
+	relays.name = "RelayObjective"
+	add_child(relays)
+	relays.bind(arena, player, player.interactor)
+
+	for relay in relays.relays:
+		# Through _make_noise and nothing else. It is the single call that both
+		# broadcasts to the spawner and reports the cost to the noise ring, so a
+		# relay wired straight to the spawner would be loud without the player
+		# ever being told it was.
+		relay.noise_pulsed.connect(_make_noise)
+
+	relays.relay_armed.connect(_on_relay_armed)
+	relays.objective_changed.connect(_on_objective_changed)
+	relays.completed.connect(_on_extraction_completed)
+
+
+func _on_objective_changed(text: String, target: Vector3, has_bearing: bool) -> void:
+	objective_changed.emit(text, target, has_bearing)
+
+
+func _on_extraction_completed() -> void:
+	if state == RoundState.PLAYING:
+		_end_round(RoundState.WON)
+
+
+## The reward exists only after the player has committed, and it is the resource
+## they will need because of what the commitment just summoned.
+func _on_relay_armed(relay: SignalRelay) -> void:
+	sounds.play_at("cache_resupply", relay.global_position)
+
+	if not relays.relay_reward_kit:
+		return
+
+	var kit := Medkit.spawn(arena, relay.global_position + RELAY_REWARD_OFFSET)
+	kit.add_to_group(RELAY_REWARD_GROUP)
+	# A kit spawned at runtime has no voice until Game gives it one.
+	wire_medkit_audio(kit)
+
+
 ## Caches hand their rounds to the weapon through Game, for the same reason
 ## audio and effects route through here: a crate in the arena should not know
 ## what a magazine is.
@@ -214,7 +277,7 @@ func _wire_caches() -> void:
 
 
 ## A gunshot is heard by anything nearby, and what it draws is a crowd to the
-## place the shot came from — not to the player.
+## place the shot came from â not to the player.
 ##
 ## This is what makes the game's first pillar literally true. Ammunition
 ## scarcity alone means a bullet costs a bullet; with noise it also costs your
@@ -244,7 +307,7 @@ func _wire_noise() -> void:
 	)
 
 	# The throw is silent; only the landing speaks. That is the whole reason a
-	# decoy is worth a round — it moves the horde without moving you, and
+	# decoy is worth a round â it moves the horde without moving you, and
 	# without telling them where you threw it from.
 	weapon.decoy_thrown.connect(func(decoy: Decoy) -> void:
 		decoy.landed.connect(func(at: Vector3, loudness: float) -> void:
@@ -258,7 +321,7 @@ func _wire_noise() -> void:
 ##
 ## Sampled several times a second rather than every frame. The figure walks
 ## every living zombie, and the mix it feeds is smoothed over more than a
-## second anyway — so a tenth of a second of staleness is not something anyone
+## second anyway â so a tenth of a second of staleness is not something anyone
 ## can hear, while the per-frame walk is cost paid for nothing.
 ##
 ## The accumulated time is handed to the smoothing rather than the frame delta,
@@ -330,7 +393,7 @@ func _wire_effects() -> void:
 
 ## Opening the pause menu is taken as an input event rather than polled in
 ## _process, because this node stops processing the instant the tree pauses.
-## Polling meant the control that opened the menu could not close it again —
+## Polling meant the control that opened the menu could not close it again â
 ## the only way out was clicking Resume, with a mouse. Closing is handled by
 ## PauseMenu itself, which is the node still awake at that point.
 func _unhandled_input(event: InputEvent) -> void:
@@ -341,7 +404,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_pause()
 	else:
 		# There is nothing to pause once the round is over, so the same control
-		# leaves for the menu — which is what the results screen offers.
+		# leaves for the menu â which is what the results screen offers.
 		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 	get_viewport().set_input_as_handled()
@@ -360,9 +423,11 @@ func _process(delta: float) -> void:
 	if state != RoundState.PLAYING:
 		return
 
-	# Endless has no clock to run out, so its timer counts up as a score rather
-	# than down as a deadline. Everything else is a countdown to a win.
-	if mode == GameSettings.Mode.ENDLESS:
+	relays.tick(delta)
+
+	# A mode with no win clock counts up as a score rather than down as a
+	# deadline. Everything else is a countdown to a win.
+	if not _has_win_clock():
 		elapsed_time += delta
 		time_changed.emit(elapsed_time, 0.0)
 		return
@@ -376,7 +441,7 @@ func _process(delta: float) -> void:
 
 
 ## Restore every system to its opening state and begin a fresh round. This is
-## the restart control — nothing is reloaded, so there is no scene transition
+## the restart control â nothing is reloaded, so there is no scene transition
 ## and no chance of a stale node surviving into the new round.
 func start_round() -> void:
 	_apply_difficulty()
@@ -411,15 +476,33 @@ func start_round() -> void:
 	for cache in arena.ammo_caches:
 		cache.reset()
 
+	# Nor with a relay the last one armed, nor a hold the last one was halfway
+	# through. A hold at 2.9s of 3.0 completing on the first frame of the new
+	# round is the exact bug QA found on the interactor.
+	for kit in get_tree().get_nodes_in_group(RELAY_REWARD_GROUP):
+		kit.queue_free()
+
+	relays.set_enabled(mode == GameSettings.Mode.RELAY)
+	relays.reset()
+	relays.set_active(true)
+
 	spawner.reset()
 	spawner.begin(arena, player)
 
 	kills_changed.emit(kills)
 	time_changed.emit(
-		elapsed_time if mode == GameSettings.Mode.ENDLESS else time_remaining,
-		0.0 if mode == GameSettings.Mode.ENDLESS else round_duration
+		elapsed_time if not _has_win_clock() else time_remaining,
+		0.0 if not _has_win_clock() else round_duration
 	)
 	round_started.emit()
+
+
+## Whether this mode's timer is a deadline or a score.
+##
+## Endless cannot be won, and Relay is won by finishing the chain rather than by
+## outlasting anything, so neither has a clock to run out.
+func _has_win_clock() -> bool:
+	return mode != GameSettings.Mode.ENDLESS and mode != GameSettings.Mode.RELAY
 
 
 func is_round_over() -> bool:
@@ -515,9 +598,13 @@ func _apply_mode() -> void:
 			round_duration = GameSettings.MODE_DURATIONS[GameSettings.Mode.TIMED]
 		GameSettings.Mode.ENDLESS:
 			round_duration = 0.0
+		GameSettings.Mode.RELAY:
+			# No countdown; elapsed_time is the score. The relay chain is this
+			# mode's escalation, so the endless ramp stays off.
+			round_duration = 0.0
 
 	# Endless keeps escalating rather than settling at its floor, so the run
-	# always ends eventually — a survival mode you cannot lose is a screensaver.
+	# always ends eventually â a survival mode you cannot lose is a screensaver.
 	spawner.endless = mode == GameSettings.Mode.ENDLESS
 
 
@@ -529,6 +616,7 @@ func _toggle_pause() -> void:
 		weapon.set_input_enabled(false)
 		player.set_look_enabled(false)
 		player.interactor.set_input_enabled(false)
+		relays.set_active(false)
 
 
 func _on_resumed() -> void:
@@ -539,6 +627,7 @@ func _on_resumed() -> void:
 	weapon.set_input_enabled(true)
 	player.set_look_enabled(true)
 	player.interactor.set_input_enabled(true)
+	relays.set_active(true)
 
 
 func _on_zombie_died(death_position: Vector3, experience: int, ammo: int) -> void:
@@ -576,6 +665,7 @@ func _on_levelled_up(level: int, choices: Array[Dictionary]) -> void:
 	weapon.set_input_enabled(false)
 	player.set_look_enabled(false)
 	player.interactor.set_input_enabled(false)
+	relays.set_active(false)
 	upgrade_menu.open(level, choices)
 
 
@@ -593,6 +683,9 @@ func _end_round(result: RoundState) -> void:
 	# The interact key goes with them, or the results screen is a place where
 	# the map can still be looted.
 	player.interactor.set_input_enabled(false)
+	# And the relay hold goes with it, or a hold paid for under player control
+	# finishes itself after the player has stopped being alive.
+	relays.set_active(false)
 
 	var difficulty: GameSettings.Difficulty = (
 		_settings.difficulty if _settings != null else GameSettings.Difficulty.SOLDIER
