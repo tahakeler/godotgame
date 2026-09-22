@@ -39,7 +39,13 @@ const DEFINITIONS := {
 		"height": 2.0,
 		"tint": Color(1.0, 1.0, 1.0),
 		"experience": 1,
-		"ammo": 1,
+		## Nothing. The commonest kill in the game funds nothing, which is the only
+		## way the average round-per-kill lands below what a kill costs to make —
+		## measured at 1.2-1.3 rounds spent, and Shamblers are 40-70% of kills, so
+		## no reward of 1 or more anywhere else can drag the mean under water.
+		##
+		## The horde does not fund you. The map does.
+		"ammo": 0,
 		## How far this kind hears a gunshot, in metres. A Brute hears furthest,
 		## so the thing you least want to attract is the thing a shot is most
 		## likely to bring — which is what makes firing a decision rather than
