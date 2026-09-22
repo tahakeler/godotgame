@@ -478,4 +478,60 @@ func _report() -> void:
 		_blocked_switching, _blocked_reloading, _blocked_empty, _blocked_cooldown
 	])
 	print("round state at end   %d (0 = still playing)" % _game.state)
+	_report_reserves()
 	quit(0)
+
+
+## Reserve per weapon across the round, as a curve rather than a total.
+##
+## A totals-only report cannot see the failure this is looking for. Income now
+## goes to whichever weapon is emptiest relative to its own ceiling, which is
+## what stops the fallback starving — but it means the weapon with the most room
+## absorbs the most, and the pistol's ceiling of 72 is the largest of the three.
+## If it quietly fills while the player fights with the other two, that is a
+## second flavour of infinite ammunition wearing a different hat, and it would
+## be completely invisible in an arsenal-wide figure.
+##
+## Printed as absolute rounds and as a percentage of each weapon's own ceiling,
+## because the routing ranks on the percentage and that is the number that
+## explains why the rounds went where they did.
+func _report_reserves() -> void:
+	if _reserve_timeline.is_empty():
+		return
+
+	var weapon: Weapon = _game.weapon
+
+	print("")
+	print("RESERVE OVER TIME — rounds (% of that weapon's ceiling)")
+
+	var header := "    t   "
+	for kind in WeaponTypes.order():
+		header += "%-16s" % WeaponTypes.display_name(kind)
+	print(header)
+
+	for row in _reserve_timeline:
+		var line := "%5.0fs  " % row.at
+		for kind in WeaponTypes.order():
+			var reserve: int = row[kind]
+			var ceiling: int = weapon.reserve_ceiling_for(kind)
+			line += "%-16s" % ("%d (%.0f%%)" % [
+				reserve, 100.0 * float(reserve) / maxf(float(ceiling), 1.0)
+			])
+		print(line)
+
+	# The verdict the curve exists to deliver: did anything end the round
+	# holding materially more than it started with?
+	print("")
+	var first: Dictionary = _reserve_timeline[0]
+	var last: Dictionary = _reserve_timeline[-1]
+
+	for kind in WeaponTypes.order():
+		var change: int = int(last[kind]) - int(first[kind])
+		var verdict := "steady"
+		if change > 0:
+			verdict = "ACCUMULATING"
+		elif change < 0:
+			verdict = "draining"
+		print("%-9s %+4d rounds across the run — %s" % [
+			WeaponTypes.display_name(kind), change, verdict
+		])
