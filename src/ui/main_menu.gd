@@ -10,6 +10,17 @@ extends Node3D
 
 const GAME_SCENE := "res://src/core/game.tscn"
 
+## What actually changes at each difficulty, in play terms rather than raw
+## multipliers. GameSettings.DIFFICULTY_PROFILES holds the numbers this
+## describes, but the project's standing rule is that player-facing UI never
+## shows a raw stat — so this file owns the prose translation of that table,
+## the same way GameSettings.MODE_BLURBS owns the prose for modes.
+const DIFFICULTY_BLURBS := {
+	GameSettings.Difficulty.RECRUIT: "Zombies react slower and hit softer. Ammunition goes further.",
+	GameSettings.Difficulty.SOLDIER: "The default fight — balanced pressure, balanced supply.",
+	GameSettings.Difficulty.VETERAN: "Zombies notice you sooner and hit harder. Ammunition is scarcer.",
+}
+
 @export_group("Backdrop camera")
 ## Where the camera stands, how far it circles, and at what eye height.
 ##
@@ -41,13 +52,21 @@ const GAME_SCENE := "res://src/core/game.tscn"
 @onready var _play_button: Button = %PlayButton
 @onready var _settings_button: Button = %SettingsButton
 @onready var _quit_button: Button = %QuitButton
-@onready var _difficulty_hint: Label = %DifficultyHint
-@onready var _mode_button: Button = %ModeButton
-@onready var _mode_blurb: Label = %ModeBlurb
-@onready var _record_label: Label = %RecordLabel
+@onready var _mode_panel: Control = %ModePanel
+@onready var _mode_entries: VBoxContainer = %ModeEntries
+@onready var _difficulty_panel: Control = %DifficultyPanel
+@onready var _difficulty_entries: VBoxContainer = %DifficultyEntries
 @onready var _fade: ColorRect = %Fade
 
 var _settings: GameSettings
+
+## Built once in _ready(), keyed by the enum value each button selects. Lets
+## focus-on-open jump straight to the player's last choice instead of always
+## landing on the first row.
+var _mode_buttons: Dictionary = {}
+var _mode_record_labels: Dictionary = {}
+var _difficulty_buttons: Dictionary = {}
+
 var _orbit_angle := 0.0
 
 
@@ -64,15 +83,16 @@ func _ready() -> void:
 	_credits_panel.closed.connect(_on_credits_closed)
 	_controls_button.pressed.connect(_on_controls_pressed)
 	_controls_panel.closed.connect(_on_controls_closed)
-	_mode_button.pressed.connect(_on_mode_pressed)
 
 	_settings_panel.visible = false
 	_credits_panel.visible = false
 	_controls_panel.visible = false
+	_mode_panel.visible = false
+	_difficulty_panel.visible = false
+	_build_mode_panel()
+	_build_difficulty_panel()
 	_play_button.grab_focus()
 	_refresh_controls_hint()
-	_refresh_difficulty_hint()
-	_refresh_mode()
 	_orbit_angle = deg_to_rad(orbit_start_degrees)
 	_fade_in()
 
@@ -93,13 +113,169 @@ func _process(delta: float) -> void:
 	)
 
 
+## Esc backs out one step of the play flow. Settings/Controls/Credits already
+## close themselves on Esc through their own `closed` signal (see
+## _on_settings_closed and friends) — this only covers the two panels added
+## for the flow below, which have no script of their own to own that logic.
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+
+	if _difficulty_panel.visible:
+		get_viewport().set_input_as_handled()
+		_close_difficulty_panel()
+	elif _mode_panel.visible:
+		get_viewport().set_input_as_handled()
+		_close_mode_panel()
+
+
 func _fade_in() -> void:
 	_fade.color.a = 1.0
 	create_tween().tween_property(_fade, "color:a", 0.0, fade_duration)
 
 
+## PLAY no longer drops straight into a round. It opens the mode panel, which
+## opens the difficulty panel, which is what actually starts the round — see
+## _start_round(). A returning player who wants exactly what they played last
+## time still only has to press Enter three times: this screen focuses their
+## last mode, the next focuses their last difficulty.
 func _on_play_pressed() -> void:
-	# Fade out before switching, so the round does not snap in.
+	_main_panel.visible = false
+	_mode_panel.visible = true
+	_refresh_mode_entries()
+	_focus_mode_button(_settings.mode if _settings != null else GameSettings.Mode.EXTRACTION)
+
+
+func _close_mode_panel() -> void:
+	_mode_panel.visible = false
+	_main_panel.visible = true
+	_play_button.grab_focus()
+
+
+## Build one row per mode: a button carrying the name, and beneath it a label
+## carrying the win-condition blurb and the player's best. The blurb text and
+## the best-record lookup both already existed for the old single-screen
+## layout (GameSettings.get_mode_blurb, Records.best/Records.describe) — this
+## just repeats them once per mode instead of once for whichever mode the
+## inline cycler currently showed.
+func _build_mode_panel() -> void:
+	for mode: GameSettings.Mode in GameSettings.MODE_NAMES.keys():
+		var entry := VBoxContainer.new()
+		entry.add_theme_constant_override("separation", 4)
+
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(0, 50)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.add_theme_font_size_override("font_size", 20)
+		button.text = GameSettings.MODE_NAMES[mode].to_upper()
+		button.pressed.connect(_on_mode_selected.bind(mode))
+		entry.add_child(button)
+
+		var info := Label.new()
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.add_theme_color_override("font_color", Color(0.55, 0.58, 0.64, 1))
+		info.add_theme_font_size_override("font_size", 15)
+		entry.add_child(info)
+
+		_mode_entries.add_child(entry)
+		_mode_buttons[mode] = button
+		_mode_record_labels[mode] = info
+
+
+## Refreshed on every open rather than trusted from _build_mode_panel(), so a
+## round played earlier in this session shows up in the best-record line —
+## the same reasoning ControlsPanel.rebuild() uses for its rows.
+func _refresh_mode_entries() -> void:
+	if _settings == null:
+		return
+
+	for mode: GameSettings.Mode in _mode_record_labels.keys():
+		var label: Label = _mode_record_labels[mode]
+		var record := Records.best(mode, _settings.difficulty)
+		label.text = "%s     BEST  %s" % [
+			GameSettings.MODE_BLURBS[mode], Records.describe(mode, record)
+		]
+
+
+func _focus_mode_button(mode: GameSettings.Mode) -> void:
+	var button: Button = _mode_buttons.get(mode)
+	if button == null and not _mode_buttons.is_empty():
+		button = _mode_buttons.values()[0]
+	if button != null:
+		button.grab_focus()
+
+
+func _on_mode_selected(mode: GameSettings.Mode) -> void:
+	if _settings == null:
+		return
+
+	_settings.mode = mode
+	_settings.save_settings()
+	_open_difficulty_panel()
+
+
+func _open_difficulty_panel() -> void:
+	_mode_panel.visible = false
+	_difficulty_panel.visible = true
+	_focus_difficulty_button(
+		_settings.difficulty if _settings != null else GameSettings.Difficulty.SOLDIER
+	)
+
+
+func _close_difficulty_panel() -> void:
+	_difficulty_panel.visible = false
+	_mode_panel.visible = true
+	_refresh_mode_entries()
+	_focus_mode_button(_settings.mode if _settings != null else GameSettings.Mode.EXTRACTION)
+
+
+## One row per difficulty: a button carrying the name, and beneath it what the
+## difficulty actually changes in play, worded from DIFFICULTY_BLURBS above
+## rather than the raw scales in GameSettings.DIFFICULTY_PROFILES.
+func _build_difficulty_panel() -> void:
+	for difficulty: GameSettings.Difficulty in GameSettings.DIFFICULTY_NAMES.keys():
+		var entry := VBoxContainer.new()
+		entry.add_theme_constant_override("separation", 4)
+
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(0, 50)
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.add_theme_font_size_override("font_size", 20)
+		button.text = GameSettings.DIFFICULTY_NAMES[difficulty].to_upper()
+		button.pressed.connect(_on_difficulty_selected.bind(difficulty))
+		entry.add_child(button)
+
+		var info := Label.new()
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.add_theme_color_override("font_color", Color(0.55, 0.58, 0.64, 1))
+		info.add_theme_font_size_override("font_size", 15)
+		info.text = DIFFICULTY_BLURBS[difficulty]
+		entry.add_child(info)
+
+		_difficulty_entries.add_child(entry)
+		_difficulty_buttons[difficulty] = button
+
+
+func _focus_difficulty_button(difficulty: GameSettings.Difficulty) -> void:
+	var button: Button = _difficulty_buttons.get(difficulty)
+	if button == null and not _difficulty_buttons.is_empty():
+		button = _difficulty_buttons.values()[0]
+	if button != null:
+		button.grab_focus()
+
+
+func _on_difficulty_selected(difficulty: GameSettings.Difficulty) -> void:
+	if _settings == null:
+		return
+
+	_settings.difficulty = difficulty
+	_settings.save_settings()
+	_start_round()
+
+
+## The actual scene switch, unchanged from what _on_play_pressed used to do
+## directly before the flow grew a mode and a difficulty step in front of it.
+func _start_round() -> void:
 	var tween := create_tween()
 	tween.tween_property(_fade, "color:a", 1.0, 0.35)
 	tween.tween_callback(func() -> void:
@@ -166,38 +342,7 @@ func _on_settings_closed() -> void:
 	_settings_panel.visible = false
 	_main_panel.visible = true
 	_play_button.grab_focus()
-	_refresh_difficulty_hint()
 
 
 func _on_quit_pressed() -> void:
 	get_tree().quit()
-
-
-## Cycle the mode from the menu. Modes change how a round is won, so they get a
-## button on the front screen rather than being buried in settings next to the
-## mouse sensitivity.
-func _on_mode_pressed() -> void:
-	if _settings == null:
-		return
-
-	var count: int = GameSettings.MODE_NAMES.size()
-	_settings.mode = ((int(_settings.mode) + 1) % count) as GameSettings.Mode
-	_settings.save_settings()
-	_refresh_mode()
-
-
-func _refresh_mode() -> void:
-	if _settings == null:
-		return
-
-	_mode_button.text = "MODE:  %s" % _settings.get_mode_name().to_upper()
-	_mode_blurb.text = _settings.get_mode_blurb()
-	_record_label.text = "BEST   %s" % Records.describe(
-		_settings.mode, Records.best(_settings.mode, _settings.difficulty)
-	)
-
-
-func _refresh_difficulty_hint() -> void:
-	if _settings == null:
-		return
-	_difficulty_hint.text = _settings.get_difficulty_name().to_upper()
