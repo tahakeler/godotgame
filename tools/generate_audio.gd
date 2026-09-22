@@ -25,6 +25,7 @@ func _initialize() -> void:
 	_write("fire_pistol", _build_fire_pistol())
 	_write("fire_shotgun", _build_fire_shotgun())
 	_write("fire_rifle", _build_fire_rifle())
+	_write("screamer_inhale", _build_screamer_inhale())
 	_write("screamer_alarm", _build_screamer_alarm())
 	_write("brute_growl", _build_brute_growl())
 	_write("decoy_land", _build_decoy_land())
@@ -380,6 +381,88 @@ func _build_fire_rifle() -> PackedFloat32Array:
 ## The pitch sweeps up, wobbles on a siren vibrato, then lands on a held note.
 ## The held part is deliberate: it gives the player a full second in which the
 ## correct play — turn, find it, kill it — is still available.
+## The breath a Screamer takes before it screams. 1.6s, to match the wind-up.
+##
+## This is the most important warning in the game and it has to win three
+## fights at once.
+##
+## Against the ambient groan. The groan is a short wooden creak that starts at
+## its loudest and dies away. This does the opposite in every dimension: it has
+## no attack at all, swells continuously for a second and a half, and rises in
+## pitch throughout. Nothing else in the bank crescendos, and a rising,
+## swelling sound is the one gesture the ear refuses to file as background —
+## it is the shape of something approaching, which is exactly the report.
+##
+## Against distance and corners. Sound is the only sense that goes round a
+## corner in this game — the flashlight needs line of sight and this must not.
+## The energy is deliberately low and narrow-band rather than bright: high
+## frequencies are the first thing forty metres of cave takes away, so a hiss
+## would vanish and this does not.
+##
+## Against a firefight. A gunshot is a broadband transient, over in a moment.
+## This is sustained, narrow and slow, which puts it in a different perceptual
+## stream — the ear tracks it as a separate voice rather than masking it under
+## the shooting, in the same way a held note survives applause.
+##
+## It ends on 300 Hz because that is the pitch `screamer_alarm` begins at, so
+## the inhale does not stop and a scream start: the breath focuses, arrives at
+## the note, and the scream continues the same gesture. Two clips, one event.
+func _build_screamer_inhale() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6661
+
+	# Matches Zombie's 1.6s alarm wind-up. If that timing changes this should
+	# follow it, or the breath will finish before or after the lungs do.
+	var duration := 1.6
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	# State-variable filter state. A resonant band-pass is what turns white
+	# noise into breath rather than static — the resonance gives the air a
+	# throat to pass through.
+	var low := 0.0
+	var band := 0.0
+	var tone_phase := 0.0
+
+	for index in frames:
+		var t := float(index) / SAMPLE_RATE
+		var progress := t / duration
+
+		# No attack whatsoever, and an accelerating swell. An onset is what
+		# makes a sound an event; the absence of one is what makes this feel
+		# like something that was already happening when you noticed it.
+		var envelope: float = pow(progress, 1.7)
+		# Except at the very end, where it must not click into the scream.
+		envelope *= minf(1.0, (1.0 - progress) / 0.04 + 0.85)
+
+		# 170 Hz up to the 300 Hz the scream starts on. Curved rather than
+		# linear so most of the travel happens late, which reads as the breath
+		# running out of room.
+		var centre: float = lerpf(170.0, 300.0, pow(progress, 1.5))
+
+		var f: float = 2.0 * sin(PI * centre / SAMPLE_RATE)
+		# Resonance tightens as the breath focuses: wide and airy at the start,
+		# nearly a pitch by the end.
+		var q: float = lerpf(0.55, 0.13, progress)
+
+		var noise := rng.randf_range(-1.0, 1.0)
+		low += f * band
+		var high: float = noise - low - q * band
+		band += f * high
+
+		# The tone the breath resolves into, absent until the final third. This
+		# is the hinge between the two clips — by the time the scream starts,
+		# its pitch is already sounding.
+		var focus: float = clampf((progress - 0.62) / 0.38, 0.0, 1.0)
+		tone_phase = fmod(tone_phase + TAU * centre / SAMPLE_RATE, TAU)
+		var tone: float = sin(tone_phase) * focus * 0.3
+
+		samples[index] = clampf((band * 1.6 + tone) * envelope, -1.0, 1.0)
+
+	return samples
+
+
 func _build_screamer_alarm() -> PackedFloat32Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 6660
