@@ -743,6 +743,11 @@ func _on_levelled_up(level: int, choices: Array[Dictionary]) -> void:
 
 
 func _on_player_died() -> void:
+	# Records.tally_death(kind) would belong here, crediting whichever zombie
+	# landed the killing blow, but Health.take_damage() and both the
+	# health.died and player.died signals carry no attacker information.
+	# Plumbing that through is a damage-path change outside this task's
+	# scope, so career deaths-by-kind is left unrecorded for now.
 	if state == RoundState.PLAYING:
 		_end_round(RoundState.LOST)
 
@@ -765,6 +770,11 @@ func _end_round(result: RoundState) -> void:
 	)
 	var is_record := Records.submit(
 		mode, difficulty, kills, elapsed_time, result == RoundState.WON
+	)
+	# Lifetime totals accumulate on every run, independent of whether this
+	# run beat the best; the STATS tab wants the career sum, not the peak.
+	Records.tally_run(
+		mode, difficulty, kills, shots_fired, shots_hit, elapsed_time, result == RoundState.WON
 	)
 
 	if result == RoundState.WON:

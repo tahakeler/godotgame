@@ -17,6 +17,14 @@ extends RefCounted
 const PATH := "user://records.cfg"
 const SECTION := "records"
 
+## Lifetime tallies, one accumulated row per mode and difficulty, plus a
+## career-wide section that is not split by mode or difficulty at all. Kept
+## as a second ConfigFile section rather than a second file so a corrupt or
+## missing save wipes both at once instead of leaving them out of sync.
+const TOTALS_SECTION := "totals"
+const CAREER_SECTION := "career"
+const CAREER_KEY := "career"
+
 
 ## The best run recorded for this mode and difficulty, or an empty result.
 static func best(mode: GameSettings.Mode, difficulty: GameSettings.Difficulty) -> Dictionary:
@@ -56,6 +64,106 @@ static func submit(
 	config.save(PATH)
 
 	return true
+
+
+## Accumulate one finished run into the lifetime totals for this mode and
+## difficulty. Independent of `submit()` above: a run always adds to the
+## totals even when it does not beat the recorded best.
+static func tally_run(
+	mode: GameSettings.Mode,
+	difficulty: GameSettings.Difficulty,
+	kills: int,
+	shots_fired: int,
+	shots_hit: int,
+	duration: float,
+	won: bool
+) -> void:
+	var row := totals(mode, difficulty)
+	row.runs_started += 1
+	row.runs_won += 1 if won else 0
+	row.runs_lost += 0 if won else 1
+	row.kills += kills
+	row.shots_fired += shots_fired
+	row.shots_hit += shots_hit
+	row.duration += duration
+
+	var config := ConfigFile.new()
+	# As with submit(), a missing or unreadable file is rebuilt rather than
+	# failed over; the run that just finished is not worth losing.
+	config.load(PATH)
+	config.set_value(TOTALS_SECTION, _key(mode, difficulty), row)
+	config.save(PATH)
+
+
+## The accumulated lifetime row for this mode and difficulty, or all zeros
+## when nothing has been tallied yet.
+static func totals(mode: GameSettings.Mode, difficulty: GameSettings.Difficulty) -> Dictionary:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return _empty_totals()
+
+	# As with best() above: the default passed to get_value() must be a real
+	# dictionary, not null, or a missing key reads back as an error instead
+	# of quietly returning the default.
+	var stored: Dictionary = config.get_value(TOTALS_SECTION, _key(mode, difficulty), {})
+	return stored if stored.has("runs_started") else _empty_totals()
+
+
+## Every mode and difficulty summed into one row, plus the career-wide
+## deaths-by-kind map. This is what the STATS tab shows; nothing here is
+## split by mode or difficulty.
+static func career() -> Dictionary:
+	var summed := _empty_totals()
+
+	var config := ConfigFile.new()
+	# Guarded on the section as well as the load. Every save written before
+	# totals existed has a "records" section and no "totals" one, and
+	# get_section_keys reports a missing section as an engine error rather
+	# than returning nothing — which the verification gate treats as a failed
+	# step, on what is simply a player who has played this game before.
+	if config.load(PATH) == OK and config.has_section(TOTALS_SECTION):
+		for row_key: String in config.get_section_keys(TOTALS_SECTION):
+			var row: Dictionary = config.get_value(TOTALS_SECTION, row_key, {})
+			if not row.has("runs_started"):
+				continue
+			summed.runs_started += row.runs_started
+			summed.runs_won += row.runs_won
+			summed.runs_lost += row.runs_lost
+			summed.kills += row.kills
+			summed.shots_fired += row.shots_fired
+			summed.shots_hit += row.shots_hit
+			summed.duration += row.duration
+
+	summed["deaths_by_kind"] = _deaths_by_kind()
+	return summed
+
+
+## Record one death credited to this zombie kind. Career-wide, not split by
+## mode or difficulty, so the menu can answer "what usually kills me?" across
+## every run rather than per mode.
+static func tally_death(kind: ZombieTypes.Kind) -> void:
+	var deaths := _deaths_by_kind()
+	deaths[int(kind)] = deaths.get(int(kind), 0) + 1
+
+	var config := ConfigFile.new()
+	config.load(PATH)
+	config.set_value(CAREER_SECTION, CAREER_KEY, deaths)
+	config.save(PATH)
+
+
+## Wipes the lifetime tallies only. The best-run section is untouched, so
+## resetting the STATS tab never costs the player a personal best.
+static func reset_totals() -> void:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return
+	# erase_section() raises an error for a section that is not there, so a
+	# fresh save with nothing tallied yet must not call it unconditionally.
+	if config.has_section(TOTALS_SECTION):
+		config.erase_section(TOTALS_SECTION)
+	if config.has_section(CAREER_SECTION):
+		config.erase_section(CAREER_SECTION)
+	config.save(PATH)
 
 
 ## A human-readable summary of a best, for the menus.
@@ -113,6 +221,29 @@ static func _key(mode: GameSettings.Mode, difficulty: GameSettings.Difficulty) -
 
 static func _empty() -> Dictionary:
 	return {}
+
+
+static func _empty_totals() -> Dictionary:
+	return {
+		"runs_started": 0,
+		"runs_won": 0,
+		"runs_lost": 0,
+		"kills": 0,
+		"shots_fired": 0,
+		"shots_hit": 0,
+		"duration": 0.0,
+	}
+
+
+## The career-wide deaths-by-kind map, keyed by `int(ZombieTypes.Kind)`, or
+## empty when nothing has been tallied yet.
+static func _deaths_by_kind() -> Dictionary:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return {}
+	# Same null-default trap as best() and totals(): {} must be passed
+	# explicitly so an absent key returns it instead of raising an error.
+	return config.get_value(CAREER_SECTION, CAREER_KEY, {})
 
 
 static func _format(seconds: float) -> String:
