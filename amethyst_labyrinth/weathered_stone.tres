@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://amethyst_labyrinth/weathered_stone.gdshader" id="1_8v8um"]
+[ext_resource type="Texture2D" path="res://amethyst_labyrinth/stone_grain.png" id="2_7mov4"]
+[ext_resource type="Texture2D" path="res://amethyst_labyrinth/amethyst_labyrinth_colormap.png" id="3_hlnir"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_8v8um")
+shader_parameter/palette = ExtResource("3_hlnir")
+shader_parameter/grain = ExtResource("2_7mov4")

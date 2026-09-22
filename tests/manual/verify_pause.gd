@@ -5,7 +5,7 @@ extends SceneTree
 ## Regression test. Pausing was polled from Game._process, and Game stops
 ## processing the moment the tree pauses — so the control opened the menu and
 ## then went dead, leaving the mouse and the Resume button as the only way back
-## into the round. On a gamepad there is no cursor to click it with, so the
+## into the round. A laptop trackpad is awkward mid-fight, so the
 ## round was simply unrecoverable.
 ##
 ## This drives real input events rather than calling the handlers, because the

@@ -1,0 +1,72 @@
+{
+  "checks": [
+    {
+      "check": "sealed_outer_wall",
+      "passed": true,
+      "position": [
+        -35.6466941833496,
+        -0.000366830499842763,
+        0.0
+      ],
+      "side": -1.0
+    },
+    {
+      "check": "sealed_outer_wall",
+      "passed": true,
+      "position": [
+        35.6466903686523,
+        -0.000366821186617017,
+        0.0
+      ],
+      "side": 1.0
+    },
+    {
+      "check": "interior_wall",
+      "passed": true,
+      "position": [
+        3.99999451637268,
+        0.000127410283312201,
+        8.22865676879883
+      ]
+    },
+    {
+      "check": "door_closed_blocks_open_passes",
+      "closed_blocks": true,
+      "closed_position": [
+        24.0021648406982,
+        -0.000549891439732164,
+        14.7525835037231
+      ],
+      "door": "Interactive_gate-door-window",
+      "open_passes": true,
+      "open_position": [
+        23.4438247680664,
+        0.000909138412680477,
+        12.1456203460693
+      ]
+    },
+    {
+      "check": "door_closed_blocks_open_passes",
+      "closed_blocks": true,
+      "closed_position": [
+        -9.23570537567139,
+        -0.000680546858347952,
+        -0.00199625384993851
+      ],
+      "door": "Interactive_gate-door",
+      "open_passes": true,
+      "open_position": [
+        -12.4783115386963,
+        0.000547477160580456,
+        -0.00322035187855363
+      ]
+    },
+    {
+      "check": "ceiling_blocks_capsule",
+      "max_player_base_y": 2.19977831840515,
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "version": "4.7.2-stable (official)"
+}

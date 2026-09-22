@@ -15,12 +15,12 @@
 <!-- Written by /setup-engine. Read by /ux-design, /ux-review, /test-setup, /team-ui, and /dev-story -->
 <!-- to scope interaction specs, test helpers, and implementation to the correct input methods. -->
 
-- **Target Platforms**: PC, Console
-- **Input Methods**: Keyboard/Mouse, Gamepad
-- **Primary Input**: Gamepad
-- **Gamepad Support**: Full
+- **Target Platforms**: PC (Windows, macOS, Linux)
+- **Input Methods**: Keyboard and mouse only
+- **Primary Input**: Keyboard and mouse
+- **Gamepad Support**: None. Removed deliberately — this is a PC game and a half-supported pad is worse than none.
 - **Touch Support**: None
-- **Platform Notes**: All UI must support d-pad/controller navigation. No hover-only interactions. Console export requires third-party publisher support in Godot.
+- **Platform Notes**: No console target. Every control must be reachable on a laptop keyboard and trackpad without an external mouse. No hover-only interactions.
 
 ## Naming Conventions
 

@@ -146,15 +146,7 @@ const DIFFICULTY_PROFILES := {
 }
 
 var mouse_sensitivity := 0.0022
-## Stick turn rate in radians per second at full deflection. Kept separate from
-## the mouse figure because the two are not the same unit: one is radians per
-## pixel moved, the other radians per second held.
-var gamepad_sensitivity := 2.7
 var invert_look_y := false
-## Stick deadzone, applied to every bound action. Sticks wear out, and a worn
-## one walks the player into a wall on its own; raising this is the only repair
-## a player has short of buying a new pad.
-var gamepad_deadzone := 0.2
 var master_volume := 0.8
 ## Music and effects ride separate buses under Master, created at runtime by
 ## ensure_buses(). Split because the ambience bed is the thing players most
@@ -224,7 +216,6 @@ func _ready() -> void:
 	apply_audio()
 	apply_window()
 	apply_interface_scale()
-	apply_deadzone()
 
 
 func get_profile() -> Dictionary:
@@ -290,16 +281,6 @@ func _apply_bus_volume(bus_name: String, linear: float) -> void:
 	AudioServer.set_bus_volume_db(bus, linear_to_db(linear))
 
 
-## Push the chosen deadzone onto every bound action.
-##
-## Applied to game actions only. Raising the deadzone on the built-in ui_*
-## actions would make the menus themselves harder to drive with the same stick,
-## which is the opposite of what a player reaching for this setting wants.
-func apply_deadzone() -> void:
-	for action in InputMap.get_actions():
-		if String(action).begins_with("ui_"):
-			continue
-		InputMap.action_set_deadzone(action, gamepad_deadzone)
 
 
 func apply_window() -> void:
@@ -324,7 +305,6 @@ func apply_window() -> void:
 ## Push look preferences onto a player that just entered the scene.
 func apply_to_player(player: Player) -> void:
 	player.mouse_sensitivity = mouse_sensitivity
-	player.gamepad_sensitivity = gamepad_sensitivity
 	player.shake_scale = shake_scale
 	player.invert_look_y = invert_look_y
 	player.set_base_fov(field_of_view)
@@ -333,9 +313,7 @@ func apply_to_player(player: Player) -> void:
 func save_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value(SECTION, "mouse_sensitivity", mouse_sensitivity)
-	config.set_value(SECTION, "gamepad_sensitivity", gamepad_sensitivity)
 	config.set_value(SECTION, "invert_look_y", invert_look_y)
-	config.set_value(SECTION, "gamepad_deadzone", gamepad_deadzone)
 	config.set_value(SECTION, "master_volume", master_volume)
 	config.set_value(SECTION, "music_volume", music_volume)
 	config.set_value(SECTION, "sfx_volume", sfx_volume)
@@ -361,9 +339,7 @@ func load_settings() -> void:
 		return
 
 	mouse_sensitivity = config.get_value(SECTION, "mouse_sensitivity", mouse_sensitivity)
-	gamepad_sensitivity = config.get_value(SECTION, "gamepad_sensitivity", gamepad_sensitivity)
 	invert_look_y = config.get_value(SECTION, "invert_look_y", invert_look_y)
-	gamepad_deadzone = config.get_value(SECTION, "gamepad_deadzone", gamepad_deadzone)
 	master_volume = config.get_value(SECTION, "master_volume", master_volume)
 	music_volume = config.get_value(SECTION, "music_volume", music_volume)
 	sfx_volume = config.get_value(SECTION, "sfx_volume", sfx_volume)

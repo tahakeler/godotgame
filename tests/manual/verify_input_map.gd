@@ -11,9 +11,6 @@ extends SceneTree
 ##
 ##   Godot --headless --script tests/manual/verify_input_map.gd
 
-## The camera verbs. Mouse and right stick only, never the keyboard.
-const LOOK_ACTIONS := ["look_left", "look_right", "look_up", "look_down"]
-
 const PREFIX := "input/"
 const PROJECT_FILE := "res://project.godot"
 
@@ -27,9 +24,7 @@ func _initialize() -> void:
 		_failures.append("no actions found in the input map at all")
 
 	test_input_map_every_action_has_a_keyboard_or_mouse_binding(actions)
-	test_input_map_every_action_has_a_gamepad_binding(actions)
-	test_input_map_stick_axes_are_bound_in_opposing_pairs(actions)
-	test_input_map_looking_is_never_bound_to_the_keyboard(actions)
+	test_input_map_nothing_is_bound_to_a_gamepad(actions)
 
 	_report()
 
@@ -41,14 +36,6 @@ func test_input_map_every_action_has_a_keyboard_or_mouse_binding(
 		"InputEventKey", "InputEventMouseButton",
 	])
 
-	# Looking is deliberately exempt. It is served by the mouse, which never
-	# goes through the InputMap at all — Player._unhandled_input reads
-	# InputEventMouseMotion directly — and by the right stick. Requiring a
-	# keyboard binding here is what put the arrow keys on the camera in the
-	# first place, and a camera you turn with arrow keys is not the game this
-	# is. The rule below asserts the opposite for these four.
-	for action in LOOK_ACTIONS:
-		missing.erase(action)
 
 	# Assert
 	if missing.is_empty():
@@ -59,62 +46,6 @@ func test_input_map_every_action_has_a_keyboard_or_mouse_binding(
 		)
 
 
-func test_input_map_every_action_has_a_gamepad_binding(actions: Dictionary) -> void:
-	# Arrange / Act
-	var missing := _actions_without(actions, [
-		"InputEventJoypadButton", "InputEventJoypadMotion",
-	])
-
-	# Assert
-	if missing.is_empty():
-		print("PASS: every action has a gamepad binding")
-	else:
-		_failures.append("no gamepad binding for: %s" % ", ".join(missing))
-
-
-## Both directions of a stick axis must exist, or the player can turn one way
-## and not back — which reads as the stick being broken rather than unbound.
-func test_input_map_stick_axes_are_bound_in_opposing_pairs(actions: Dictionary) -> void:
-	# Arrange: collect the signed axis values bound for each joypad axis.
-	var by_axis := {}
-
-	for action in actions:
-		for event in actions[action]:
-			if not (event is InputEventJoypadMotion):
-				continue
-			var values: Array = by_axis.get(event.axis, [])
-			values.append(event.axis_value)
-			by_axis[event.axis] = values
-
-	# Act / Assert
-	var broken: Array[String] = []
-
-	for axis in by_axis:
-		var values: Array = by_axis[axis]
-		# A trigger rests at one end and only ever reads positive, so a single
-		# direction is correct there rather than a missing half.
-		if axis == JOY_AXIS_TRIGGER_LEFT or axis == JOY_AXIS_TRIGGER_RIGHT:
-			continue
-
-		var has_negative := values.any(func(v: float) -> bool: return v < 0.0)
-		var has_positive := values.any(func(v: float) -> bool: return v > 0.0)
-
-		if not (has_negative and has_positive):
-			broken.append("axis %d" % axis)
-
-	if broken.is_empty():
-		print("PASS: every stick axis is bound in both directions")
-	else:
-		_failures.append("only one direction bound on: %s" % ", ".join(broken))
-
-
-## action name -> its bound events, for actions this project declares.
-##
-## Read from project.godot rather than from ProjectSettings.get_property_list(),
-## which also reports the ~90 built-in `ui_*` editor actions. Those are the
-## engine's, not ours, and most are text-editing commands that have no business
-## being on a gamepad — asserting over them buries the actions that matter in
-## noise. The file's [input] section is exactly what this project declared.
 func _project_actions() -> Dictionary:
 	var config := ConfigFile.new()
 	var error := config.load(PROJECT_FILE)
@@ -177,39 +108,35 @@ func _report() -> void:
 ##
 ## Asserted rather than left as a comment because the exemption above would
 ## otherwise let a keyboard binding drift back in unnoticed.
-func test_input_map_looking_is_never_bound_to_the_keyboard(
-		actions: Dictionary) -> void:
+## Nothing may be bound to a gamepad.
+##
+## This game is keyboard and mouse only. The test that used to live here
+## required the opposite — every action needed a pad binding — and it was
+## written when console was a target. It is inverted rather than deleted
+## because a half-removed input path is worse than either state: a stray pad
+## binding would keep working, keep appearing on the controls screen, and keep
+## implying support that nothing else in the game honours.
+##
+## Looking never appears here at all. The four look actions were stick-only and
+## are gone; the mouse is read as InputEventMouseMotion in
+## Player._unhandled_input rather than through the InputMap.
+func test_input_map_nothing_is_bound_to_a_gamepad(actions: Dictionary) -> void:
 	# Arrange / Act
-	var keyboard_bound: Array[String] = []
-	var stickless: Array[String] = []
+	var bound: Array[String] = []
 
-	for action in LOOK_ACTIONS:
-		if not actions.has(action):
-			continue
-
-		var has_key := false
-		var has_stick := false
-
+	for action in actions:
 		for event in actions[action]:
 			if event == null:
 				continue
-			if event.get_class() == "InputEventKey":
-				has_key = true
-			elif event.get_class() == "InputEventJoypadMotion":
-				has_stick = true
-
-		if has_key:
-			keyboard_bound.append(action)
-		if not has_stick:
-			stickless.append(action)
+			if event.get_class().begins_with("InputEventJoypad"):
+				bound.append(action)
+				break
 
 	# Assert
-	if not keyboard_bound.is_empty():
+	if not bound.is_empty():
 		_failures.append(
-			"the camera is bound to the keyboard on: %s — looking is mouse and "
-			% ", ".join(keyboard_bound) + "stick only"
+			"gamepad bindings remain on: %s — this game is keyboard and mouse only"
+			% ", ".join(bound)
 		)
-	elif not stickless.is_empty():
-		_failures.append("no right-stick binding for: %s" % ", ".join(stickless))
 	else:
-		print("PASS: the camera is mouse and stick only, never the keyboard")
+		print("PASS: %d actions, all keyboard and mouse, none on a gamepad" % actions.size())

@@ -1,0 +1,30 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://amethyst_labyrinth/dungeon.tscn" id="1_87w83"]
+
+[sub_resource type="Environment" id="Environment_6uhb7"]
+background_mode = 1
+background_color = Color(0.006, 0.009, 0.016, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.6, 0.65, 0.75, 1)
+ambient_light_energy = 0.07
+tonemap_mode = 3
+ssao_enabled = true
+ssao_intensity = 1.1
+sdfgi_enabled = true
+sdfgi_use_occlusion = true
+sdfgi_read_sky_light = false
+sdfgi_min_cell_size = 0.3
+glow_enabled = true
+glow_intensity = 0.25
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.008
+volumetric_fog_albedo = Color(0.5, 0.55, 0.62, 1)
+volumetric_fog_length = 35.0
+
+[node name="EnclosedLabyrinthLit" type="Node3D" unique_id=1356837225]
+
+[node name="EnclosedLabyrinth" type="Node3D" parent="." unique_id=371486409 instance=ExtResource("1_87w83")]
+
+[node name="InteriorEnvironment" type="WorldEnvironment" parent="." unique_id=1926304437]
+environment = SubResource("Environment_6uhb7")
