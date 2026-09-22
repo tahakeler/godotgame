@@ -53,6 +53,7 @@ func _process(_delta: float) -> bool:
 			test_look_sensitivity_scales_the_turn()
 			test_look_uses_unscaled_screen_motion()
 			test_look_disabled_releases_the_cursor_and_ignores_input()
+			test_look_nothing_on_the_hud_swallows_the_mouse()
 
 		Step.DONE:
 			_report()
@@ -94,12 +95,28 @@ func test_look_mouse_motion_pitches_the_camera() -> void:
 ## angle is not a meaningful number — the pitch here reaches its clamp. What is
 ## meaningful is the difference between "turned" and "did not turn at all",
 ## which is the bug this guards.
+## Deliver a motion event the way the window does, from where the cursor is.
+##
+## `position` matters and used to be left at its default. A captured cursor is
+## pinned to the middle of the screen, so every real motion event arrives over
+## whatever sits at the centre — which is the crosshair. A Control there that
+## does not ignore the mouse consumes the event, `_unhandled_input` never runs,
+## and the camera cannot turn at all. Sending from (0, 0) missed that entirely:
+## the top-left corner is empty, so the event sailed through to the player and
+## the test passed against a build whose mouse was dead in the hand.
 func _send_motion(relative: Vector2) -> void:
 	var event := InputEventMouseMotion.new()
+	event.position = _cursor_anchor()
+	event.global_position = event.position
 	event.relative = relative
 	event.screen_relative = relative
 	event.velocity = relative
 	Input.parse_input_event(event)
+
+
+## Where a captured cursor sits: the centre of the viewport.
+func _cursor_anchor() -> Vector2:
+	return Vector2(root.get_visible_rect().size) * 0.5
 
 
 func _mode_name() -> String:
@@ -303,3 +320,48 @@ func _motion(relative: Vector2) -> InputEventMouseMotion:
 	event.relative = relative
 	event.screen_relative = relative
 	return event
+
+
+## Nothing drawn during play may take mouse input.
+##
+## This is the bug that prompted the check: `ColorRect` defaults to
+## MOUSE_FILTER_STOP, and the crosshair is five of them anchored to the middle
+## of the screen. A captured cursor is pinned to that exact point, so every
+## motion event arrived over a Control that consumed it, `_unhandled_input`
+## never ran, and the camera would not turn at all — while every headless test
+## kept passing, because a synthesised event carries no cursor to hover with.
+##
+## Asserted as an invariant rather than by replaying the symptom, since
+## headless has no DisplayServer and never resolves a hovered control. The
+## invariant is the real rule anyway: a HUD is something you look through.
+func test_look_nothing_on_the_hud_swallows_the_mouse() -> void:
+	# Arrange
+	var blockers: Array[String] = []
+
+	# Act
+	_collect_mouse_blockers(_game.hud, blockers)
+
+	# Assert
+	if not blockers.is_empty():
+		_failures.append(
+			"%d HUD node(s) take mouse input and would block looking: %s"
+			% [blockers.size(), ", ".join(blockers)]
+		)
+	else:
+		print("PASS: nothing visible on the HUD takes the mouse")
+
+
+## Walk the visible HUD, naming every Control that would consume motion.
+##
+## Hidden subtrees are skipped deliberately. The end-of-round overlay lives on
+## the HUD and its buttons must stay clickable; they are only ever on screen
+## once looking has already been disabled, so they cannot block anything.
+func _collect_mouse_blockers(node: Node, into: Array[String]) -> void:
+	if node is CanvasItem and not (node as CanvasItem).visible:
+		return
+
+	if node is Control and (node as Control).mouse_filter != Control.MOUSE_FILTER_IGNORE:
+		into.append(String(node.name))
+
+	for child in node.get_children():
+		_collect_mouse_blockers(child, into)

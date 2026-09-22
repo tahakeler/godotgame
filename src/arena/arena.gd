@@ -352,6 +352,11 @@ const DOORWAY_BEAM := "gate-overhang"
 ## polarity matters: marking what is exempt means the next prop somebody adds
 ## is audited by default, where marking what is solid would let it slip through
 ## unnoticed.
+## How close a spawn point's route must come to the player to count as
+## connected. The navmesh is eroded by the agent radius, so a path legitimately
+## stops short of a target standing near a wall.
+const SPAWN_ROUTE_TOLERANCE := 3.0
+
 const SHELL_BACKED := "collision_provided_elsewhere"
 
 const RAMP_NAV_OVERLAP := 0.9
@@ -637,6 +642,11 @@ var ammo_caches: Array[AmmoCache] = []
 var _external := false
 ## Cell occupancy derived from the external navigation mesh, cached because the
 ## minimap asks for it every time fog is revealed.
+var _navigation_ready := false
+var _spawns_pruned := false
+var _prune_attempts := 0
+## Frames to give the navigation server before accepting the spawns unchecked.
+const PRUNE_ATTEMPT_LIMIT := 30
 var _external_cells: Dictionary = {}
 ## Half-extent reported by get_play_radius(), measured from the map when there
 ## is one.
@@ -696,6 +706,10 @@ func _adopt_external_map() -> void:
 
 	var map := external_map.instantiate()
 	map.name = "ImportedMap"
+	# The map carries its own 322 collision shapes. It must not be fitted with
+	# a box like a prop: its bounding volume is mostly the empty air inside a
+	# labyrinth, so a fitted collider would be a solid block filling the level.
+	map.add_to_group(SHELL_BACKED)
 	_geometry_root.add_child(map)
 
 	if external_navigation != null:
@@ -865,6 +879,10 @@ func _world_to_cell(point: Vector3) -> Vector2i:
 ## — the audits compare runs against each other and would be worthless if the
 ## spawn set moved underneath them.
 func _build_external_spawn_points(samples: Array[Vector3]) -> void:
+	# Unreachable candidates are pruned on the first frame rather than here:
+	# the navigation region is not synchronised with the server during _ready,
+	# so every path query at build time comes back empty and the filter would
+	# reject the entire map. See _prune_unreachable_spawns.
 	spawn_points.clear()
 	spawn_chambers.clear()
 
@@ -2120,3 +2138,89 @@ func _add_doorway(cell: Vector2i, direction: Vector2i) -> void:
 	beam.name = "Doorway"
 	beam.add_to_group(SHELL_BACKED)
 	_geometry_root.add_child(beam)
+
+
+## Whether a zombie standing here could actually walk to the player.
+##
+## Sampling the navigation mesh finds walkable ground, which is not the same as
+## ground connected to the rest of the map. One derived spawn on the authored
+## labyrinth sat in a pocket the navigation server could only path to within
+## 18.5m of the player — a zombie there would have set off, stopped, and stood
+## still for the whole round, and nothing in the game would have said why.
+##
+## Checked once at build time rather than trusted, because the alternative is a
+## spawn point that looks fine in every screenshot and silently swallows a
+## fraction of every wave.
+
+
+## Drop spawn points the navigation server cannot actually route from.
+##
+## Sampling the navigation mesh finds walkable ground, which is not the same as
+## ground connected to the rest of the map. One derived spawn on the authored
+## labyrinth sat in a pocket the server could only path to within 18.5m of the
+## player — a zombie there would have set off, stopped, and stood still for the
+## whole round, with nothing in the game saying why.
+func prune_unreachable_spawns() -> bool:
+	if not _external or spawn_points.is_empty():
+		return true
+
+	var map_rid := get_navigation_map()
+	if not map_rid.is_valid():
+		return false
+
+	NavigationServer3D.map_force_update(map_rid)
+
+	# Snap the target onto the mesh before querying. external_player_start is
+	# an authored point, not a sampled one, so it can sit slightly off the
+	# walkable surface — and a path to an off-mesh target fails for every
+	# source, which reads as "the whole map is disconnected" rather than as a
+	# bad target.
+	var target := NavigationServer3D.map_get_closest_point(
+		map_rid, external_player_start
+	)
+
+	var kept: Array[Vector3] = []
+	var kept_chambers: Array[int] = []
+
+	for index in spawn_points.size():
+		var point: Vector3 = spawn_points[index]
+		var path := NavigationServer3D.map_get_path(
+			map_rid, point, target, true
+		)
+
+		if path.is_empty():
+			continue
+		if path[path.size() - 1].distance_to(target) > SPAWN_ROUTE_TOLERANCE:
+			continue
+
+		kept.append(point)
+		kept_chambers.append(spawn_chambers[index])
+
+	if kept.is_empty():
+		# Better spawns that are reachable by assumption than a round with no
+		# zombies at all. If this fires the navigation map is not what it
+		# claims to be, and that is worth saying out loud.
+		return false
+
+	spawn_points = kept
+	spawn_chambers = kept_chambers
+	return true
+
+
+## Prune on the first processed frame, once.
+##
+## The arena does this itself rather than relying on a caller: every consumer of
+## spawn_points would otherwise have to know the list is provisional until the
+## navigation server has synchronised, and one of them forgetting is a silent
+## fraction of every wave standing still.
+func _process(_delta: float) -> void:
+	if _spawns_pruned:
+		return
+
+	# Retried rather than attempted once. The navigation server synchronises on
+	# its own schedule and a map_force_update on the first frame is not enough —
+	# every query still came back empty, which the prune correctly refused to
+	# read as "the entire map is disconnected". Give it a few frames to settle.
+	_prune_attempts += 1
+	if prune_unreachable_spawns() or _prune_attempts >= PRUNE_ATTEMPT_LIMIT:
+		_spawns_pruned = true
