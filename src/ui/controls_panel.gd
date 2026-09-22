@@ -79,24 +79,6 @@ const OTHER_GROUP_TITLE := "O T H E R"
 
 ## Xbox-style face names. The project's pad bindings are authored against this
 ## layout, and it is the one printed on most PC controllers.
-const JOY_BUTTON_NAMES := {
-	JOY_BUTTON_A: "A",
-	JOY_BUTTON_B: "B",
-	JOY_BUTTON_X: "X",
-	JOY_BUTTON_Y: "Y",
-	JOY_BUTTON_BACK: "Back",
-	JOY_BUTTON_GUIDE: "Guide",
-	JOY_BUTTON_START: "Start",
-	JOY_BUTTON_LEFT_STICK: "L3",
-	JOY_BUTTON_RIGHT_STICK: "R3",
-	JOY_BUTTON_LEFT_SHOULDER: "LB",
-	JOY_BUTTON_RIGHT_SHOULDER: "RB",
-	JOY_BUTTON_DPAD_UP: "D-pad Up",
-	JOY_BUTTON_DPAD_DOWN: "D-pad Down",
-	JOY_BUTTON_DPAD_LEFT: "D-pad Left",
-	JOY_BUTTON_DPAD_RIGHT: "D-pad Right",
-}
-
 const MOUSE_BUTTON_NAMES := {
 	MOUSE_BUTTON_LEFT: "Left Mouse",
 	MOUSE_BUTTON_RIGHT: "Right Mouse",
@@ -200,7 +182,6 @@ func _add_row(action: String) -> void:
 
 	row.add_child(_cell(label_for(action), 220, Color(0.792, 0.808, 0.839)))
 	row.add_child(_cell(keyboard_binding(action), 230, Color(0.957, 0.949, 0.933)))
-	row.add_child(_cell(gamepad_binding(action), 200, Color(0.878, 0.631, 0.235)))
 
 	_entries.add_child(row)
 
@@ -227,12 +208,9 @@ static func label_for(action: String) -> String:
 
 ## The keyboard and mouse bindings for an action, or a dash when it has none.
 static func keyboard_binding(action: String) -> String:
-	return _join(_describe(action, false))
+	return _join(_describe(action))
 
 
-## The gamepad bindings for an action, or a dash when it has none.
-static func gamepad_binding(action: String) -> String:
-	return _join(_describe(action, true))
 
 
 static func _join(parts: Array[String]) -> String:
@@ -244,17 +222,13 @@ static func _join(parts: Array[String]) -> String:
 ## Describe every event bound to an action, keeping either the pad events or
 ## everything else. Unknown event types fall back to the engine's own text, so
 ## a binding is never silently invisible.
-static func _describe(action: String, want_joypad: bool) -> Array[String]:
+static func _describe(action: String) -> Array[String]:
 	var parts: Array[String] = []
 
 	if not InputMap.has_action(action):
 		return parts
 
 	for event in InputMap.action_get_events(action):
-		var is_joypad := event is InputEventJoypadButton or event is InputEventJoypadMotion
-		if is_joypad != want_joypad:
-			continue
-
 		var text := _describe_event(event)
 		if text != "" and not parts.has(text):
 			parts.append(text)
@@ -278,40 +252,8 @@ static func _describe_event(event: InputEvent) -> String:
 			mouse_event.button_index, "Mouse %d" % mouse_event.button_index
 		)
 
-	if event is InputEventJoypadButton:
-		var pad_event := event as InputEventJoypadButton
-		return JOY_BUTTON_NAMES.get(
-			pad_event.button_index, "Button %d" % pad_event.button_index
-		)
-
-	if event is InputEventJoypadMotion:
-		var motion := event as InputEventJoypadMotion
-		return _describe_axis(motion.axis, motion.axis_value)
-
 	return event.as_text()
 
-
-## Name a stick or trigger, including which way it has to move. An axis binding
-## is only half a control — "Left Stick" alone does not tell a player that
-## forward is up — so the direction is part of the name.
-static func _describe_axis(axis: int, value: float) -> String:
-	var positive := value > 0.0
-
-	match axis:
-		JOY_AXIS_LEFT_X:
-			return "Left Stick %s" % ("Right" if positive else "Left")
-		JOY_AXIS_LEFT_Y:
-			return "Left Stick %s" % ("Down" if positive else "Up")
-		JOY_AXIS_RIGHT_X:
-			return "Right Stick %s" % ("Right" if positive else "Left")
-		JOY_AXIS_RIGHT_Y:
-			return "Right Stick %s" % ("Down" if positive else "Up")
-		JOY_AXIS_TRIGGER_LEFT:
-			return "LT"
-		JOY_AXIS_TRIGGER_RIGHT:
-			return "RT"
-
-	return "Axis %d%s" % [axis, "+" if positive else "-"]
 
 
 func _add_heading(text: String) -> void:

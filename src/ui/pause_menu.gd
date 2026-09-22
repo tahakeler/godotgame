@@ -48,7 +48,7 @@ func _ready() -> void:
 
 ## Closing is handled here rather than in Game, which is paused and therefore
 ## receives no input at all while this menu is up. The pause control has to
-## close what it opened, and on a gamepad there is no cursor to reach Resume
+## close what it opened, and a trackpad is awkward enough that the keyboard must reach Resume
 ## with in the first place.
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_open or not event.is_action_pressed("pause"):

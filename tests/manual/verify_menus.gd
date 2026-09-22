@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## Verifies the out-of-game menus: the controls screen, the settings form, the
-## navigation between screens, and gamepad reachability.
+## navigation between screens, and keyboard reachability.
 ##
 ## These assert on the things that rot silently. A menu does not break loudly —
 ## it keeps rendering a control list that stopped being true three commits ago,
@@ -14,7 +14,7 @@ extends SceneTree
 ##     object, which looks identical to a working one until you restart
 ##   - a screen can become unreachable when a button is renamed
 ##   - a control with focus_mode NONE is invisible to a d-pad, and this game's
-##     primary input is a gamepad
+##     primary input is a keyboard and mouse
 ##
 ##   Godot --headless --script tests/manual/verify_menus.gd
 
@@ -25,7 +25,6 @@ const CONTROLS_SCENE := "res://src/ui/controls_panel.tscn"
 ## Settings values written during the round-trip test. Chosen to differ from
 ## every default, so a value that survives cannot have survived by accident.
 const PROBE_MOUSE_SENSITIVITY := 0.0031
-const PROBE_DEADZONE := 0.35
 const PROBE_MUSIC := 0.42
 const PROBE_SFX := 0.31
 const PROBE_FOV := 96.0
@@ -49,7 +48,7 @@ func _process(_delta: float) -> bool:
 	test_settings_values_survive_a_save_and_load_round_trip()
 	test_every_settings_control_is_connected_to_something()
 	test_every_menu_screen_can_be_opened_and_closed()
-	test_every_interactive_control_is_reachable_by_gamepad_focus()
+	test_every_interactive_control_is_reachable_by_keyboard_focus()
 
 	_report()
 	return true
@@ -90,8 +89,7 @@ func test_every_action_on_the_controls_screen_shows_a_binding() -> void:
 
 	for action in ControlsPanel.game_actions():
 		var keyboard := ControlsPanel.keyboard_binding(action)
-		var gamepad := ControlsPanel.gamepad_binding(action)
-		if keyboard == ControlsPanel.UNBOUND and gamepad == ControlsPanel.UNBOUND:
+		if keyboard == ControlsPanel.UNBOUND:
 			unbound.append(action)
 
 	# Assert
@@ -115,7 +113,6 @@ func test_settings_values_survive_a_save_and_load_round_trip() -> void:
 
 	# Act
 	settings.mouse_sensitivity = PROBE_MOUSE_SENSITIVITY
-	settings.gamepad_deadzone = PROBE_DEADZONE
 	settings.music_volume = PROBE_MUSIC
 	settings.sfx_volume = PROBE_SFX
 	settings.field_of_view = PROBE_FOV
@@ -130,7 +127,6 @@ func test_settings_values_survive_a_save_and_load_round_trip() -> void:
 	# Assert
 	var drifted: Array[String] = []
 	_expect_close(drifted, "mouse sensitivity", reloaded.mouse_sensitivity, PROBE_MOUSE_SENSITIVITY)
-	_expect_close(drifted, "stick deadzone", reloaded.gamepad_deadzone, PROBE_DEADZONE)
 	_expect_close(drifted, "music volume", reloaded.music_volume, PROBE_MUSIC)
 	_expect_close(drifted, "effects volume", reloaded.sfx_volume, PROBE_SFX)
 	_expect_close(drifted, "field of view", reloaded.field_of_view, PROBE_FOV)
@@ -180,7 +176,7 @@ func test_every_settings_control_is_connected_to_something() -> void:
 
 
 ## Each screen must be reachable from the front menu and must give the player a
-## way back. A screen you cannot leave on a gamepad is a soft lock.
+## way back. A screen you cannot leave from the keyboard is a soft lock.
 func test_every_menu_screen_can_be_opened_and_closed() -> void:
 	# Arrange
 	var menu: Node = (load(MAIN_MENU_SCENE) as PackedScene).instantiate()
@@ -221,9 +217,9 @@ func test_every_menu_screen_can_be_opened_and_closed() -> void:
 	menu.queue_free()
 
 
-## Gamepad is this project's primary input, and a gamepad has no cursor. Any
+## The keyboard must reach everything: a laptop trackpad is awkward enough that
 ## control the player is expected to operate must be able to hold focus.
-func test_every_interactive_control_is_reachable_by_gamepad_focus() -> void:
+func test_every_interactive_control_is_reachable_by_keyboard_focus() -> void:
 	# Arrange
 	var scenes := [SETTINGS_SCENE, CONTROLS_SCENE]
 	var unreachable: Array[String] = []
@@ -243,7 +239,7 @@ func test_every_interactive_control_is_reachable_by_gamepad_focus() -> void:
 
 	# Assert
 	if unreachable.is_empty():
-		print("PASS: all %d interactive controls can take gamepad focus" % checked)
+		print("PASS: all %d interactive controls can take keyboard focus" % checked)
 	else:
 		_failures.append_array(unreachable)
 
@@ -288,7 +284,6 @@ func _expect_close(
 func _snapshot(settings: GameSettings) -> Dictionary:
 	return {
 		"mouse_sensitivity": settings.mouse_sensitivity,
-		"gamepad_deadzone": settings.gamepad_deadzone,
 		"music_volume": settings.music_volume,
 		"sfx_volume": settings.sfx_volume,
 		"field_of_view": settings.field_of_view,
@@ -300,7 +295,6 @@ func _snapshot(settings: GameSettings) -> Dictionary:
 
 func _restore(settings: GameSettings, values: Dictionary) -> void:
 	settings.mouse_sensitivity = values.mouse_sensitivity
-	settings.gamepad_deadzone = values.gamepad_deadzone
 	settings.music_volume = values.music_volume
 	settings.sfx_volume = values.sfx_volume
 	settings.field_of_view = values.field_of_view
