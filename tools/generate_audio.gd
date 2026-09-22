@@ -25,6 +25,7 @@ func _initialize() -> void:
 	_write("fire_pistol", _build_fire_pistol())
 	_write("fire_shotgun", _build_fire_shotgun())
 	_write("fire_rifle", _build_fire_rifle())
+	_write("melee_swing", _build_melee_swing())
 	_write("screamer_inhale", _build_screamer_inhale())
 	_write("screamer_alarm", _build_screamer_alarm())
 	_write("brute_growl", _build_brute_growl())
@@ -381,6 +382,60 @@ func _build_fire_rifle() -> PackedFloat32Array:
 ## The pitch sweeps up, wobbles on a siren vibrato, then lands on a held note.
 ## The held part is deliberate: it gives the player a full second in which the
 ## correct play — turn, find it, kill it — is still available.
+## A melee swing that hits nothing. 140ms of air going past.
+##
+## Synthesised because the borrowed clip was actively harmful, not merely
+## bland: `melee_swing` and `zombie_death` were both `cloth3`, separated only by
+## pitch. "You swung and hit nothing" and "a zombie just died" are opposite
+## pieces of information arriving at the one moment the player is panicking, and
+## a whiff that can be mistaken for a kill is worse than no whiff sound at all.
+##
+## Purely noise, with no tonal content anywhere. Everything else in the melee's
+## vocabulary has a pitch — `melee_hit` cracks, `melee_unmoved` thuds — so the
+## absence of one is itself the signal: nothing was struck, because nothing
+## resonated.
+##
+## The character is entirely in the downward sweep. A band of noise falling from
+## 1900 Hz to 320 Hz over 140ms is the sound of a source passing the listener,
+## and that is exactly the report: it went by, it did not land.
+func _build_melee_swing() -> PackedFloat32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+
+	var duration := 0.14
+	var frames := int(SAMPLE_RATE * duration)
+	var samples := PackedFloat32Array()
+	samples.resize(frames)
+
+	var low := 0.0
+	var band := 0.0
+
+	for index in frames:
+		var progress := float(index) / float(frames)
+
+		# A bell, not a hit. Air builds as the arm accelerates and falls away
+		# behind it; an instant attack would read as a contact, which is the one
+		# thing this sound must never be confused with.
+		var envelope: float = sin(PI * pow(progress, 0.75))
+
+		# Fast at first and slowing, the way something passing you does.
+		var centre: float = lerpf(1900.0, 320.0, pow(progress, 0.6))
+		var f: float = 2.0 * sin(PI * centre / SAMPLE_RATE)
+		# Low resonance throughout: this is a body of air, not a throat. Any
+		# more and it starts to sing, which would give it the pitch it must not
+		# have.
+		var q := 0.9
+
+		var noise := rng.randf_range(-1.0, 1.0)
+		low += f * band
+		var high: float = noise - low - q * band
+		band += f * high
+
+		samples[index] = clampf(band * 1.1 * envelope, -1.0, 1.0)
+
+	return samples
+
+
 ## The breath a Screamer takes before it screams. 1.6s, to match the wind-up.
 ##
 ## This is the most important warning in the game and it has to win three

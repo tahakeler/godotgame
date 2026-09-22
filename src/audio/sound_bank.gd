@@ -19,6 +19,10 @@ const GENERATED_EVENTS := {
 	"fire_pistol": ["fire_pistol"],
 	"fire_shotgun": ["fire_shotgun"],
 	"fire_rifle": ["fire_rifle"],
+	# The emergency swing. Synthesised rather than borrowed: it shared cloth3
+	# with zombie_death, so a whiff and a kill were the same clip at different
+	# pitches — opposite information at the worst possible moment.
+	"melee_swing": ["melee_swing"],
 	"screamer_inhale": ["screamer_inhale"],
 	"screamer_alarm": ["screamer_alarm"],
 	"brute_growl": ["brute_growl"],
@@ -33,11 +37,6 @@ const EVENTS := {
 	"reload_start": ["beltHandle1"],
 	"reload_end": ["metalLatch"],
 	"zombie_hit": ["knifeSlice"],
-	# The emergency swing. Two events rather than one, because the only thing
-	# the player needs to know in the moment they are swinging is whether it
-	# landed — a hit and a whiff that sound alike make a last resort feel like
-	# it is not responding.
-	"melee_swing": ["cloth3"],
 	"melee_hit": ["chop"],
 	# Layered over melee_hit when the thing struck cannot be staggered. Dead and
 	# heavy: the sound of a blow being absorbed rather than landing.
@@ -110,7 +109,9 @@ const MIX := {
 	"zombie_hit": {"volume": -9.0, "pitch": Vector2(0.8, 0.95)},
 	# A whiff is quiet and breathy; a connection is a wet, low thud. The gap
 	# between the two mixes is doing the work the two clips cannot.
-	"melee_swing": {"volume": -13.0, "pitch": Vector2(1.15, 1.3)},
+	# Purpose-built, so it no longer needs pitching up out of the way of another
+	# event. Left near unity and quiet — a miss should be felt more than heard.
+	"melee_swing": {"volume": -11.0, "pitch": Vector2(0.96, 1.06)},
 	"melee_hit": {"volume": -6.0, "pitch": Vector2(0.75, 0.9)},
 	"melee_unmoved": {"volume": -4.0, "pitch": Vector2(0.55, 0.65)},
 	"zombie_death": {"volume": -6.0, "pitch": Vector2(0.65, 0.8)},
