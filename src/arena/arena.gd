@@ -577,6 +577,21 @@ void fragment() {
 @export var external_cache_count := 6
 ## Where the player starts, which spawns keep clear of. Game seats the player
 ## at the origin; this is an export so a map that starts elsewhere can say so.
+## Navigation polygons whose vertices sit above this are discarded when the
+## external mesh is adopted.
+##
+## The shipped mesh has sixteen vertices at y=5.175 — ceiling height on a map
+## whose floor is at y=0 — forming slabs that span the full 77m. They are a
+## by-product of baking against geometry that includes the ceiling, not a
+## walkable storey: the map is one level and its own layout validation counts
+## 261 route nodes, none of them up there. Left in, they are somewhere an agent
+## can be snapped to by a closest-point query and somewhere spawn sampling
+## would happily put a zombie.
+##
+## The filtering happens on a runtime copy. navigation.tres is the owner's file
+## and is not edited; re-exporting the map overwrites anything written into it,
+## whereas this survives.
+@export var external_walkable_height := 2.5
 @export var external_player_start := Vector3.ZERO
 ## Coarse grid, in metres, used to group spawn points into "chambers" for
 ## pick_spawn_point's repeat damping. A labyrinth has no rooms the layout can
@@ -684,7 +699,7 @@ func _adopt_external_map() -> void:
 	_geometry_root.add_child(map)
 
 	if external_navigation != null:
-		navigation_mesh = external_navigation
+		navigation_mesh = _ground_level_navigation(external_navigation)
 	else:
 		push_error("Arena: external_map is set but external_navigation is not")
 		return
@@ -700,6 +715,47 @@ func _adopt_external_map() -> void:
 	_build_external_caches(walkable)
 	_adopt_doors()
 
+
+## A copy of an imported navigation mesh with everything above head height
+## dropped. See external_walkable_height for why this is necessary.
+##
+## Vertices are kept as they are and only the polygon list is rebuilt: indices
+## then stay valid, and a handful of orphaned vertices cost nothing. Returns
+## the source untouched if nothing needed dropping, so a clean mesh is used
+## exactly as authored.
+func _ground_level_navigation(source: NavigationMesh) -> NavigationMesh:
+	var vertices := source.get_vertices()
+	var kept: Array[PackedInt32Array] = []
+	var dropped := 0
+
+	for index in source.get_polygon_count():
+		var polygon := source.get_polygon(index)
+		var grounded := true
+		for vertex_index in polygon:
+			if vertices[vertex_index].y > external_walkable_height:
+				grounded = false
+				break
+
+		if grounded:
+			kept.append(polygon)
+		else:
+			dropped += 1
+
+	if dropped == 0:
+		return source
+
+	var filtered: NavigationMesh = source.duplicate()
+	filtered.clear_polygons()
+	filtered.set_vertices(vertices)
+	for polygon in kept:
+		filtered.add_polygon(polygon)
+
+	# Loud on purpose. This is a finding about the map, and it should be
+	# visible in the log rather than silently corrected every run.
+	print("Arena: dropped %d navigation polygons above %.1fm (ceiling bake)" % [
+		dropped, external_walkable_height
+	])
+	return filtered
 
 ## One point per navigation polygon, at its centroid.
 ##

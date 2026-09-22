@@ -1,9 +1,5 @@
 [gd_scene load_steps=6 format=3]
 
-# The playable arena: the owner's authored labyrinth, adapted to the Arena
-# interface. arena.tscn stays as it was and is now a test environment — the
-# generated cave is still the quickest place to exercise a system in isolation.
-
 [ext_resource type="Script" path="res://src/arena/arena.gd" id="1_arena"]
 [ext_resource type="PackedScene" path="res://amethyst_labyrinth/dungeon.tscn" id="2_dungeon"]
 [ext_resource type="NavigationMesh" path="res://amethyst_labyrinth/navigation.tres" id="3_nav"]
