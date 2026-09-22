@@ -41,6 +41,9 @@ const RIFLE_RANGE := 40.0
 ## preference. A player picks a weapon and lives with it; re-deciding every
 ## frame is indecision, not policy.
 const SWITCH_COMMIT := 2.0
+## Seconds between reserve samples. Coarse on purpose — this is looking for a
+## trend across a round, not a transient after one kill.
+const TIMELINE_INTERVAL := 15.0
 
 var _game: Game
 var _started := false
@@ -76,6 +79,12 @@ var _blocked_switching := 0.0
 var _blocked_reloading := 0.0
 var _blocked_empty := 0.0
 var _blocked_cooldown := 0.0
+## Reserve per weapon, sampled on a slow clock. Totals hide the failure this
+## is looking for: with income going to the emptiest weapon, one weapon can
+## quietly accumulate while the player fights with the other two, and "the
+## fallback is always full" is its own flavour of infinite ammunition.
+var _reserve_timeline: Array[Dictionary] = []
+var _timeline_remaining := 0.0
 var _alive_samples := 0
 var _alive_total := 0
 
@@ -402,6 +411,14 @@ func _sample(delta: float) -> void:
 		var entry: Dictionary = _per_weapon[kind]
 		if entry.emptied_at < 0.0 and not _has_rounds(kind):
 			entry.emptied_at = _elapsed
+
+	_timeline_remaining -= delta
+	if _timeline_remaining <= 0.0:
+		_timeline_remaining = TIMELINE_INTERVAL
+		var row := {"at": _elapsed}
+		for kind in WeaponTypes.order():
+			row[kind] = weapon.reserve_for(kind)
+		_reserve_timeline.append(row)
 
 	_alive_samples += 1
 	_alive_total += _game.spawner.get_alive_count()
