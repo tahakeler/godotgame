@@ -876,8 +876,8 @@ func _neediest_kind() -> int:
 	var best_fill := INF
 
 	for slot_kind in _slots:
-		var ceiling := _kind_ceiling(slot_kind)
-		var reserve := _kind_reserve(slot_kind)
+		var ceiling := reserve_ceiling_for(slot_kind)
+		var reserve := reserve_for(slot_kind)
 		if reserve >= ceiling:
 			continue
 
@@ -890,8 +890,8 @@ func _neediest_kind() -> int:
 
 	# Tie-break to the weapon in hand: if it is exactly as empty as the winner,
 	# the rounds go where the player is actually shooting from.
-	var held_ceiling := _kind_ceiling(kind)
-	var held_reserve := _kind_reserve(kind)
+	var held_ceiling := reserve_ceiling_for(kind)
+	var held_reserve := reserve_for(kind)
 	if held_reserve < held_ceiling:
 		var held_fill := float(held_reserve) / maxf(float(held_ceiling), 1.0)
 		if is_equal_approx(held_fill, best_fill):
@@ -900,15 +900,20 @@ func _neediest_kind() -> int:
 	return best
 
 
-## Reserve for any kind, reading the live field for the weapon in hand — its
-## reserve lives in `reserve_ammo`, not in its slot, until it is put away.
-func _kind_reserve(slot_kind: WeaponTypes.Kind) -> int:
+## Reserve for any kind, reading the live field for the weapon in hand.
+##
+## Public because the held weapon's reserve lives in `reserve_ammo` and only
+## reaches its slot on a swap, so anything reading `_slots` directly gets a
+## stale figure for whatever is in the player's hands — the one place this is
+## easy to get silently wrong.
+func reserve_for(slot_kind: WeaponTypes.Kind) -> int:
 	if slot_kind == kind:
 		return reserve_ammo
 	return int(_slots[slot_kind].reserve)
 
 
-func _kind_ceiling(slot_kind: WeaponTypes.Kind) -> int:
+## Reserve ceiling for any kind, with the same caveat as reserve_for.
+func reserve_ceiling_for(slot_kind: WeaponTypes.Kind) -> int:
 	if slot_kind == kind:
 		return max_reserve
 	return int(_slots[slot_kind].stats.max_reserve)
