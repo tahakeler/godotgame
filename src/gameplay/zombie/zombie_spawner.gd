@@ -13,6 +13,15 @@ signal zombie_groaned(groan_position: Vector3, kind: ZombieTypes.Kind)
 signal population_changed(alive: int)
 ## A zombie has just started hunting the player.
 signal zombie_noticed_player(at: Vector3, kind: ZombieTypes.Kind)
+## A Screamer has drawn breath and is about to raise the alarm.
+##
+## The single most important sound in a round: it is the only warning the
+## player gets that the room is about to fill up, and the whole reason the
+## Screamer has a wind-up at all is so there is something to react to. Relayed
+## here rather than left on the zombie because listeners should not have to
+## reach into the population to find one — every other per-zombie event a
+## listener cares about already arrives this way.
+signal zombie_winding_up(at: Vector3, kind: ZombieTypes.Kind)
 
 @export var zombie_scene: PackedScene
 
@@ -297,6 +306,10 @@ func _spawn_one() -> void:
 	zombie.hit_player.connect(_on_zombie_hit_player)
 	zombie.groaned.connect(func(groan_position: Vector3) -> void:
 		zombie_groaned.emit(groan_position, zombie.kind)
+	)
+	zombie.alarm_winding_up.connect(
+		func(_raiser: Zombie, at: Vector3) -> void:
+			zombie_winding_up.emit(at, zombie.kind)
 	)
 
 	_alive.append(zombie)
