@@ -1,7 +1,7 @@
 [gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://src/core/game.gd" id="1_game"]
-[ext_resource type="PackedScene" path="res://src/arena/arena.tscn" id="2_arena"]
+[ext_resource type="PackedScene" path="res://src/arena/dungeon_arena.tscn" id="2_arena"]
 [ext_resource type="PackedScene" path="res://src/gameplay/player/player.tscn" id="3_player"]
 [ext_resource type="Script" path="res://src/gameplay/zombie/zombie_spawner.gd" id="4_spawner"]
 [ext_resource type="PackedScene" path="res://src/gameplay/zombie/zombie.tscn" id="5_zombie"]

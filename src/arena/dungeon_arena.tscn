@@ -1,0 +1,20 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://src/arena/arena.gd" id="1_arena"]
+[ext_resource type="PackedScene" path="res://amethyst_labyrinth/dungeon.tscn" id="2_dungeon"]
+[ext_resource type="NavigationMesh" path="res://amethyst_labyrinth/navigation.tres" id="3_nav"]
+[ext_resource type="Environment" path="res://amethyst_labyrinth/interior_environment.tres" id="4_environment"]
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributes_dungeon"]
+
+[node name="Arena" type="NavigationRegion3D"]
+script = ExtResource("1_arena")
+external_map = ExtResource("2_dungeon")
+external_navigation = ExtResource("3_nav")
+bake_navigation = false
+ceiling_enabled = false
+dust_enabled = false
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("4_environment")
+camera_attributes = SubResource("CameraAttributes_dungeon")

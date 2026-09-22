@@ -547,6 +547,58 @@ void fragment() {
 ## navigate, so it can skip the bake.
 @export var bake_navigation := true
 
+@export_group("External map")
+## An authored map to use instead of generating a cave.
+##
+## When this is set the Arena stops being a generator and becomes an adapter:
+## the scene below supplies the geometry, the collision and the lighting, and
+## everything the rest of the game asks an Arena for — spawn points, occupied
+## cells, caches, the navigation map — is derived from it instead of from
+## LAYOUT. One class and one type, so nothing downstream has to know which of
+## the two an Arena happens to be today.
+@export var external_map: PackedScene
+## The map's own prebaked navigation mesh.
+##
+## Used in place of a bake. Re-baking an authored map would be both slower and
+## worse: the map ships a mesh its author validated (261 route nodes, all
+## connected), and a bake from 945 meshes of decorated architecture would
+## produce something subtly different from what was signed off.
+@export var external_navigation: NavigationMesh
+## How many spawn points to derive. The generated cave has 55.
+@export var external_spawn_count := 55
+## Metres between spawn points, before relaxation. Zombies that arrive in a
+## clump read as one event rather than as a place being overrun.
+@export var external_spawn_spacing := 6.0
+## No spawn closer than this to where the player starts.
+@export var external_player_clearance := 14.0
+## Metres between resupply caches, so a single corner cannot hold them all.
+@export var external_cache_spacing := 22.0
+## How many resupply caches to place. Matches CACHE_CELLS on the built cave.
+@export var external_cache_count := 6
+## Where the player starts, which spawns keep clear of. Game seats the player
+## at the origin; this is an export so a map that starts elsewhere can say so.
+## Navigation polygons whose vertices sit above this are discarded when the
+## external mesh is adopted.
+##
+## The shipped mesh has sixteen vertices at y=5.175 — ceiling height on a map
+## whose floor is at y=0 — forming slabs that span the full 77m. They are a
+## by-product of baking against geometry that includes the ceiling, not a
+## walkable storey: the map is one level and its own layout validation counts
+## 261 route nodes, none of them up there. Left in, they are somewhere an agent
+## can be snapped to by a closest-point query and somewhere spawn sampling
+## would happily put a zombie.
+##
+## The filtering happens on a runtime copy. navigation.tres is the owner's file
+## and is not edited; re-exporting the map overwrites anything written into it,
+## whereas this survives.
+@export var external_walkable_height := 2.5
+@export var external_player_start := Vector3.ZERO
+## Coarse grid, in metres, used to group spawn points into "chambers" for
+## pick_spawn_point's repeat damping. A labyrinth has no rooms the layout can
+## name, so bearing-sized buckets stand in: what the damping actually needs is
+## "not the same part of the map twice running", not a room list.
+@export var external_chamber_size := 16.0
+
 @export_group("Atmosphere")
 ## Set from the graphics preset before the arena builds itself.
 @export var quality: GameSettings.Quality = GameSettings.Quality.HIGH
@@ -580,6 +632,16 @@ var spawn_chambers: Array[int] = []
 ## Resupply points, for Game to connect to.
 var ammo_caches: Array[AmmoCache] = []
 
+## True once an external map has been adopted, which changes where several of
+## the public answers below come from.
+var _external := false
+## Cell occupancy derived from the external navigation mesh, cached because the
+## minimap asks for it every time fog is revealed.
+var _external_cells: Dictionary = {}
+## Half-extent reported by get_play_radius(), measured from the map when there
+## is one.
+var _play_radius := 10.0
+
 var _rng := RandomNumberGenerator.new()
 var _geometry_root: Node3D
 var _stone_shader: Shader
@@ -594,6 +656,10 @@ func _ready() -> void:
 	_geometry_root = Node3D.new()
 	_geometry_root.name = "Geometry"
 	add_child(_geometry_root)
+
+	if external_map != null:
+		_adopt_external_map()
+		return
 
 	_build_layout()
 	_build_collision_shell()
@@ -620,6 +686,293 @@ func _ready() -> void:
 		_build_dust()
 
 
+## Source everything from an authored map instead of generating a cave.
+##
+## Deliberately skips _build_layout, the collision shell, the ceiling and every
+## dressing pass: the map already has all four, authored, and a generated shell
+## laid over authored walls would be both redundant collision and wrong.
+func _adopt_external_map() -> void:
+	_external = true
+
+	var map := external_map.instantiate()
+	map.name = "ImportedMap"
+	_geometry_root.add_child(map)
+
+	if external_navigation != null:
+		navigation_mesh = _ground_level_navigation(external_navigation)
+	else:
+		push_error("Arena: external_map is set but external_navigation is not")
+		return
+
+	var walkable := _navigation_samples()
+	if walkable.is_empty():
+		push_error("Arena: the external navigation mesh has no polygons")
+		return
+
+	_external_cells = _cells_from_navigation()
+	_play_radius = _measure_play_radius(walkable)
+	_build_external_spawn_points(walkable)
+	_build_external_caches(walkable)
+	_adopt_doors()
+
+
+## A copy of an imported navigation mesh with everything above head height
+## dropped. See external_walkable_height for why this is necessary.
+##
+## Vertices are kept as they are and only the polygon list is rebuilt: indices
+## then stay valid, and a handful of orphaned vertices cost nothing. Returns
+## the source untouched if nothing needed dropping, so a clean mesh is used
+## exactly as authored.
+func _ground_level_navigation(source: NavigationMesh) -> NavigationMesh:
+	var vertices := source.get_vertices()
+	var kept: Array[PackedInt32Array] = []
+	var dropped := 0
+
+	for index in source.get_polygon_count():
+		var polygon := source.get_polygon(index)
+		var grounded := true
+		for vertex_index in polygon:
+			if vertices[vertex_index].y > external_walkable_height:
+				grounded = false
+				break
+
+		if grounded:
+			kept.append(polygon)
+		else:
+			dropped += 1
+
+	if dropped == 0:
+		return source
+
+	var filtered: NavigationMesh = source.duplicate()
+	filtered.clear_polygons()
+	filtered.set_vertices(vertices)
+	for polygon in kept:
+		filtered.add_polygon(polygon)
+
+	# Loud on purpose. This is a finding about the map, and it should be
+	# visible in the log rather than silently corrected every run.
+	print("Arena: dropped %d navigation polygons above %.1fm (ceiling bake)" % [
+		dropped, external_walkable_height
+	])
+	return filtered
+
+## One point per navigation polygon, at its centroid.
+##
+## Centroids rather than vertices on purpose: a vertex sits on the edge of the
+## walkable surface, which after agent-radius erosion is the one place an agent
+## cannot stand. A centroid is walkable by construction.
+func _navigation_samples() -> Array[Vector3]:
+	var samples: Array[Vector3] = []
+	if navigation_mesh == null:
+		return samples
+
+	var vertices := navigation_mesh.get_vertices()
+	for index in navigation_mesh.get_polygon_count():
+		var polygon := navigation_mesh.get_polygon(index)
+		if polygon.size() < 3:
+			continue
+
+		var centre := Vector3.ZERO
+		for vertex_index in polygon:
+			centre += vertices[vertex_index]
+		samples.append(centre / float(polygon.size()))
+
+	return samples
+
+
+## Which CELL-sized grid squares the map can be walked on.
+##
+## The minimap's fog of war reads this, so it has to describe area rather than
+## a scattering of points: every polygon is rasterised against the grid, and a
+## cell counts as walkable if its centre falls inside a polygon or if a polygon
+## corner falls inside it. The second test is what catches the corridors that
+## are narrower than a cell — of which a labyrinth has a great many.
+func _cells_from_navigation() -> Dictionary:
+	var cells: Dictionary = {}
+	if navigation_mesh == null:
+		return cells
+
+	var vertices := navigation_mesh.get_vertices()
+	for index in navigation_mesh.get_polygon_count():
+		var polygon := navigation_mesh.get_polygon(index)
+		if polygon.size() < 3:
+			continue
+
+		for corner in range(1, polygon.size() - 1):
+			_mark_triangle_cells(
+				vertices[polygon[0]],
+				vertices[polygon[corner]],
+				vertices[polygon[corner + 1]],
+				cells
+			)
+
+	return cells
+
+
+func _mark_triangle_cells(a: Vector3, b: Vector3, c: Vector3,
+		cells: Dictionary) -> void:
+	cells[_world_to_cell(a)] = true
+	cells[_world_to_cell(b)] = true
+	cells[_world_to_cell(c)] = true
+
+	var low := _world_to_cell(Vector3(
+		minf(a.x, minf(b.x, c.x)), 0.0, minf(a.z, minf(b.z, c.z))
+	))
+	var high := _world_to_cell(Vector3(
+		maxf(a.x, maxf(b.x, c.x)), 0.0, maxf(a.z, maxf(b.z, c.z))
+	))
+
+	for x in range(low.x, high.x + 1):
+		for y in range(low.y, high.y + 1):
+			var cell := Vector2i(x, y)
+			if cells.has(cell):
+				continue
+			var centre := _cell_to_world(cell)
+			if _point_in_triangle(Vector2(centre.x, centre.z), a, b, c):
+				cells[cell] = true
+
+
+## Barycentric sign test, flattened to the XZ plane. The map is one storey, so
+## height never disambiguates two polygons here.
+func _point_in_triangle(point: Vector2, a: Vector3, b: Vector3,
+		c: Vector3) -> bool:
+	var flat_a := Vector2(a.x, a.z)
+	var flat_b := Vector2(b.x, b.z)
+	var flat_c := Vector2(c.x, c.z)
+
+	var first := (flat_a - flat_c).cross(point - flat_c)
+	var second := (flat_b - flat_a).cross(point - flat_a)
+	var third := (flat_c - flat_b).cross(point - flat_b)
+
+	var any_negative := first < 0.0 or second < 0.0 or third < 0.0
+	var any_positive := first > 0.0 or second > 0.0 or third > 0.0
+	return not (any_negative and any_positive)
+
+
+func _world_to_cell(point: Vector3) -> Vector2i:
+	return Vector2i(roundi(point.x / CELL), roundi(point.z / CELL))
+
+
+## Spread spawn points across the whole map, clear of where the player starts.
+##
+## Greedy Poisson-style selection over a shuffled candidate list, with the
+## spacing relaxed and the pass repeated if the map cannot supply the full
+## count at the distance asked for. Relaxing beats failing: a map that yields
+## forty well-spread points should give forty, not zero.
+##
+## The shuffle is driven by _rng, so a given seed always produces the same set
+## — the audits compare runs against each other and would be worthless if the
+## spawn set moved underneath them.
+func _build_external_spawn_points(samples: Array[Vector3]) -> void:
+	spawn_points.clear()
+	spawn_chambers.clear()
+
+	var candidates := samples.duplicate()
+	for index in range(candidates.size() - 1, 0, -1):
+		var swap := _rng.randi_range(0, index)
+		var held: Vector3 = candidates[index]
+		candidates[index] = candidates[swap]
+		candidates[swap] = held
+
+	var chambers: Dictionary = {}
+	var spacing := external_spawn_spacing
+
+	while spawn_points.size() < external_spawn_count and spacing >= 1.0:
+		for point in candidates:
+			if spawn_points.size() >= external_spawn_count:
+				break
+			if point.distance_to(external_player_start) < external_player_clearance:
+				continue
+			if not _is_clear_of(point, spawn_points, spacing):
+				continue
+
+			# Lifted slightly, exactly as the generated spawns are: a zombie
+			# placed dead on the navmesh plane can fail its first ground check.
+			spawn_points.append(point + Vector3.UP * 0.2)
+			spawn_chambers.append(_chamber_index(point, chambers))
+
+		spacing *= 0.75
+
+
+## Resupply caches at walkable points, as far apart as the map allows.
+##
+## Same relaxation as the spawns, and the same reason as CACHE_CELLS has on the
+## built cave: resupplying should cost you the ground you were holding, which
+## it only does if the caches are nowhere near each other.
+func _build_external_caches(samples: Array[Vector3]) -> void:
+	ammo_caches.clear()
+	if not caches_enabled:
+		return
+
+	var chosen: Array[Vector3] = []
+	var spacing := external_cache_spacing
+
+	while chosen.size() < external_cache_count and spacing >= 2.0:
+		for point in samples:
+			if chosen.size() >= external_cache_count:
+				break
+			if point.distance_to(external_player_start) < external_player_clearance:
+				continue
+			if not _is_clear_of(point, chosen, spacing):
+				continue
+			chosen.append(point)
+
+		spacing *= 0.75
+
+	for point in chosen:
+		var cache := AmmoCache.new()
+		cache.name = "AmmoCache_%d_%d" % [roundi(point.x), roundi(point.z)]
+		cache.position = point
+		add_child(cache)
+		ammo_caches.append(cache)
+
+
+func _is_clear_of(point: Vector3, placed: Array[Vector3], spacing: float) -> bool:
+	for existing in placed:
+		if existing.distance_to(point) < spacing:
+			return false
+	return true
+
+
+## Group a point into a coarse bucket, numbered in the order buckets are first
+## used. pick_spawn_point only ever compares these for equality, so the numbers
+## themselves mean nothing beyond "somewhere else".
+func _chamber_index(point: Vector3, chambers: Dictionary) -> int:
+	var bucket := Vector2i(
+		roundi(point.x / external_chamber_size),
+		roundi(point.z / external_chamber_size)
+	)
+	if not chambers.has(bucket):
+		chambers[bucket] = chambers.size()
+	return chambers[bucket]
+
+
+## How far the walkable area reaches, as a radius from the player's start.
+##
+## get_play_radius answers "how big is the space you are fighting in", and on
+## an authored map the honest answer is measured rather than declared. Taken at
+## the 80th percentile of sample distance rather than the maximum, so one
+## far-flung corridor end does not describe the whole map.
+func _measure_play_radius(samples: Array[Vector3]) -> float:
+	var distances: Array[float] = []
+	for point in samples:
+		distances.append(point.distance_to(external_player_start))
+	distances.sort()
+	if distances.is_empty():
+		return 10.0
+	return distances[int(float(distances.size() - 1) * 0.8)]
+
+
+## Give the imported map's doors a handle the interaction system can see.
+##
+## door.gd is the map's file, not this project's, and is left exactly as
+## exported — see DungeonDoorHandle for why the adapter goes on this side.
+func _adopt_doors() -> void:
+	for door in get_tree().get_nodes_in_group("dungeon_doors"):
+		if door is Node3D:
+			DungeonDoorHandle.attach(door)
+
 ## Turn the post-processing that the benchmark showed to be expensive on or off.
 ## The geometry and lighting layout stay identical across presets — only the
 ## effects that cost frames change, so Performance looks flatter but never
@@ -645,6 +998,8 @@ func _apply_quality() -> void:
 
 ## Half-extent of the central room.
 func get_play_radius() -> float:
+	if _external:
+		return _play_radius
 	return 10.0
 
 
@@ -1572,6 +1927,11 @@ func _build_collision_shell() -> void:
 
 ## Every grid cell any piece covers.
 func _occupied_cells() -> Dictionary:
+	# An authored map has no LAYOUT to read; its walkable area was measured
+	# off the navigation mesh when it was adopted.
+	if _external:
+		return _external_cells
+
 	var occupied: Dictionary = {}
 
 	for entry in LAYOUT:
