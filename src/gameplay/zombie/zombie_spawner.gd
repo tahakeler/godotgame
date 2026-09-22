@@ -31,6 +31,12 @@ signal zombie_noticed_player(at: Vector3, kind: ZombieTypes.Kind)
 ## How far a hunting zombie's alarm passes to the ones around it.
 @export var alert_radius := 14.0
 
+@export_group("Response")
+## Interval multiplier when the cave is completely empty, easing back to 1.0 as
+## the population approaches the cap. Below 1.0 means an empty cave refills
+## faster than a full one tops up.
+@export_range(0.05, 1.0) var catch_up_scale := 0.35
+
 @export_group("Threat")
 ## Distance over which a hunter's contribution halves.
 @export var threat_falloff := 12.0
@@ -217,6 +223,25 @@ func _current_interval() -> float:
 		(_elapsed - grace_period) / maxf(ramp_duration, 0.001), 0.0, 1.0
 	)
 	var interval := lerpf(initial_interval, minimum_interval, ramp_progress) * interval_scale
+
+	# Spawn faster the emptier the cave is.
+	#
+	# The ramp is a function of elapsed time alone, which means the director has
+	# no idea how the player is doing, and measurement showed both ends of that
+	# going wrong. A stand-in killing at a modest 0.55/s outran it completely:
+	# the population sat at zero or one for the first fifty-five seconds and
+	# pressure only arrived after t=90. A stand-in killing nothing hit the cap
+	# at t=50 and stayed pinned there for the rest of the round.
+	#
+	# Same root cause, opposite symptoms — the rate never responds to what is
+	# actually in the cave. Scaling the interval by how far under the ceiling
+	# the population is closes that loop with one multiply.
+	#
+	# Deliberately one-directional: this can only ever make zombies arrive
+	# sooner, never later, so it cannot quietly starve anything that depends on
+	# the horde showing up.
+	var shortfall := 1.0 - float(_alive.size()) / float(maxi(_current_max_alive(), 1))
+	interval *= lerpf(1.0, catch_up_scale, clampf(shortfall, 0.0, 1.0))
 
 	if endless:
 		var overtime := maxf(0.0, _elapsed - grace_period - ramp_duration)

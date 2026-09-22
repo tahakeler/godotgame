@@ -39,7 +39,7 @@ const DEFINITIONS := {
 		"height": 2.0,
 		"tint": Color(1.0, 1.0, 1.0),
 		"experience": 1,
-		"ammo": 3,
+		"ammo": 1,
 		## How far this kind hears a gunshot, in metres. A Brute hears furthest,
 		## so the thing you least want to attract is the thing a shot is most
 		## likely to bring — which is what makes firing a decision rather than
@@ -108,7 +108,7 @@ const DEFINITIONS := {
 		"height": 1.85,
 		"tint": Color(0.78, 1.0, 0.82),
 		"experience": 2,
-		"ammo": 3,
+		"ammo": 1,
 		"hearing": 32.0,
 		"unlock": 25.0,
 		"weight": 6.0,
@@ -148,7 +148,7 @@ const DEFINITIONS := {
 		"height": 2.6,
 		"tint": Color(0.95, 0.62, 0.58),
 		"experience": 5,
-		"ammo": 8,
+		"ammo": 4,
 		"hearing": 42.0,
 		"unlock": 70.0,
 		"weight": 2.5,
@@ -195,7 +195,7 @@ const DEFINITIONS := {
 		# against unlit rock — that is the entire enemy.
 		"tint": Color(0.34, 0.37, 0.44),
 		"experience": 3,
-		"ammo": 2,
+		"ammo": 1,
 		"hearing": 30.0,
 		"unlock": 45.0,
 		"weight": 4.0,
@@ -240,7 +240,7 @@ const DEFINITIONS := {
 		# Priced as the kill it is. Dropping one fast should feel rewarded
 		# rather than like a magazine spent on a weakling.
 		"experience": 4,
-		"ammo": 5,
+		"ammo": 2,
 		"hearing": 34.0,
 		"unlock": 35.0,
 		"weight": 3.0,
