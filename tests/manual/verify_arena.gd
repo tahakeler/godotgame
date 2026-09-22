@@ -3,6 +3,12 @@ extends SceneTree
 ## Verifies the arena actually generates. The failure this exists to catch is a
 ## navigation mesh that bakes to zero polygons — Godot reports no error for it,
 ## the game boots fine, and zombies simply never move.
+##
+## SCOPE: this checks the PROCEDURAL arena generator, which is no longer the
+## map the game ships. The game runs on the authored labyrinth
+## (res://src/arena/dungeon_arena.tscn); the generator remains in arena.gd as
+## working code and keeps its own coverage here. Do not read a pass from this
+## file as a statement about the level players actually walk through.
 
 const MINIMUM_SPAWN_POINTS := 6
 const MINIMUM_PIECES := 9

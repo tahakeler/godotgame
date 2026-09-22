@@ -13,9 +13,15 @@ extends SceneTree
 ##
 ##   Godot --headless --script tests/manual/verify_spawn_director.gd
 
-const ARENA_SCENE := "res://src/arena/arena.tscn"
+const ARENA_SCENE := "res://src/arena/dungeon_arena.tscn"
 const DRAWS := 600
 const MINIMUM_DISTANCE := 14.0
+## Matches Arena.PRUNE_ATTEMPT_LIMIT plus headroom. On the labyrinth the arena
+## drops spawn points the navigation server cannot actually route to (1 of 55,
+## measured), but only a few frames after _ready — sampling before that point
+## draws from a population of 55 the game itself never spawns from, once the
+## round is under way.
+const PRUNE_WAIT_FRAMES := 40
 
 var _arena: Arena
 var _failures: Array[String] = []
@@ -30,6 +36,8 @@ func _initialize() -> void:
 func _process(_delta: float) -> bool:
 	_frames += 1
 	if _frames < 3:
+		return false
+	if not _arena._spawns_pruned and _frames < PRUNE_WAIT_FRAMES:
 		return false
 
 	test_spawn_director_respects_the_minimum_distance()
@@ -109,9 +117,15 @@ func test_spawn_director_spreads_across_chambers() -> void:
 
 	# Assert
 	if used.size() < 4:
+		# Arena.SPAWN_CELLS is the procedural cave's named-room layout and does
+		# not exist as a concept on the labyrinth — there, pick_spawn_point's
+		# repeat damping buckets spawn points into chambers by position (see
+		# Arena._chamber_index), and the bucket count is a property of the map,
+		# not a constant. Counted from the live population instead, so the
+		# denominator means the same thing "chambers used" does above it.
 		_failures.append(
-			"spawns only ever used %d chambers out of %d"
-			% [used.size(), Arena.SPAWN_CELLS.size()]
+			"spawns only ever used %d chambers out of %d available"
+			% [used.size(), _available_chamber_count()]
 		)
 		return
 
@@ -125,6 +139,14 @@ func test_spawn_director_spreads_across_chambers() -> void:
 	print("PASS: spawns used %d chambers, %.0f%% back-to-back repeats" % [
 		used.size(), repeat_share * 100.0
 	])
+
+
+## How many distinct chambers the current spawn population actually offers.
+func _available_chamber_count() -> int:
+	var chambers := {}
+	for chamber in _arena.spawn_chambers:
+		chambers[chamber] = true
+	return chambers.size()
 
 
 ## Which chamber a returned point belongs to.

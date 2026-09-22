@@ -11,7 +11,7 @@ extends SceneTree
 ##
 ##   Godot --headless --script tests/manual/verify_decoy.gd
 
-const ARENA_SCENE := "res://src/arena/arena.tscn"
+const ARENA_SCENE := "res://src/arena/dungeon_arena.tscn"
 const WEAPON_SCENE := "res://src/gameplay/weapon/weapon.tscn"
 const ZOMBIE_SCENE := "res://src/gameplay/zombie/zombie.tscn"
 
@@ -110,8 +110,16 @@ func test_throwing_is_refused_with_an_empty_reserve() -> void:
 ## they are not, pulling a zombie to that place instead of to them.
 func test_a_landing_diverts_a_zombie_to_the_landing_point() -> void:
 	# Arrange: a zombie at the arena centre, a player far to the south, and a
-	# landing 20m up the north corridor.
-	var landing := Vector3(0.0, 0.1, 20.0)
+	# landing one corridor run away.
+	#
+	# The landing point is measured, not chosen. The old cave took "20m up the
+	# north corridor" literally as (0, 0.1, 20); on the labyrinth the straight
+	# line to that point goes through a wall and the only route to it is 121.6m,
+	# so a sound that should carry was correctly not heard and the test read a
+	# working mechanic as a broken one. This point is 20.7m away in a straight
+	# line and 21.5m by the route the navmesh actually finds — the same corridor
+	# run verify_noise uses for the same reason.
+	var landing := Vector3(-5.666667, 0.708333, 19.86666)
 	var player := _marker(Vector3(0.0, 0.1, -400.0))
 	var zombie: Zombie = (load(ZOMBIE_SCENE) as PackedScene).instantiate()
 	root.add_child(zombie)

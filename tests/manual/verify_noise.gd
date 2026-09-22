@@ -13,15 +13,21 @@ extends SceneTree
 ##
 ##   Godot --headless --script tests/manual/verify_noise.gd
 
-const ARENA_SCENE := "res://src/arena/arena.tscn"
+const ARENA_SCENE := "res://src/arena/dungeon_arena.tscn"
 const ZOMBIE_SCENE := "res://src/gameplay/zombie/zombie.tscn"
 
-## Measured with a probe rather than guessed. From the arena centre a sound
-## straight up the north corridor travels almost exactly its straight-line
-## distance, while one diagonally into the rock between two arms has to go the
-## long way round — 22.6m apart in space, 42.8m apart by any route a sound
-## could actually take.
-const DOWN_THE_CORRIDOR := Vector3(0.0, 0.1, 20.0)
+## Measured with a probe rather than guessed. The old cave's "20m up the open
+## corridor" point does not carry over: on the labyrinth the only route to
+## (0, 0.1, 20) is 121.6m, because the straight line to it goes through a
+## wall. This point instead sits 20.7m away in a straight line and 21.5m by
+## the route the navmesh actually finds — a real corridor run, not a wall's
+## width away from one.
+const DOWN_THE_CORRIDOR := Vector3(-5.666667, 0.708333, 19.86666)
+## Unchanged from the old cave — its straight-line distance (22.6m) is a
+## property of the two points, not the map, and still happens to hold. What
+## changed is the route: on the labyrinth it is 31.7m, not 42.8m, because the
+## detour is a different shape. 31.7m still clears the 26m Shambler hearing
+## range this test needs, so the point still proves rock muffles a sound.
 const THROUGH_THE_ROCK := Vector3(-16.0, 0.1, 16.0)
 
 var _arena: Arena
@@ -146,9 +152,14 @@ func test_sound_travels_through_the_map_not_through_rock() -> void:
 
 
 func test_a_brute_hears_further_than_a_shambler() -> void:
-	# Arrange: 32m up the corridor sits between a Shambler's 26m and a Brute's
-	# 42m, and the route there is a straight run.
-	var far_up_the_corridor := Vector3(0.0, 0.1, 32.0)
+	# Arrange: the old cave's point 32m straight up the corridor is 124.9m by
+	# route on the labyrinth (the straight line crosses a wall), which sits
+	# neither zombie inside its hearing range and proves nothing. This point
+	# sits 28.4m away in a straight line — inside the Brute's 42m hearing but
+	# already outside the Shambler's 26m, so the Shambler is ruled out before
+	# a route is ever measured. Its measured route, 31.9m, is what the Brute
+	# is actually judged against, and it clears comfortably under 42m.
+	var far_up_the_corridor := Vector3(-12.41667, 0.875, -25.55)
 	var shambler := _targeted_zombie(ZombieTypes.Kind.SHAMBLER, Vector3(0.0, 0.1, 0.0))
 	var brute := _targeted_zombie(ZombieTypes.Kind.BRUTE, Vector3(0.0, 0.1, 0.0))
 

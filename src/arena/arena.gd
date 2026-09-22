@@ -880,6 +880,16 @@ func _world_to_cell(point: Vector3) -> Vector2i:
 	return Vector2i(roundi(point.x / CELL), roundi(point.z / CELL))
 
 
+## How many resupply caches this arena was asked to place.
+##
+## The procedural cave reads its hand-authored CACHE_CELLS table; an authored
+## map has no such table and is given a target instead, which the placement
+## loop meets or relaxes its spacing trying to. Asked of the arena so a caller
+## cannot compare a count from one map against a constant from the other.
+func declared_cache_count() -> int:
+	return external_cache_count if _external else CACHE_CELLS.size()
+
+
 ## The pitch of the grid `_occupied_cells()` is expressed in, in metres.
 ##
 ## The two arenas do not agree: the procedural cave is built from 4m tiles,

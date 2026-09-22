@@ -10,7 +10,7 @@ extends SceneTree
 ##
 ##   Godot --headless --script tests/manual/verify_caches.gd
 
-const ARENA_SCENE := "res://src/arena/arena.tscn"
+const ARENA_SCENE := "res://src/arena/dungeon_arena.tscn"
 
 var _arena: Arena
 var _failures: Array[String] = []
@@ -44,10 +44,14 @@ func test_arena_places_a_cache_in_every_declared_chamber() -> void:
 	var placed := _arena.ammo_caches.size()
 
 	# Assert
-	if placed != Arena.CACHE_CELLS.size():
-		_failures.append("declared %d caches but placed %d" % [
-			Arena.CACHE_CELLS.size(), placed
-		])
+	# Asked of the arena rather than read off Arena.CACHE_CELLS, which is the
+	# procedural cave's hand-authored table and has nothing to say about an
+	# authored map. The labyrinth is given a target of 6 and places 6; against
+	# the old table that read as two missing caches.
+	var declared: int = _arena.declared_cache_count()
+
+	if placed != declared:
+		_failures.append("declared %d caches but placed %d" % [declared, placed])
 	else:
 		print("PASS: all %d caches placed" % placed)
 

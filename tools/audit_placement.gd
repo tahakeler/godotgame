@@ -2,6 +2,12 @@ extends SceneTree
 
 ## Checks that nothing in the arena is standing inside anything else.
 ##
+## SCOPE: this checks the PROCEDURAL arena generator, which is no longer the
+## map the game ships. The game runs on the authored labyrinth
+## (res://src/arena/dungeon_arena.tscn); the generator remains in arena.gd as
+## working code and keeps its own coverage here. Do not read a pass from this
+## file as a statement about the level players actually walk through.
+##
 ## The layout tables are hand-authored and have been edited many times — decks
 ## and ramps were added after the cover rocks, caches after both, and spawn
 ## points spread out after that. Nothing in the build reports a collision

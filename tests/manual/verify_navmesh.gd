@@ -7,6 +7,12 @@ extends SceneTree
 ## corridor whose floor does not quite meet the room's, an agent radius that
 ## pinches a doorway shut. Nothing reports an error; zombies simply never
 ## arrive. Polygon count alone cannot catch that, so this queries real paths.
+##
+## SCOPE: this checks the PROCEDURAL arena generator, which is no longer the
+## map the game ships. The game runs on the authored labyrinth
+## (res://src/arena/dungeon_arena.tscn); the generator remains in arena.gd as
+## working code and keeps its own coverage here. Do not read a pass from this
+## file as a statement about the level players actually walk through.
 
 const ARENA_SCENE := "res://src/arena/arena.tscn"
 
