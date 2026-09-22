@@ -1,15 +1,31 @@
 extends Node3D
 
-## Entry scene. The cave itself is the backdrop — a slow camera orbit inside the
+## Entry scene. The level itself is the backdrop — a slow camera pan inside the
 ## real arena rather than a flat image, so the menu shows the game it leads into.
+##
+## The camera stands in the level and looks outward. It used to orbit overhead
+## at 5.2m looking down into the middle, which suited an open cave and puts the
+## camera inside the ceiling of an authored dungeon — the backdrop came out
+## completely black, because there is nothing to see from inside a ceiling.
 
 const GAME_SCENE := "res://src/core/game.tscn"
 
 @export_group("Backdrop camera")
-@export var orbit_radius := 9.0
-@export var orbit_height := 5.2
+## Where the camera stands, how far it circles, and at what eye height.
+##
+## Small and low: the pan has to stay inside one chamber, or it walks the
+## camera through a wall every few seconds.
+@export var orbit_centre := Vector3.ZERO
+## Where in the circle the pan begins, in degrees. Chosen so the menu opens on
+## a view worth looking at rather than on whichever wall angle zero happens to
+## face — in an enclosed level most bearings are a wall in shadow.
+@export var orbit_start_degrees := 240.0
+@export var orbit_radius := 1.6
+@export var orbit_height := 1.7
 @export var orbit_speed := 0.055
-@export var look_height := 0.3
+## How far down the corridor the camera looks, and at what height.
+@export var look_distance := 9.0
+@export var look_height := 1.5
 
 @export_group("Presentation")
 @export var fade_duration := 0.9
@@ -57,18 +73,24 @@ func _ready() -> void:
 	_refresh_controls_hint()
 	_refresh_difficulty_hint()
 	_refresh_mode()
+	_orbit_angle = deg_to_rad(orbit_start_degrees)
 	_fade_in()
 
 
 func _process(delta: float) -> void:
 	_orbit_angle += orbit_speed * delta
 
-	_camera.position = Vector3(
-		cos(_orbit_angle) * orbit_radius,
-		orbit_height,
-		sin(_orbit_angle) * orbit_radius
+	var radial := Vector3(cos(_orbit_angle), 0.0, sin(_orbit_angle))
+
+	_camera.position = (
+		orbit_centre + radial * orbit_radius + Vector3.UP * orbit_height
 	)
-	_camera.look_at(Vector3(0.0, look_height, 0.0), Vector3.UP)
+	_camera.look_at(
+		orbit_centre
+			+ radial * (orbit_radius + look_distance)
+			+ Vector3.UP * look_height,
+		Vector3.UP
+	)
 
 
 func _fade_in() -> void:
