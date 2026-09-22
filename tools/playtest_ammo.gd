@@ -65,6 +65,18 @@ var _dry_episodes := 0
 var _dry_longest := 0.0
 var _dry_current := 0.0
 var _was_dry := false
+## The same bookkeeping for the state the player would call being out: the
+## weapon in hand is empty while another still has rounds. This is what
+## `is_arsenal_dry()` named before it was tightened to require all three.
+var _held_dry_total := 0.0
+var _held_dry_episodes := 0
+var _held_dry_longest := 0.0
+var _held_dry_current := 0.0
+var _was_held_dry := false
+## Switches the autopilot was forced into by running the held weapon out, as
+## opposed to switches it chose for range. A forced switch is the design
+## working; the question is how often it happens.
+var _forced_switches := 0
 
 var _melee_swings := 0
 var _melee_hits := 0
@@ -180,6 +192,8 @@ func _instrument() -> void:
 			"fired": 0,
 			"held": 0.0,
 			"emptied_at": -1.0,
+			"emptied": 0,
+			"had_rounds": true,
 			"loadout": _loadout_size(kind),
 		}
 
@@ -277,6 +291,8 @@ func _drive(_unused: float) -> void:
 
 		if forced or _wanted_for >= SWITCH_COMMIT:
 			if not weapon.is_switching():
+				if forced:
+					_forced_switches += 1
 				weapon.equip(wanted)
 				_wanted_for = 0.0
 			return
@@ -409,8 +425,15 @@ func _sample(delta: float) -> void:
 
 	for kind in _per_weapon:
 		var entry: Dictionary = _per_weapon[kind]
-		if entry.emptied_at < 0.0 and not _has_rounds(kind):
+		var has := _has_rounds(kind)
+		if entry.emptied_at < 0.0 and not has:
 			entry.emptied_at = _elapsed
+		# How many separate times this weapon bottomed out, not just the first.
+		# A loadout that empties once is a duration; one that empties six times
+		# is a rhythm, and only the second is a resource decision.
+		if not has and entry.had_rounds:
+			entry.emptied += 1
+		entry.had_rounds = has
 
 	_timeline_remaining -= delta
 	if _timeline_remaining <= 0.0:
@@ -435,6 +458,48 @@ func _sample(delta: float) -> void:
 		_dry_current = 0.0
 
 	_was_dry = dry
+	_sample_held_dry(delta)
+
+
+## Track the state the *player* would call being out: the weapon in your hands
+## has nothing, while something else still does.
+##
+## This is the condition `is_arsenal_dry()` used to name before it was tightened
+## to require all three weapons empty. Measuring both separately is the only way
+## to settle whether the old rule was an accidental cushion or the only version
+## of the check that could ever fire in practice — and whether the gap between
+## them is a real experience or an artifact of a policy that hoards shells in a
+## weapon it never draws.
+##
+## Deliberately measured and not acted on. The autopilot still only swings the
+## melee on arsenal-dry, because that is the shipped rule and a probe that
+## quietly played by a different one would be measuring a game nobody is going
+## to ship.
+func _sample_held_dry(delta: float) -> void:
+	var weapon: Weapon = _game.weapon
+	var held_empty: bool = weapon.magazine_ammo <= 0 and weapon.reserve_ammo <= 0
+
+	# Only counts while an alternative exists. With nothing anywhere this is
+	# arsenal-dry, which is already counted above, and double-counting it would
+	# make the comparison between the two rules meaningless.
+	var elsewhere := false
+	for kind in WeaponTypes.order():
+		if kind != weapon.kind and _has_rounds(kind):
+			elsewhere = true
+			break
+
+	var held_dry := held_empty and elsewhere
+
+	if held_dry:
+		_held_dry_total += delta
+		_held_dry_current += delta
+		if not _was_held_dry:
+			_held_dry_episodes += 1
+	elif _was_held_dry:
+		_held_dry_longest = maxf(_held_dry_longest, _held_dry_current)
+		_held_dry_current = 0.0
+
+	_was_held_dry = held_dry
 
 
 func _report() -> void:
@@ -449,13 +514,14 @@ func _report() -> void:
 	print("AMMO ECONOMY — %.0fs simulated%s" % [
 		_elapsed, "" if _only == "" else (", %s only" % _only)
 	])
-	print("weapon    loadout  fired  held(s)  first empty(s)")
+	print("weapon    loadout  fired  held(s)  first empty(s)  times empty")
 
 	for kind in _per_weapon:
 		var entry: Dictionary = _per_weapon[kind]
-		print("%-9s %7d %6d %8.1f  %s" % [
+		print("%-9s %7d %6d %8.1f  %-14s %d" % [
 			entry.name, entry.loadout, entry.fired, entry.held,
 			"never" if entry.emptied_at < 0.0 else "%.1f" % entry.emptied_at,
+			entry.emptied,
 		])
 
 	print("")
@@ -474,6 +540,19 @@ func _report() -> void:
 		_dry_episodes, _dry_total, 100.0 * _dry_total / maxf(_elapsed, 0.01)
 	])
 	print("longest dry spell    %.1fs" % _dry_longest)
+
+	# The comparison the whole metric exists for. `is_arsenal_dry()` gates the
+	# melee, dry_resupply and the Screamer-versus-a-dry-player interaction; the
+	# held-weapon figure is what those systems would have fired on under the
+	# older, looser rule. If arsenal-dry stays at zero while held-dry does not,
+	# the emergency systems are gated on a condition the game cannot reach.
+	_held_dry_longest = maxf(_held_dry_longest, _held_dry_current)
+	print("held weapon dry      %d episode(s), %.1fs total (%.0f%% of the run)" % [
+		_held_dry_episodes, _held_dry_total,
+		100.0 * _held_dry_total / maxf(_elapsed, 0.01)
+	])
+	print("longest held-dry     %.1fs" % _held_dry_longest)
+	print("forced switches      %d (ran the held weapon out)" % _forced_switches)
 	print("clear shots lost to  switching %.1fs, reloading %.1fs, empty mag %.1fs, cooldown %.1fs" % [
 		_blocked_switching, _blocked_reloading, _blocked_empty, _blocked_cooldown
 	])
