@@ -142,6 +142,7 @@ func _ready() -> void:
 	_compass.draw.connect(_draw_compass)
 	_health_delta.draw.connect(_draw_health_delta)
 	_ready_minimap()
+	_ready_melee()
 
 	# The arms are moved relative to where the scene put them, so the authored
 	# gap between the reticle and its centre survives the spread maths.
@@ -163,6 +164,7 @@ func _process(delta: float) -> void:
 	_tick_crosshair(delta)
 	_tick_health_delta(delta)
 	_tick_map(delta)
+	_tick_melee(delta)
 
 	# The bearing changes every time the player turns, which is constantly.
 	_compass.queue_redraw()
@@ -205,6 +207,7 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 
 	# The map needs the cave and the crowd, both read-only.
 	_bind_minimap(game, spawner)
+	_bind_melee(weapon)
 
 	# Seeded from the real value, or the pale bar drains from zero on the first
 	# frame and reads as damage the player never took.
@@ -1464,3 +1467,111 @@ func _apply_switch_flash() -> void:
 
 	var accent := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
 	_ammo_caption.modulate = Color(1.0, 1.0, 1.0).lerp(accent, _switch_flash)
+
+
+# --- Emergency melee ---------------------------------------------------------
+#
+# The melee is a last resort, not a weapon slot, so it is absent from the HUD
+# until the player is in the situation it exists for: a magazine with nothing
+# in it. A permanent readout would advertise it as an option alongside the
+# guns, which is exactly what it is not — it does two thirds of a pistol round
+# for four times the wait, and its only real advantage is that it makes no
+# sound at all. So the hint says the two things that change a decision: which
+# button, and that swinging costs no noise.
+
+## How long a melee confirmation stays up. Shorter than a gunshot's, because
+## the swing has already told the player something happened.
+const MELEE_MARKER_DURATION := 0.3
+
+## How long "it did not flinch" stays on the status line.
+const MELEE_STATUS_DURATION := 0.9
+
+## A hit that landed and moved nothing. Deliberately not the kill red:
+## "connected" and "connected and it mattered" have to look different, or a
+## Brute's immunity to the stagger reads as the game dropping the hit.
+const MELEE_UNMOVED_COLOUR := Color(0.62, 0.66, 0.74, 1.0)
+
+const MELEE_UNMOVED_TEXT := "DID NOT FLINCH"
+
+var _melee_status_remaining := 0.0
+
+@onready var _melee_hint: Label = %MeleeHint
+
+
+func _ready_melee() -> void:
+	_melee_hint.visible = false
+
+
+func _bind_melee(weapon: Weapon) -> void:
+	weapon.melee_swung.connect(_on_melee_swung)
+
+
+## Surface the melee only while the magazine is empty, and fade it while the
+## swing is still coming back.
+func _tick_melee(delta: float) -> void:
+	if _melee_status_remaining > 0.0:
+		_melee_status_remaining = maxf(0.0, _melee_status_remaining - delta)
+		if _melee_status_remaining <= 0.0 and _weapon_status_label.text == MELEE_UNMOVED_TEXT:
+			_weapon_status_label.text = ""
+
+	if _weapon == null or _melee_hint == null:
+		return
+
+	# Empty magazine, not empty reserve: the moment worth naming is the one
+	# where the trigger has just stopped working, whether or not a reload is
+	# available. Reloading in front of something is the decision this is for.
+	var dry := _weapon.magazine_ammo <= 0
+	_melee_hint.visible = dry
+	if not dry:
+		return
+
+	if _melee_hint.text.is_empty():
+		_melee_hint.text = "%s   M E L E E   ·   S I L E N T" % _melee_key_name()
+
+	# Dimmed while the swing is still recovering, so a cooldown reads as "not
+	# yet" rather than as a button that did nothing.
+	var cooldown: float = maxf(_weapon.melee_cooldown, 0.001)
+	var ready_fraction: float = 1.0 - clampf(
+		_weapon.melee_cooldown_remaining() / cooldown, 0.0, 1.0
+	)
+	_melee_hint.modulate.a = lerpf(0.28, 0.85, ready_fraction)
+
+
+## The control actually bound to the melee action, read from the InputMap.
+##
+## A prompt naming a key that does nothing is worse than no prompt, and the
+## controls screen already lets the player rebind this one.
+func _melee_key_name() -> String:
+	if not InputMap.has_action("melee"):
+		return "MELEE"
+
+	for event in InputMap.action_get_events("melee"):
+		if event is InputEventKey:
+			return (event as InputEventKey).as_text_physical_keycode().to_upper()
+
+	return "MELEE"
+
+
+## Confirm a swing, and say which of the three things happened.
+##
+## A miss gets nothing: the swing itself is the feedback, and a marker for
+## "there was nothing there" would be noise in the one moment the player is
+## already panicking. A hit that staggered gets the ordinary confirmation. A
+## hit that did not gets its own colour and a word, because "that connected and
+## went nowhere" is a fact the player has to act on — by moving, which is the
+## Brute's whole rule.
+func _on_melee_swung(hit: bool, staggered: bool, _at: Vector3) -> void:
+	if not hit:
+		return
+
+	_hitmarker_remaining = MELEE_MARKER_DURATION
+	_hitmarker.scale = Vector2.ONE
+
+	if staggered:
+		_hitmarker.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		return
+
+	_hitmarker.modulate = MELEE_UNMOVED_COLOUR
+	_weapon_status_label.text = MELEE_UNMOVED_TEXT
+	_weapon_status_label.modulate = MELEE_UNMOVED_COLOUR
+	_melee_status_remaining = MELEE_STATUS_DURATION

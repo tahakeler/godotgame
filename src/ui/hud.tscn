@@ -526,3 +526,13 @@ unique_name_in_owner = true
 mouse_filter = 2
 alignment = 2
 theme_override_constants/separation = 10
+
+[node name="MeleeHint" type="Label" parent="AmmoBlock"]
+unique_name_in_owner = true
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 11
+text = ""
+horizontal_alignment = 2
