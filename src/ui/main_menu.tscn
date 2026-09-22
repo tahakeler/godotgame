@@ -126,6 +126,12 @@ custom_minimum_size = Vector2(0, 50)
 text = "CONTROLS"
 alignment = 0
 
+[node name="StatsButton" type="Button" parent="UI/MainPanel/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 50)
+text = "STATS"
+alignment = 0
+
 [node name="BottomRow" type="HBoxContainer" parent="UI/MainPanel/Buttons"]
 custom_minimum_size = Vector2(0, 50)
 theme_override_constants/separation = 10
@@ -284,3 +290,71 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0, 0, 0, 1)
+
+[node name="StatsPanel" type="Control" parent="UI"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("4_theme")
+visible = false
+
+[node name="Scrim" type="ColorRect" parent="UI/StatsPanel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.016, 0.019, 0.027, 0.92)
+
+[node name="Title" type="Label" parent="UI/StatsPanel"]
+offset_left = 92.0
+offset_top = 150.0
+offset_right = 900.0
+offset_bottom = 214.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.957, 0.949, 0.933, 1)
+theme_override_font_sizes/font_size = 44
+text = "STATS"
+
+[node name="Career" type="Label" parent="UI/StatsPanel"]
+unique_name_in_owner = true
+offset_left = 92.0
+offset_top = 226.0
+offset_right = 1100.0
+offset_bottom = 330.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.72, 0.75, 0.8, 1)
+theme_override_font_sizes/font_size = 17
+
+[node name="Breakdown" type="Label" parent="UI/StatsPanel"]
+unique_name_in_owner = true
+offset_left = 92.0
+offset_top = 350.0
+offset_right = 1300.0
+offset_bottom = 900.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.66, 0.72, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="StatsBackButton" type="Button" parent="UI/StatsPanel"]
+unique_name_in_owner = true
+offset_left = 92.0
+offset_top = 920.0
+offset_right = 292.0
+offset_bottom = 970.0
+text = "BACK"
+alignment = 0
+
+[node name="BackHint" type="Label" parent="UI/StatsPanel"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 92.0
+offset_top = -60.0
+offset_right = -48.0
+offset_bottom = -30.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.376, 0.4, 0.443, 1)
+theme_override_font_sizes/font_size = 15
+text = "ESC   BACK"

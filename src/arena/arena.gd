@@ -2282,6 +2282,14 @@ func prune_unreachable_spawns() -> bool:
 	if not map_rid.is_valid():
 		return false
 
+	# Asked whether the map has ever synchronised before querying it. A path
+	# query made before the first synchronisation does not merely fail, it logs
+	# an engine error — and this function is deliberately retried every frame
+	# until the server is ready, so "wait and try again" wrote one error into
+	# the log on every run. The iteration id is zero until the first sync.
+	if NavigationServer3D.map_get_iteration_id(map_rid) == 0:
+		return false
+
 	NavigationServer3D.map_force_update(map_rid)
 
 	# Snap the target onto the mesh before querying. external_player_start is

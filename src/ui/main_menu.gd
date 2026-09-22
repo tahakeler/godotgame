@@ -53,6 +53,11 @@ const DIFFICULTY_BLURBS := {
 @onready var _settings_button: Button = %SettingsButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _mode_panel: Control = %ModePanel
+@onready var _stats_button: Button = %StatsButton
+@onready var _stats_panel: Control = %StatsPanel
+@onready var _stats_career: Label = %Career
+@onready var _stats_breakdown: Label = %Breakdown
+@onready var _stats_back_button: Button = %StatsBackButton
 @onready var _mode_entries: VBoxContainer = %ModeEntries
 @onready var _difficulty_panel: Control = %DifficultyPanel
 @onready var _difficulty_entries: VBoxContainer = %DifficultyEntries
@@ -76,6 +81,8 @@ func _ready() -> void:
 	_settings = GameSettings.instance(self)
 
 	_play_button.pressed.connect(_on_play_pressed)
+	_stats_button.pressed.connect(_on_stats_pressed)
+	_stats_back_button.pressed.connect(_close_stats_panel)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_settings_panel.closed.connect(_on_settings_closed)
@@ -121,7 +128,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 
-	if _difficulty_panel.visible:
+	if _stats_panel.visible:
+		get_viewport().set_input_as_handled()
+		_close_stats_panel()
+	elif _difficulty_panel.visible:
 		get_viewport().set_input_as_handled()
 		_close_difficulty_panel()
 	elif _mode_panel.visible:
@@ -346,3 +356,116 @@ func _on_settings_closed() -> void:
 
 func _on_quit_pressed() -> void:
 	get_tree().quit()
+
+
+## The STATS screen: what the player has actually done, across every run.
+##
+## Deliberately a record of the whole career rather than a trophy case of
+## bests. A best is already shown against each mode on the way into a round,
+## where it is a target; here the interesting numbers are the ones that
+## accumulate, because those are the ones that say how the player plays rather
+## than how well their single luckiest run went.
+func _on_stats_pressed() -> void:
+	_refresh_stats()
+	_main_panel.visible = false
+	_stats_panel.visible = true
+	_stats_back_button.grab_focus()
+
+
+func _close_stats_panel() -> void:
+	_stats_panel.visible = false
+	_main_panel.visible = true
+	_stats_button.grab_focus()
+
+
+func _refresh_stats() -> void:
+	var career := Records.career()
+	_stats_career.text = _describe_career(career)
+	_stats_breakdown.text = _describe_breakdown()
+
+
+## The career summary, in prose rather than a table.
+##
+## Accuracy is the one derived figure worth showing: it is the only number here
+## the player can move deliberately, and on a map where most of a magazine goes
+## into the dark it is the honest measure of whether the ammunition economy is
+## being fought or wasted.
+func _describe_career(career: Dictionary) -> String:
+	var runs: int = career.runs_started
+
+	if runs <= 0:
+		return "No runs recorded yet. Finish one and it will show up here."
+
+	var lines: Array[String] = []
+	lines.append(
+		"%s   ·   %d won   ·   %d lost"
+		% [_plural(runs, "run"), career.runs_won, career.runs_lost]
+	)
+	lines.append(
+		"%d kills   ·   %s   ·   %s survived"
+		% [career.kills, _describe_accuracy(career), _describe_duration(career.duration)]
+	)
+
+	return "\n".join(lines)
+
+
+## Shots hit against shots fired, or a flat statement when nothing was fired.
+##
+## Guarded rather than divided: a career that has started a run and quit out of
+## it before shooting has a real run count and zero shots, and dividing by that
+## would put "nan%" on the front page of the player's own statistics.
+func _describe_accuracy(career: Dictionary) -> String:
+	var fired: int = career.shots_fired
+
+	if fired <= 0:
+		return "no shots fired"
+
+	return "%.0f%% accuracy" % (100.0 * float(career.shots_hit) / float(fired))
+
+
+## One line per mode and difficulty the player has actually played.
+##
+## Combinations never played are left out entirely rather than listed as zeros.
+## A grid of empty rows reads as a checklist of things the player has failed to
+## do, which is the opposite of what a statistics screen is for.
+func _describe_breakdown() -> String:
+	var lines: Array[String] = []
+
+	for mode: GameSettings.Mode in GameSettings.MODE_NAMES.keys():
+		for difficulty: GameSettings.Difficulty in GameSettings.DIFFICULTY_NAMES.keys():
+			var row := Records.totals(mode, difficulty)
+			if row.runs_started <= 0:
+				continue
+
+			lines.append(
+				"%-12s %-9s %s, %d won, %d kills   ·   best %s"
+				% [
+					GameSettings.MODE_NAMES[mode].to_upper(),
+					GameSettings.DIFFICULTY_NAMES[difficulty].to_upper(),
+					_plural(row.runs_started, "run"),
+					row.runs_won,
+					row.kills,
+					Records.describe(mode, Records.best(mode, difficulty)),
+				]
+			)
+
+	if lines.is_empty():
+		return ""
+
+	lines.insert(0, "BY MODE AND DIFFICULTY\n")
+	return "\n".join(lines)
+
+
+func _describe_duration(seconds: float) -> String:
+	var whole := int(seconds)
+	if whole < 3600:
+		return "%dm" % (whole / 60)
+	return "%dh %dm" % [whole / 3600, (whole % 3600) / 60]
+
+
+## "1 run", "2 runs". Small, but this text sits on a screen whose whole job is
+## to look considered, and "1 runs" undoes that in one glance.
+func _plural(count: int, noun: String) -> String:
+	if count == 1:
+		return "1 %s" % noun
+	return "%d %ss" % [count, noun]

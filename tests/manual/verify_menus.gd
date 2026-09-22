@@ -49,6 +49,7 @@ func _process(_delta: float) -> bool:
 	test_every_settings_control_is_connected_to_something()
 	test_every_menu_screen_can_be_opened_and_closed()
 	test_every_interactive_control_is_reachable_by_keyboard_focus()
+	test_the_staged_flow_reaches_a_round_and_the_stats_screen()
 
 	_report()
 	return true
@@ -311,3 +312,81 @@ func _report() -> void:
 	for failure in _failures:
 		printerr("FAIL: %s" % failure)
 	quit(1)
+
+
+## The staged flow, walked the way a player walks it.
+##
+## PLAY no longer starts a round: it opens a mode panel, which opens a
+## difficulty panel, which starts the round. Three screens that did not exist
+## before, built in code rather than in the scene, and none of them covered by
+## the screens test above — that one drives each panel's `closed` signal, and
+## these are plain Controls with no such signal.
+##
+## Worth its own test because the failure is total and silent. The two panels
+## are populated by `_build_mode_panel` and `_build_difficulty_panel` at
+## _ready(); when their containers could not be resolved during development the
+## menu came up with PLAY leading nowhere, and nothing in the suite noticed.
+## A main menu that cannot reach a round is the whole game, unplayable.
+func test_the_staged_flow_reaches_a_round_and_the_stats_screen() -> void:
+	# Arrange
+	var menu: Node = (load(MAIN_MENU_SCENE) as PackedScene).instantiate()
+	root.add_child(menu)
+
+	var broken: Array[String] = []
+
+	# Act / Assert: PLAY opens the mode panel.
+	var mode_panel := menu.find_child("ModePanel", true, false) as Control
+	var play := menu.find_child("PlayButton", true, false) as Button
+
+	if mode_panel == null or play == null:
+		broken.append("the main menu has no PlayButton or no ModePanel")
+	else:
+		play.pressed.emit()
+		if not mode_panel.visible:
+			broken.append("PLAY did not open the mode panel")
+
+		# A mode opens the difficulty panel. The mode buttons are built in
+		# code, so this also proves the container was resolved and populated.
+		var modes := _interactive_controls(
+			menu.find_child("ModeEntries", true, false)
+		)
+		var difficulty_panel := menu.find_child("DifficultyPanel", true, false) as Control
+
+		if modes.is_empty():
+			broken.append("the mode panel offers no modes to choose")
+		elif difficulty_panel == null:
+			broken.append("the main menu has no DifficultyPanel")
+		else:
+			(modes[0] as Button).pressed.emit()
+			if not difficulty_panel.visible:
+				broken.append("choosing a mode did not open the difficulty panel")
+			if _interactive_controls(
+				menu.find_child("DifficultyEntries", true, false)
+			).is_empty():
+				broken.append("the difficulty panel offers no difficulties")
+
+	# STATS is reached from the front screen rather than through the flow.
+	var stats_panel := menu.find_child("StatsPanel", true, false) as Control
+	var stats := menu.find_child("StatsButton", true, false) as Button
+
+	if stats_panel == null or stats == null:
+		broken.append("the main menu has no StatsButton or no StatsPanel")
+	else:
+		stats.pressed.emit()
+		if not stats_panel.visible:
+			broken.append("STATS did not open the stats screen")
+
+	# Everything the flow puts on screen must still be keyboard-reachable.
+	for control in _interactive_controls(menu):
+		if control.focus_mode == Control.FOCUS_NONE:
+			broken.append("%s in the main menu cannot take focus" % control.name)
+
+	if broken.is_empty():
+		print(
+			"PASS: PLAY reaches mode, difficulty and a round, and STATS opens (%d controls focusable)"
+			% _interactive_controls(menu).size()
+		)
+	else:
+		_failures.append_array(broken)
+
+	menu.queue_free()

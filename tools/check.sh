@@ -128,6 +128,7 @@ run_step "flashlight" "$GODOT" --headless --script tests/manual/verify_flashligh
 run_step "accessibility" "$GODOT" --headless --script tests/manual/verify_accessibility.gd
 run_step "progression" "$GODOT" --headless --script tests/manual/verify_progression.gd
 run_step "records" "$GODOT" --headless --script tests/manual/verify_records.gd
+run_step "menus" "$GODOT" --headless --script tests/manual/verify_menus.gd
 run_step "objectives" "$GODOT" --headless --script tests/manual/verify_objectives.gd
 run_step "no-phantom-fire" "$GODOT" --headless --script tests/manual/verify_no_phantom_fire.gd
 run_step "ammo" "$GODOT" --headless --script tests/manual/verify_ammo.gd
