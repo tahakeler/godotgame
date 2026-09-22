@@ -202,6 +202,17 @@ func _wire_audio() -> void:
 			sounds.play_at(event, groan_position)
 	)
 
+	# The inhale before a scream.
+	#
+	# `alarm_winding_up` lives on the zombie rather than the spawner, and there
+	# is no spawner-level relay for it, so new arrivals are swept as the
+	# population changes. A relay would be cleaner and belongs to whoever owns
+	# the spawner; this reaches the signal without reaching into their files.
+	spawner.population_changed.connect(
+		func(_alive: int) -> void: _wire_alarm_tells()
+	)
+	_wire_alarm_tells()
+
 	round_won.connect(
 		func(_kills: int, _time: float, _record: bool) -> void: sounds.play("round_won")
 	)
@@ -219,6 +230,28 @@ func _wire_audio() -> void:
 ## Give a medkit its voice. The heal is two seconds of standing still with
 ## nothing on screen to show for it; the sound is the only thing that confirms
 ## the hold paid off rather than being interrupted.
+## Give every living zombie's alarm wind-up a voice.
+##
+## Idempotent: already-connected zombies are skipped, so this can be called as
+## often as the population changes without stacking duplicate breaths onto one
+## pair of lungs.
+func _wire_alarm_tells() -> void:
+	# No public accessor for the list itself, only a count. Reading the private
+	# array is the lesser evil against editing a file another agent owns.
+	for zombie in spawner._alive:
+		if zombie == null or not is_instance_valid(zombie):
+			continue
+		if zombie.alarm_winding_up.is_connected(_on_alarm_winding_up):
+			continue
+		zombie.alarm_winding_up.connect(_on_alarm_winding_up)
+
+
+## Played at the zombie, not at the player — the whole point of the wind-up is
+## that it tells you which direction to deal with before it goes off.
+func _on_alarm_winding_up(_zombie: Node, at: Vector3) -> void:
+	sounds.play_at("screamer_inhale", at)
+
+
 func wire_medkit_audio(kit: Medkit) -> void:
 	if kit == null or kit.used.is_connected(_on_medkit_used):
 		return

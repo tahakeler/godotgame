@@ -19,6 +19,7 @@ const GENERATED_EVENTS := {
 	"fire_pistol": ["fire_pistol"],
 	"fire_shotgun": ["fire_shotgun"],
 	"fire_rifle": ["fire_rifle"],
+	"screamer_inhale": ["screamer_inhale"],
 	"screamer_alarm": ["screamer_alarm"],
 	"brute_growl": ["brute_growl"],
 	"decoy_land": ["decoy_land"],
@@ -89,6 +90,14 @@ const MIX := {
 	# it is drawing, or the warning arrives after the consequence. Its pitch
 	# range is deliberately narrow: this is a siren, and a siren that changes
 	# note between instances is harder to learn.
+	# The warning, mixed to be heard from outside the room it is in. Quieter
+	# than the scream it resolves into and reaching slightly less far, so the
+	# pair reads as one event getting closer to happening rather than two.
+	# Pitch is barely varied: this is the one sound the player must recognise
+	# instantly every single time, and variation is the enemy of recognition.
+	"screamer_inhale": {
+		"volume": -7.0, "pitch": Vector2(0.99, 1.01), "distance": 40.0
+	},
 	"screamer_alarm": {
 		"volume": -1.0, "pitch": Vector2(0.97, 1.04), "distance": 46.0
 	},
