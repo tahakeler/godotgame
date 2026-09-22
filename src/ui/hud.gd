@@ -1002,14 +1002,29 @@ const MAP_SAMPLE_INTERVAL := 0.2
 const MAP_LINE_STEP := 0.34
 
 @export_group("Minimap")
+# All four are in CELLS, and a cell is whatever pitch the arena sampled at —
+# 4m for the procedural cave, 1m for an authored map. The defaults below are
+# set for the metre grid the labyrinth uses, so they read as metres there.
+
 ## How many cells fit across the dial. Smaller is a closer, more legible map.
-@export var minimap_visible_cells := 13.0
+##
+## Twenty-six rather than thirteen: at a metre a cell the old value showed a
+## 13m circle, which in a labyrinth is barely the corridor you are standing in.
+@export var minimap_visible_cells := 26.0
 ## Cells around the player revealed without needing line of sight — what you
 ## would know by touch.
-@export var minimap_touch_cells := 1.6
+##
+## Deliberately short. Touch ignores line of sight, so anything generous here
+## reveals straight through a wall, and on a grid fine enough to draw walls
+## that is visible as a stain spreading into rooms the player has not entered.
+@export var minimap_touch_cells := 2.0
 ## How far an unlit player sees, in cells, and what the torch adds.
-@export var minimap_sight_cells := 4.0
-@export var minimap_torch_bonus_cells := 3.0
+##
+## Eleven and six. The longest clear sightline measured anywhere on the
+## labyrinth is 17.6m, so a lit reach of seventeen is as far as the level can
+## actually pay out — past that the line-of-sight walk clips it to a wall.
+@export var minimap_sight_cells := 11.0
+@export var minimap_torch_bonus_cells := 6.0
 ## The cone the player is considered to be looking down.
 @export var minimap_sight_arc_degrees := 110.0
 
@@ -1164,8 +1179,21 @@ func _discover_caches() -> void:
 			_discovered_caches[index] = true
 
 
+## The grid pitch the arena sampled at, in metres.
+##
+## Asked of the arena rather than assumed, because the two arenas do not agree:
+## the procedural cave is built from 4m tiles, while an authored map is sampled
+## at a metre so its corridors survive the grid. Reading Arena.CELL here drew
+## the labyrinth as one solid square.
+func _cell_size() -> float:
+	if _arena != null and _arena.has_method("grid_cell_size"):
+		return _arena.call("grid_cell_size")
+	return Arena.CELL
+
+
 func _world_to_cell(point: Vector3) -> Vector2i:
-	return Vector2i(roundi(point.x / Arena.CELL), roundi(point.z / Arena.CELL))
+	var size := _cell_size()
+	return Vector2i(roundi(point.x / size), roundi(point.z / size))
 
 
 ## How many cells the player has earned so far. For tests, and nothing else.
@@ -1250,7 +1278,8 @@ func _draw_minimap() -> void:
 
 	var pixels_per_cell := extent / maxf(minimap_visible_cells, 1.0)
 	var here := _player.global_position
-	var player_cell := Vector2(here.x / Arena.CELL, here.z / Arena.CELL)
+	var size := _cell_size()
+	var player_cell := Vector2(here.x / size, here.z / size)
 
 	var facing := -_player.global_transform.basis.z
 	var forward := Vector2(facing.x, facing.z)
@@ -1318,7 +1347,8 @@ func _draw_map_cell(screen: Vector2, right: Vector2, forward: Vector2,
 func _map_project(world: Vector3, centre: Vector2, radius: float,
 		pixels_per_cell: float, player_cell: Vector2,
 		right: Vector2, forward: Vector2) -> Dictionary:
-	var offset := Vector2(world.x / Arena.CELL, world.z / Arena.CELL) - player_cell
+	var size := _cell_size()
+	var offset := Vector2(world.x / size, world.z / size) - player_cell
 	var screen := Vector2(offset.dot(right), -offset.dot(forward)) * pixels_per_cell
 	var limit := radius - 7.0
 

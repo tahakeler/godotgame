@@ -13,7 +13,13 @@ const GAME_SCENE := "res://src/core/game.tscn"
 ## Let zombies spawn and settle before the first distance sample.
 const SETTLE_SECONDS := 1.5
 ## How long they then get to close the gap.
-const PURSUIT_SECONDS := 7.0
+##
+## Twelve rather than seven because the level is a labyrinth. Measured on it,
+## a route is four to five times its straight-line distance — spawns sitting
+## 22m and 41m away are 119m and 93m on foot — so a window sized for an open
+## cave ends while a zombie that is walking straight at the player is still
+## three corners out.
+const PURSUIT_SECONDS := 12.0
 ## Distance a zombie must close to count as genuinely pursuing.
 const REQUIRED_APPROACH := 4.0
 ## Fraction of tracked zombies that must be pursuing.
@@ -77,8 +83,9 @@ func _record_start_distances() -> void:
 	var player_position: Vector3 = _game.player.global_position
 
 	for zombie in _living_zombies():
-		_start_distances[zombie.get_instance_id()] = \
-			player_position.distance_to(zombie.global_position)
+		_start_distances[zombie.get_instance_id()] = _route_length(
+			zombie.global_position, player_position
+		)
 
 	if _start_distances.is_empty():
 		_failures.append("no zombies spawned after %.1fs" % SETTLE_SECONDS)
@@ -99,7 +106,9 @@ func _check_pursuit() -> void:
 			continue
 
 		tracked += 1
-		var distance_now: float = player_position.distance_to(zombie.global_position)
+		var distance_now: float = _route_length(
+			zombie.global_position, player_position
+		)
 		var approach: float = _start_distances[id] - distance_now
 		best_approach = maxf(best_approach, approach)
 
@@ -118,10 +127,10 @@ func _check_pursuit() -> void:
 			"only %d of %d zombies closed %.0fm on the player (%.0f%%, need %.0f%%); "
 			% [pursuing, tracked, REQUIRED_APPROACH, ratio * 100.0,
 				REQUIRED_PURSUIT_RATIO * 100.0]
-			+ "best approach %.1fm — the navmesh may not connect the ring" % best_approach
+			+ "best route closed %.1fm — the navmesh may not connect the ring" % best_approach
 		)
 	else:
-		print("PASS: %d/%d zombies pursued from the outer chambers (best %.1fm closed)" % [
+		print("PASS: %d/%d zombies pursued from the outer chambers (best %.1fm of route closed)" % [
 			pursuing, tracked, best_approach
 		])
 
@@ -187,3 +196,30 @@ func _report() -> void:
 	for failure in _failures:
 		printerr("FAIL: %s" % failure)
 	quit(1)
+
+
+## How far a zombie has to walk to reach the player, along the navmesh.
+##
+## The measure used to be straight-line distance, which quietly stopped meaning
+## anything when the game moved onto an authored labyrinth. Measured there, a
+## zombie approaching correctly can have its straight-line distance grow by 7m
+## while the route it is actually walking shrinks by 8m — it is rounding the
+## outside of a wall. Straight-line closure therefore reports a working pursuit
+## as a broken navmesh, which is the precise opposite of what this file is for.
+##
+## Falls back to straight-line distance when no route exists, so a genuinely
+## severed spawn still reads as "never got closer" rather than as a zero.
+func _route_length(from: Vector3, to: Vector3) -> float:
+	var map_rid := _game.arena.get_navigation_map()
+	if not map_rid.is_valid():
+		return from.distance_to(to)
+
+	var path := NavigationServer3D.map_get_path(map_rid, from, to, true)
+	if path.size() < 2:
+		return from.distance_to(to)
+
+	var total := 0.0
+	for index in range(1, path.size()):
+		total += path[index - 1].distance_to(path[index])
+
+	return total

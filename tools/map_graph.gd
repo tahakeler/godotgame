@@ -96,7 +96,7 @@ func _landmarks() -> Dictionary:
 
 
 func _cell_of(at: Vector3) -> Vector2i:
-	return Vector2i(roundi(at.x / Arena.CELL), roundi(at.z / Arena.CELL))
+	return _arena.grid_world_to_cell(at)
 
 
 func _exits_from(cell: Vector2i, cells: Dictionary) -> int:

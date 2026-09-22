@@ -25,6 +25,14 @@ const PROP_PATH := "res://assets/models/weapons/%s.glb"
 ## Grid unit of the cave kit. Every placement below is a multiple of this.
 const CELL := 4.0
 
+## Grid pitch used for the minimap on an authored map, in metres.
+##
+## CELL is the size of a procedural arena tile and is wider than a corridor in
+## the labyrinth, so sampling the authored map at that pitch marks every cell
+## in its bounding box walkable — measured, 361 of 361, a solid square with no
+## maze in it. A metre resolves a corridor from the wall beside it.
+const EXTERNAL_CELL := 1.0
+
 
 const CENTRE_ROOM := "room-large"
 const OUTER_ROOM := "room-small"
@@ -824,16 +832,20 @@ func _cells_from_navigation() -> Dictionary:
 	return cells
 
 
+## A cell counts as walkable only when its centre lies inside the polygon.
+##
+## The three corners used to be marked outright as well, which was invisible at
+## a 4m pitch because everything got marked anyway. On a metre grid it speckles
+## the map: a navmesh vertex sits on the boundary of the walkable area, so the
+## cell it rounds into is usually the wall on the far side, and the minimap
+## came out as noise with rooms and corridors buried in it. Dropping them took
+## the fill from 57% to 43% and made the walls straight.
 func _mark_triangle_cells(a: Vector3, b: Vector3, c: Vector3,
 		cells: Dictionary) -> void:
-	cells[_world_to_cell(a)] = true
-	cells[_world_to_cell(b)] = true
-	cells[_world_to_cell(c)] = true
-
-	var low := _world_to_cell(Vector3(
+	var low := _external_world_to_cell(Vector3(
 		minf(a.x, minf(b.x, c.x)), 0.0, minf(a.z, minf(b.z, c.z))
 	))
-	var high := _world_to_cell(Vector3(
+	var high := _external_world_to_cell(Vector3(
 		maxf(a.x, maxf(b.x, c.x)), 0.0, maxf(a.z, maxf(b.z, c.z))
 	))
 
@@ -842,7 +854,7 @@ func _mark_triangle_cells(a: Vector3, b: Vector3, c: Vector3,
 			var cell := Vector2i(x, y)
 			if cells.has(cell):
 				continue
-			var centre := _cell_to_world(cell)
+			var centre := _external_cell_to_world(cell)
 			if _point_in_triangle(Vector2(centre.x, centre.z), a, b, c):
 				cells[cell] = true
 
@@ -866,6 +878,43 @@ func _point_in_triangle(point: Vector2, a: Vector3, b: Vector3,
 
 func _world_to_cell(point: Vector3) -> Vector2i:
 	return Vector2i(roundi(point.x / CELL), roundi(point.z / CELL))
+
+
+## The pitch of the grid `_occupied_cells()` is expressed in, in metres.
+##
+## The two arenas do not agree: the procedural cave is built from 4m tiles,
+## while an authored map is sampled at a metre so its corridors survive the
+## grid. Everything that reads the grid must ask rather than assume — the HUD,
+## the collision audit and the map graph each hardcoded Arena.CELL and each
+## broke in a different way when the pitch changed.
+func grid_cell_size() -> float:
+	return EXTERNAL_CELL if _external else CELL
+
+
+## Grid conversions matching `_occupied_cells()`, whichever arena is running.
+func grid_world_to_cell(point: Vector3) -> Vector2i:
+	return _external_world_to_cell(point) if _external else _world_to_cell(point)
+
+
+func grid_cell_to_world(cell: Vector2i) -> Vector3:
+	return _external_cell_to_world(cell) if _external else _cell_to_world(cell)
+
+
+## Grid conversions for an authored map, which is sampled far finer than CELL.
+##
+## Kept separate from `_world_to_cell` and `_cell_to_world` deliberately: those
+## two place props, lights and beams during procedural generation, where the
+## cell IS the tile and a different pitch would move the level around.
+func _external_world_to_cell(point: Vector3) -> Vector2i:
+	return Vector2i(
+		roundi(point.x / EXTERNAL_CELL), roundi(point.z / EXTERNAL_CELL)
+	)
+
+
+func _external_cell_to_world(cell: Vector2i) -> Vector3:
+	return Vector3(
+		float(cell.x) * EXTERNAL_CELL, 0.0, float(cell.y) * EXTERNAL_CELL
+	)
 
 
 ## Spread spawn points across the whole map, clear of where the player starts.

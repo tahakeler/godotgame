@@ -38,6 +38,17 @@ const REACH_HEIGHT := 3.2
 ## Compass directions swept from each cell when testing containment, and how
 ## far. Far enough to cross the whole cave, so an unobstructed sweep is
 ## unambiguous rather than merely long.
+## Slack allowed around a swept landing, in metres. See _is_inside().
+const CONTAINMENT_TOLERANCE_METRES := 2.5
+
+## Target spacing between swept cells, in metres.
+##
+## A hole in the shell is a doorway, not a crack, so sweeping every cell of a
+## metre grid is about four times redundant and costs sixteen shape casts each.
+## At 2234 cells the audit ran for minutes; strided to roughly two metres it is
+## back to seconds and still cannot miss anything a player could fit through.
+const SWEEP_SPACING_METRES := 2.0
+
 const SWEEP_DIRECTIONS := 16
 const SWEEP_DISTANCE := 160.0
 
@@ -85,6 +96,8 @@ func _process(_delta: float) -> bool:
 func _audit_containment(arena: Node) -> void:
 	var space: PhysicsDirectSpaceState3D = arena.get_world_3d().direct_space_state
 	var cells: Dictionary = arena._occupied_cells()
+	var pitch: float = arena.grid_cell_size()
+	var stride: int = maxi(1, int(round(SWEEP_SPACING_METRES / pitch)))
 
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = PLAYER_RADIUS
@@ -99,10 +112,15 @@ func _audit_containment(arena: Node) -> void:
 	var escapes := 0
 
 	for cell in cells:
+		# Strided so the sweep spacing is a fixed distance rather than a fixed
+		# number of cells, which keeps the cost the same at either grid pitch.
+		if posmod(cell.x, stride) != 0 or posmod(cell.y, stride) != 0:
+			continue
+
 		# Lifted a little off the floor: a capsule whose feet rest exactly on the
 		# slab reads as overlapping it, and every cell would be skipped as solid.
 		var origin: Vector3 = (
-			arena._cell_to_world(cell) + Vector3.UP * (PLAYER_HEIGHT * 0.5 + 0.15)
+			arena.grid_cell_to_world(cell) + Vector3.UP * (PLAYER_HEIGHT * 0.5 + 0.15)
 		)
 
 		# Cells inside rock or under a deck are not places to sweep from.
@@ -125,15 +143,14 @@ func _audit_containment(arena: Node) -> void:
 				continue
 
 			var stopped: Vector3 = origin + query.motion * fractions[0]
-			var landed := Vector2i(
-				roundi(stopped.x / Arena.CELL), roundi(stopped.z / Arena.CELL)
-			)
+			var landed: Vector2i = arena.grid_world_to_cell(stopped)
 
-			if not cells.has(landed):
+			if not _is_inside(cells, landed, pitch):
 				escapes += 1
+				var from_world: Vector3 = arena.grid_cell_to_world(cell)
 				_problems.append(
-					"the player can walk out of the cave from (%d, %d) heading %.0f degrees, "
-					% [cell.x * 4, cell.y * 4, rad_to_deg(heading)]
+					"the player can walk out of the cave from %s heading %.0f degrees, "
+					% [_round(from_world), rad_to_deg(heading)]
 					+ "ending up at %s" % _round(stopped)
 				)
 				break
@@ -365,3 +382,26 @@ func _report() -> void:
 		printerr("FAIL: %s" % problem)
 	printerr("%d objects can be walked through" % _problems.size())
 	quit(1)
+
+
+## True when a swept capsule came to rest somewhere still inside the cave.
+##
+## Not a plain lookup, because on an authored map the grid is sampled from the
+## navigation mesh and the navigation mesh is inset from every wall by the
+## agent radius. The last half-metre of real floor beside a wall is therefore
+## legitimately absent from the grid, and a sweep that stops there has hit the
+## wall — which is the shell doing its job. A plain lookup called that an
+## escape and reported one at every wall in the level.
+##
+## The tolerance stays at a single cell on purpose. A genuine hole lets the
+## capsule travel the full sweep distance and come to rest well clear of
+## anything walkable, which is several cells out at any pitch.
+func _is_inside(cells: Dictionary, landed: Vector2i, pitch: float) -> bool:
+	var reach := int(ceil(CONTAINMENT_TOLERANCE_METRES / pitch))
+
+	for dx in range(-reach, reach + 1):
+		for dy in range(-reach, reach + 1):
+			if cells.has(landed + Vector2i(dx, dy)):
+				return true
+
+	return false
