@@ -45,12 +45,31 @@ const SWITCH_COMMIT := 2.0
 ## trend across a round, not a transient after one kill.
 const TIMELINE_INTERVAL := 15.0
 
+## How close the stand-in has to get to a waypoint before it takes the next.
+const WAYPOINT_REACHED := 1.2
+## How long it will chase one roaming destination before picking another. A
+## stand-in that cannot reach its goal must not spend the whole run trying.
+const ROAM_PATIENCE := 25.0
+## A contact is a zombie within this. Separate from ENGAGE_RANGE, which is
+## about whether a shot is worth taking; this is about whether the player is
+## being pressed, which is the pacing question.
+const CONTACT_RANGE := 6.0
+## Deadband on the movement decision, so a direction almost perpendicular to
+## an axis does not chatter that key on and off every frame.
+const MOVE_DEADBAND := 0.25
+
+const MOVE_ACTIONS: Array[StringName] = [
+	&"move_forward", &"move_back", &"move_left", &"move_right"
+]
+
 var _game: Game
 var _started := false
 var _elapsed := 0.0
 var _seconds := 150.0
 var _only := ""
 var _immortal := true
+## Fixed by default so two runs of the same build agree; --seed= to resample.
+var _seed := 20260922
 var _last_wanted: WeaponTypes.Kind = WeaponTypes.Kind.PISTOL
 var _wanted_for := 0.0
 ## An upgrade offered but not yet taken. Applied a frame late on purpose — see
@@ -100,6 +119,27 @@ var _timeline_remaining := 0.0
 var _alive_samples := 0
 var _alive_total := 0
 
+## Whether the stand-in walks the map. On by default: it used to stand where it
+## spawned, which was a fair stand-in for an open cave the zombies crossed in
+## seconds and is no stand-in at all for a labyrinth. Rooted on the authored
+## map it measured 17.9 zombies alive and 2% engaged time — a reading about the
+## probe, not about the game.
+var _roam := true
+var _roam_path: PackedVector3Array = PackedVector3Array()
+var _roam_index := 0
+var _roam_age := 0.0
+## Seconds spent with a zombie inside CONTACT_RANGE.
+var _contact_time := 0.0
+## Distance to the nearest zombie, sampled every frame, for a mean.
+var _nearest_total := 0.0
+var _nearest_samples := 0
+var _distance_walked := 0.0
+## Seeded so a run can be repeated. The roaming destinations were drawn from
+## the global RNG at first, which made every run a different walk and every
+## comparison between two settings a comparison of two different walks.
+var _rng := RandomNumberGenerator.new()
+var _last_position := Vector3.ZERO
+
 
 func _initialize() -> void:
 	_parse_arguments()
@@ -115,6 +155,10 @@ func _parse_arguments() -> void:
 			_only = argument.split("=")[1].to_lower()
 		elif argument == "--mortal":
 			_immortal = false
+		elif argument == "--stationary":
+			_roam = false
+		elif argument.begins_with("--seed="):
+			_seed = int(argument.split("=")[1])
 
 
 func _process(delta: float) -> bool:
@@ -124,6 +168,7 @@ func _process(delta: float) -> bool:
 	if not _started:
 		_started = true
 		DeterministicSettings.apply(root)
+		_rng.seed = _seed
 		Engine.time_scale = TIME_SCALE
 		# Endless, because an extraction round ends on its own clock and stops
 		# the spawner. The first attempt at this measurement ran in extraction
@@ -149,6 +194,7 @@ func _process(delta: float) -> bool:
 
 	_last_delta = delta
 	_drive(delta)
+	_roam_step(delta)
 	_sample(delta)
 
 	if _elapsed < _seconds:
@@ -446,6 +492,8 @@ func _sample(delta: float) -> void:
 	_alive_samples += 1
 	_alive_total += _game.spawner.get_alive_count()
 
+	_sample_pressure(delta)
+
 	var dry := weapon.is_arsenal_dry()
 
 	if dry:
@@ -525,6 +573,14 @@ func _report() -> void:
 		])
 
 	print("")
+	print("roamed               %.0fm walked, %s" % [
+		_distance_walked, "roaming" if _roam else "stationary"
+	])
+	print("nearest zombie       %.1fm mean, in contact (<%.0fm) %.0fs of %.0fs (%.0f%%)" % [
+		_nearest_total / maxf(1.0, float(_nearest_samples)),
+		CONTACT_RANGE, _contact_time, _seconds,
+		100.0 * _contact_time / maxf(1.0, _seconds)
+	])
 	print("engaged time         %.1fs of %.0fs (%.0f%%), mean %.1f zombies alive" % [
 		_engaged, _elapsed, 100.0 * _engaged / maxf(_elapsed, 0.01),
 		float(_alive_total) / maxf(float(_alive_samples), 1.0)
@@ -614,3 +670,148 @@ func _report_reserves() -> void:
 		print("%-9s %+4d rounds across the run — %s" % [
 			WeaponTypes.display_name(kind), change, verdict
 		])
+
+
+## Walk the map, so the measurement is about the level and not about a statue.
+##
+## Movement goes through the real input actions rather than by writing to the
+## player's position, because the player's own _physics_process owns speed,
+## acceleration, crouch and the collide-and-slide. A probe that teleports its
+## stand-in measures a player who cannot be blocked by a doorway, which on a
+## labyrinth is the entire question.
+##
+## The destination is any walkable point far enough to be a journey. What the
+## stand-in is doing is closer to "sweep the level" than to "hunt", which is
+## what a player in an extraction round is actually doing between fights.
+func _roam_step(delta: float) -> void:
+	var player: Player = _game.player
+
+	if not _roam:
+		_release_movement()
+		return
+
+	_roam_age += delta
+
+	if _roam_index >= _roam_path.size() or _roam_age > ROAM_PATIENCE:
+		_choose_destination()
+
+	if _roam_index >= _roam_path.size():
+		_release_movement()
+		return
+
+	var here := player.global_position
+	var waypoint: Vector3 = _roam_path[_roam_index]
+
+	# Compared on the flat. The path rides the navmesh and the player rides the
+	# floor, and the height difference between the two never closes.
+	if Vector2(waypoint.x - here.x, waypoint.z - here.z).length() < WAYPOINT_REACHED:
+		_roam_index += 1
+		if _roam_index >= _roam_path.size():
+			_release_movement()
+			return
+		waypoint = _roam_path[_roam_index]
+
+	_press_towards(waypoint - here)
+
+
+## Hold whichever movement keys carry the stand-in in a world direction.
+##
+## Translated into the player's own frame first, because the player moves
+## relative to where it is looking and the autopilot is looking at whatever it
+## is shooting — which is usually not where it is going. That mismatch is the
+## point: it is how a person plays, backing away from one thing while facing
+## another.
+func _press_towards(world_direction: Vector3) -> void:
+	var player: Player = _game.player
+	var flat := Vector3(world_direction.x, 0.0, world_direction.z)
+
+	if flat.length_squared() < 0.0001:
+		_release_movement()
+		return
+
+	var local := player.global_transform.basis.inverse() * flat.normalized()
+
+	_hold(&"move_right", local.x > MOVE_DEADBAND)
+	_hold(&"move_left", local.x < -MOVE_DEADBAND)
+	# Godot's forward is -Z, and move_back is the positive half of the axis.
+	_hold(&"move_back", local.z > MOVE_DEADBAND)
+	_hold(&"move_forward", local.z < -MOVE_DEADBAND)
+
+
+func _hold(action: StringName, wanted: bool) -> void:
+	if wanted == Input.is_action_pressed(action):
+		return
+
+	if wanted:
+		Input.action_press(action)
+	else:
+		Input.action_release(action)
+
+
+func _release_movement() -> void:
+	for action in MOVE_ACTIONS:
+		if Input.is_action_pressed(action):
+			Input.action_release(action)
+
+
+## Pick somewhere worth walking to, and the route there.
+func _choose_destination() -> void:
+	_roam_path = PackedVector3Array()
+	_roam_index = 0
+	_roam_age = 0.0
+
+	var arena: Arena = _game.arena
+	var map_rid := arena.get_navigation_map()
+	if not map_rid.is_valid():
+		return
+
+	var here: Vector3 = _game.player.global_position
+	var candidates: Array[Vector3] = arena.spawn_points
+
+	if candidates.is_empty():
+		return
+
+	# Tried a few times rather than once: the nearest spawn point is often the
+	# room the stand-in is already in, and walking two metres and stopping is
+	# not a sweep of anything.
+	for attempt in 8:
+		var goal: Vector3 = candidates[_rng.randi_range(0, candidates.size() - 1)]
+		if here.distance_to(goal) < 15.0:
+			continue
+
+		var path := NavigationServer3D.map_get_path(map_rid, here, goal, true)
+		if path.size() >= 2:
+			_roam_path = path
+			_roam_index = 1
+			return
+
+
+## How hard the level is pressing, as distinct from how much it is shooting.
+##
+## Engaged time answers "was there a shot worth taking". These answer "was
+## anything near me", which on a labyrinth is a different question with a very
+## different answer: a large live population separated from the player by four
+## corners is a number on a HUD rather than a threat.
+func _sample_pressure(delta: float) -> void:
+	var here: Vector3 = _game.player.global_position
+
+	if _last_position != Vector3.ZERO:
+		_distance_walked += Vector2(
+			here.x - _last_position.x, here.z - _last_position.z
+		).length()
+	_last_position = here
+
+	var nearest := INF
+	for zombie in _game.spawner.get_children():
+		if not (zombie is Zombie) or not is_instance_valid(zombie):
+			continue
+		nearest = minf(nearest, here.distance_to((zombie as Zombie).global_position))
+
+	if is_inf(nearest):
+		return
+
+	_nearest_total += nearest
+	_nearest_samples += 1
+
+	if nearest <= CONTACT_RANGE:
+		_contact_time += delta

@@ -56,7 +56,15 @@ func spawn_impact(position: Vector3, normal: Vector3, is_flesh: bool) -> void:
 	# Spray back along the surface normal rather than in a ball, so a hit reads
 	# as coming off the surface it landed on.
 	if not normal.is_zero_approx():
-		burst.look_at(position + normal, Vector3.UP)
+		# A floor or ceiling hit has a normal pointing straight up or down, which
+		# is colinear with Vector3.UP — look_at has no way to resolve roll, Godot
+		# warns on every such shot, and the roll it picks is arbitrary. Any axis
+		# off the normal resolves it, and the spray is symmetric about the normal
+		# so which one is chosen cannot be seen.
+		var up := Vector3.UP
+		if absf(normal.normalized().dot(Vector3.UP)) > 0.99:
+			up = Vector3.FORWARD
+		burst.look_at(position + normal, up)
 
 	burst.emitting = true
 	_free_after(burst, impact_lifetime)

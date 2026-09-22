@@ -1207,8 +1207,19 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 	_world_parent().add_child(mesh_instance)
 	mesh_instance.global_position = from.lerp(to, 0.5)
 	# CylinderMesh runs along local Y, so aim that axis down the shot.
+	#
+	# The up vector is chosen off the shot direction for the same reason the
+	# impact spray picks one: a shot fired straight down at the floor is
+	# colinear with Vector3.UP, which leaves look_at unable to resolve roll. A
+	# tracer is a cylinder and has no meaningful roll, so any resolving axis is
+	# as good as another.
+	var along := (to - mesh_instance.global_position).normalized()
+	var tracer_up := Vector3.UP
+	if absf(along.dot(Vector3.UP)) > 0.99:
+		tracer_up = Vector3.FORWARD
+
 	mesh_instance.look_at_from_position(
-		mesh_instance.global_position, to, Vector3.UP
+		mesh_instance.global_position, to, tracer_up
 	)
 	mesh_instance.rotate_object_local(Vector3.RIGHT, PI * 0.5)
 

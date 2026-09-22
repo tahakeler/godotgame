@@ -588,6 +588,13 @@ void fragment() {
 @export var external_cache_spacing := 22.0
 ## How many resupply caches to place. Matches CACHE_CELLS on the built cave.
 @export var external_cache_count := 6
+
+## The longest walk a zombie may be asked to make to reach the player.
+##
+## Beyond this it is not joining the fight, it is walking to where the fight
+## was. Generous rather than tight: the point is to exclude the far side of
+## the map, not to pen every spawn into the next room.
+@export var spawn_route_ceiling := 45.0
 ## Where the player starts, which spawns keep clear of. Game seats the player
 ## at the origin; this is an export so a map that starts elsewhere can say so.
 ## Navigation polygons whose vertices sit above this are discarded when the
@@ -652,6 +659,12 @@ var _external := false
 ## minimap asks for it every time fog is revealed.
 var _navigation_ready := false
 var _spawns_pruned := false
+## Walking distances to each spawn point, and where the player stood when they
+## were measured. See _route_distance.
+var _route_cache: Dictionary = {}
+var _route_cache_origin := Vector3(INF, INF, INF)
+## How far the player may move before the cached walking distances are stale.
+const ROUTE_CACHE_REFRESH := 6.0
 var _prune_attempts := 0
 ## Frames to give the navigation server before accepting the spawns unchecked.
 const PRUNE_ATTEMPT_LIMIT := 30
@@ -1133,9 +1146,21 @@ func _score_spawn(index: int, away_from: Vector3, minimum_distance: float,
 	if distance < minimum_distance:
 		return 0.0
 
-	# Peaks at the near end of the band and tails off, so the fight stays where
-	# the player is rather than trickling in from the far corners.
-	var score: float = 1.0 / (1.0 + maxf(0.0, distance - minimum_distance) / SPAWN_FALLOFF)
+	# Scored on how far the zombie has to WALK, not on how far away it looks.
+	#
+	# The falloff below has always meant "keep the fight where the player is
+	# rather than trickling in from the far corners", and straight-line distance
+	# expressed that faithfully on an open cave. On the authored labyrinth it
+	# stopped meaning anything: routes there run four to five times their
+	# straight-line distance, so a spawn 22m away that scored as near was a 119m
+	# walk, and the zombie arrived — if it arrived — long after the moment that
+	# asked for it. Measured with the population this produced: 18 zombies alive
+	# and the player with a shot available 1% of the time.
+	var walk := _route_distance(index, away_from, distance)
+	if walk > spawn_route_ceiling:
+		return 0.0
+
+	var score: float = 1.0 / (1.0 + maxf(0.0, walk - minimum_distance) / SPAWN_FALLOFF)
 
 	if facing != Vector3.ZERO and distance > 0.001:
 		var ahead := facing.normalized().dot(offset / distance)
@@ -1147,6 +1172,36 @@ func _score_spawn(index: int, away_from: Vector3, minimum_distance: float,
 		score *= REPEAT_DAMPING
 
 	return score
+
+
+## How far a zombie spawning here would have to walk to reach the player.
+##
+## Cached against where the player was standing when it was measured, because
+## the query is not free and the answer barely moves while the player does not.
+## Falls back to straight-line distance when no route exists, which keeps a
+## point that has just been orphaned from scoring as though it were adjacent.
+func _route_distance(index: int, away_from: Vector3, straight: float) -> float:
+	if away_from.distance_to(_route_cache_origin) > ROUTE_CACHE_REFRESH:
+		_route_cache.clear()
+		_route_cache_origin = away_from
+
+	if _route_cache.has(index):
+		return _route_cache[index]
+
+	var map_rid := get_navigation_map()
+	var walk := straight
+
+	if map_rid.is_valid():
+		var path := NavigationServer3D.map_get_path(
+			map_rid, spawn_points[index], away_from, true
+		)
+		if path.size() >= 2:
+			walk = 0.0
+			for step in range(1, path.size()):
+				walk += path[step - 1].distance_to(path[step])
+
+	_route_cache[index] = walk
+	return walk
 
 
 ## Remember which chambers were used lately, so the next pick can avoid them.
