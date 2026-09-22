@@ -1,0 +1,12 @@
+{
+  "floors": 1,
+  "upper_deck": false,
+  "stairs": false,
+  "route_nodes": 261,
+  "connected_nodes": 261,
+  "minimum_connections": 2,
+  "dead_end_nodes": 0,
+  "bridge_edges": 0,
+  "doors": "Two openable doors; route graph evaluated with doors open.",
+  "ceiling_underside_metres": 4.0
+}
