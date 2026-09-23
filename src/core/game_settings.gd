@@ -263,6 +263,7 @@ static func ensure_buses() -> void:
 		AudioServer.set_bus_send(index, "Master")
 
 	_ensure_sfx_reverb()
+	_ensure_sfx_lowpass()
 
 
 ## Cave acoustics: a stone room, not a rehearsal hall. room_size and damping
@@ -311,6 +312,60 @@ static func _ensure_sfx_reverb() -> void:
 	reverb.predelay_msec = REVERB_PREDELAY_MSEC
 	reverb.predelay_feedback = REVERB_PREDELAY_FEEDBACK
 	AudioServer.add_bus_effect(sfx_index, reverb)
+
+
+## Cutoff of the SFX bus lowpass at zero muffle — effectively transparent,
+## since it sits above the range anything in this game actually emits.
+const LOWPASS_DEFAULT_CUTOFF_HZ := 20000.0
+## Cutoff at full muffle (VitalsAudio driving set_sfx_muffle(1.0)) — low
+## enough that only a dull rumble survives, which is the "underwater" read
+## the low-health cue is going for.
+const MUFFLE_MIN_CUTOFF := 650.0
+## Warps how quickly the muffle bites as `amount` rises. The amount is raised
+## to 1/EXPONENT, so above 1 the drop is front-loaded: the first slip under
+## the low-health line already takes the top end away (about 5.4 kHz at 30%
+## health), and the last stretch toward death only deepens it. The world going
+## dull the moment you are in trouble is the cue; a gentle EQ fade is not.
+const MUFFLE_CURVE_EXPONENT := 2.0
+
+
+## Add the low-pass filter the low-health cue drives to the SFX bus, once.
+## Idempotent for the same reason `_ensure_sfx_reverb` is: called on every
+## `ensure_buses()`, which runs on every scene boot and every settings apply.
+static func _ensure_sfx_lowpass() -> void:
+	var sfx_index := AudioServer.get_bus_index(SFX_BUS)
+	if sfx_index < 0:
+		return
+
+	for i in AudioServer.get_bus_effect_count(sfx_index):
+		if AudioServer.get_bus_effect(sfx_index, i) is AudioEffectLowPassFilter:
+			return
+
+	var lowpass := AudioEffectLowPassFilter.new()
+	lowpass.cutoff_hz = LOWPASS_DEFAULT_CUTOFF_HZ
+	AudioServer.add_bus_effect(sfx_index, lowpass)
+
+
+## Drive the SFX bus muffle for the low-health cue. `amount` is 0 (clear) to 1
+## (fully muffled); the cutoff falls exponentially rather than linearly
+## because hearing is logarithmic — a linear Hz sweep spends almost its whole
+## range sounding identical and only "does something" near the bottom.
+## A no-op if the SFX bus or its lowpass filter is missing.
+static func set_sfx_muffle(amount: float) -> void:
+	var sfx_index := AudioServer.get_bus_index(SFX_BUS)
+	if sfx_index < 0:
+		return
+
+	var clamped := clampf(amount, 0.0, 1.0)
+	var t := pow(clamped, 1.0 / MUFFLE_CURVE_EXPONENT)
+
+	for i in AudioServer.get_bus_effect_count(sfx_index):
+		var effect := AudioServer.get_bus_effect(sfx_index, i)
+		if effect is AudioEffectLowPassFilter:
+			effect.cutoff_hz = LOWPASS_DEFAULT_CUTOFF_HZ * pow(
+				MUFFLE_MIN_CUTOFF / LOWPASS_DEFAULT_CUTOFF_HZ, t
+			)
+			return
 
 
 func apply_audio() -> void:
