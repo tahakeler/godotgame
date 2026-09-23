@@ -173,10 +173,53 @@ func _on_alarm_raised(raiser: Zombie, believed_position: Vector3) -> void:
 	for zombie in _alive:
 		if not is_instance_valid(zombie) or zombie == raiser:
 			continue
-		if zombie.global_position.distance_to(raiser.global_position) > raiser.alarm_radius:
+		if not _scream_reaches(raiser, zombie):
 			continue
 
 		zombie.receive_alert(believed_position)
+
+
+## Whether a scream from `raiser` carries to `listener`, measured along the
+## walkable route rather than straight through the rock.
+##
+## The alarm was a straight-line radius while gunfire is heard along routes
+## (Zombie._can_hear), so on the labyrinth a scream passed through walls a
+## gunshot could not: one Screamer pulled in zombies from sealed-off corridors
+## several routes away, which is the unfair chain aggro the Screamer is meant
+## to avoid. Now the two follow the same rule — a wall muffles, a corridor
+## carries.
+##
+## Falls back to the straight line only when there is no navigation to walk:
+## a bare scene with no navmesh (the behaviour tests build one), or a map the
+## server has not synchronised yet, where a path query would fail for every
+## listener rather than answer the question.
+func _scream_reaches(raiser: Zombie, listener: Zombie) -> bool:
+	var reach := raiser.alarm_radius
+	var from := raiser.global_position
+	var to := listener.global_position
+
+	# A route is never shorter than the straight line, so this rejects the far
+	# ones without paying for a path query.
+	if from.distance_to(to) > reach:
+		return false
+
+	var map := raiser.get_world_3d().navigation_map
+	if not map.is_valid() \
+			or NavigationServer3D.map_get_regions(map).is_empty() \
+			or NavigationServer3D.map_get_iteration_id(map) == 0:
+		return true
+
+	var path := NavigationServer3D.map_get_path(map, from, to, true)
+	if path.size() < 2:
+		return false
+
+	var travelled := 0.0
+	for index in range(1, path.size()):
+		travelled += path[index - 1].distance_to(path[index])
+		if travelled > reach:
+			return false
+
+	return true
 
 
 ## Tell every living zombie that something was heard here.
