@@ -606,7 +606,14 @@ func set_target(target: Node3D) -> void:
 
 ## Damage entry point used by the weapon's raycast.
 func take_damage(amount: float, _hit_position: Vector3 = Vector3.ZERO,
-		_direction: Vector3 = Vector3.ZERO) -> float:
+		direction: Vector3 = Vector3.ZERO) -> float:
+	# The flinch scales with how much of the body the hit took, and a bigger
+	# body is harder to rock: a pistol round barely moves a Brute.
+	if direction != Vector3.ZERO and not health.is_dead:
+		var mass := pow(_collider.shape.height / REFERENCE_HEIGHT, 2.0) if _collider != null else 1.0
+		_visual.react_to_hit(
+			direction, clampf(amount / maxf(health.max_health, 1.0) * 3.0, 0.35, 1.0) / mass
+		)
 	return health.take_damage(amount)
 
 
