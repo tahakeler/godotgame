@@ -584,10 +584,17 @@ void fragment() {
 @export var external_spawn_spacing := 6.0
 ## No spawn closer than this to where the player starts.
 @export var external_player_clearance := 14.0
-## Metres between resupply caches, so a single corner cannot hold them all.
-@export var external_cache_spacing := 22.0
 ## How many resupply caches to place. Matches CACHE_CELLS on the built cave.
 @export var external_cache_count := 6
+
+## How many medkits an authored map carries.
+##
+## Three, because the procedural cave carried two against eight caches and the
+## labyrinth carries six on a larger floor. Without these the shipped map had
+## none at all: MEDKIT_PLACEMENTS is the procedural cave's hand-authored table,
+## the external map never read it, and nothing regenerates health — so every
+## hit taken on the labyrinth was permanent apart from the Vitality upgrade.
+@export var external_medkit_count := 3
 
 ## The longest walk a zombie may be asked to make to reach the player.
 ##
@@ -748,6 +755,7 @@ func _adopt_external_map() -> void:
 	_play_radius = _measure_play_radius(walkable)
 	_build_external_spawn_points(walkable)
 	_build_external_caches(walkable)
+	_build_external_medkits(walkable)
 	_adopt_doors()
 
 
@@ -987,28 +995,16 @@ func _build_external_spawn_points(samples: Array[Vector3]) -> void:
 
 ## Resupply caches at walkable points, as far apart as the map allows.
 ##
-## Same relaxation as the spawns, and the same reason as CACHE_CELLS has on the
-## built cave: resupplying should cost you the ground you were holding, which
-## it only does if the caches are nowhere near each other.
+## The same reason as CACHE_CELLS has on the built cave: resupplying should
+## cost you the ground you were holding, which it only does if the caches are
+## nowhere near each other.
 func _build_external_caches(samples: Array[Vector3]) -> void:
 	ammo_caches.clear()
 	if not caches_enabled:
 		return
 
-	var chosen: Array[Vector3] = []
-	var spacing := external_cache_spacing
-
-	while chosen.size() < external_cache_count and spacing >= 2.0:
-		for point in samples:
-			if chosen.size() >= external_cache_count:
-				break
-			if point.distance_to(external_player_start) < external_player_clearance:
-				continue
-			if not _is_clear_of(point, chosen, spacing):
-				continue
-			chosen.append(point)
-
-		spacing *= 0.75
+	var avoid: Array[Vector3] = [external_player_start]
+	var chosen := _spread_points(samples, external_cache_count, avoid)
 
 	for point in chosen:
 		var cache := AmmoCache.new()
@@ -1017,6 +1013,61 @@ func _build_external_caches(samples: Array[Vector3]) -> void:
 		add_child(cache)
 		ammo_caches.append(cache)
 
+
+
+## Medkits at walkable points, spread apart and kept off the caches.
+##
+## Built after the caches so it can stay clear of them: a medkit beside a crate
+## makes one spot the answer to everything, when the point of both is that a
+## resupply costs you the ground you were holding.
+func _build_external_medkits(samples: Array[Vector3]) -> void:
+	if not medkits_enabled:
+		return
+
+	var avoid: Array[Vector3] = [external_player_start]
+	for cache in ammo_caches:
+		avoid.append(cache.position)
+
+	for point in _spread_points(samples, external_medkit_count, avoid):
+		var kit := Medkit.spawn(self, point)
+		kit.name = "Medkit_%d_%d" % [roundi(point.x), roundi(point.z)]
+
+
+## Choose `count` walkable points, each as far as possible from everything
+## already placed — the points in `avoid` and the ones chosen before it.
+##
+## Farthest-point selection rather than first-fit. The caches used to take the
+## first samples that cleared a spacing threshold, in the order the navmesh
+## happened to list them, and on the labyrinth that order starts in the north:
+## all six caches landed in the northern half and the southern half had no
+## ammunition at all. Maximising the gap covers the whole map regardless of
+## sample order, and tends to put pickups at the ends of branches, which is
+## where a payout for exploring belongs. Deterministic for a given map.
+func _spread_points(samples: Array[Vector3], count: int,
+		avoid: Array[Vector3]) -> Array[Vector3]:
+	var placed: Array[Vector3] = avoid.duplicate()
+	var chosen: Array[Vector3] = []
+
+	for _index in count:
+		var best := Vector3.ZERO
+		var best_gap := -1.0
+
+		for point in samples:
+			if point.distance_to(external_player_start) < external_player_clearance:
+				continue
+			var gap := INF
+			for other in placed:
+				gap = minf(gap, point.distance_to(other))
+			if gap > best_gap:
+				best_gap = gap
+				best = point
+
+		if best_gap < 0.0:
+			break
+		chosen.append(best)
+		placed.append(best)
+
+	return chosen
 
 func _is_clear_of(point: Vector3, placed: Array[Vector3], spacing: float) -> bool:
 	for existing in placed:
