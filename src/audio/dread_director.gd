@@ -33,12 +33,12 @@ enum Kind { FOOTSTEPS_BEHIND, DISTANT_CALL, CAVE_SETTLE, CLOSE_BREATH }
 @export var calm_threshold := 0.12
 ## At or above this threat the calm clock resets to zero outright — a spike
 ## in danger erases the quiet that was building, rather than merely pausing it.
-@export var interrupt_threshold := 0.3
+@export var interrupt_threshold := 0.45
 ## Minimum real time between the end of one phantom and the start of the next,
 ## regardless of how calm the cave has been.
 @export var min_gap := 28.0
 ## Minimum unbroken calm before the very first phantom of a round is allowed.
-@export var calm_before_first := 25.0
+@export var calm_before_first := 15.0
 ## Chance per second of a phantom starting, the moment min_gap and
 ## calm_before_first are both satisfied.
 @export var base_chance := 0.02
