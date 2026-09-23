@@ -45,14 +45,20 @@ func _test_kill_shortens_extraction() -> void:
 	_game.start_round()
 
 	var time_before: float = _game.time_remaining
-	var reserve_before: int = _game.weapon.reserve_ammo
+	# Counted across the whole arsenal rather than on the weapon in hand.
+	#
+	# A kill used to pour its reward into whatever was held, so reading one
+	# weapon was reading all of it. It is routed now, to whichever weapon is
+	# emptiest relative to its own ceiling, so the rounds from a kill routinely
+	# land in a holstered weapon — and checking the held one alone reported a
+	# reward that had in fact been paid in full, just not where this test was
+	# looking.
+	var reserve_before := _total_reserve()
 
 	_game._on_zombie_died(Vector3.ZERO, 1, 3)
 
 	var expected_time := time_before - _game.seconds_per_kill
-	var expected_reserve := mini(
-		reserve_before + 3 + _game.ammo_bonus_per_kill, _game.weapon.max_reserve
-	)
+	var expected_reserve := reserve_before + 3 + _game.ammo_bonus_per_kill
 
 	if not is_equal_approx(_game.time_remaining, expected_time):
 		_failures.append("kill did not shorten extraction: expected %.1f, got %.1f" % [
@@ -60,13 +66,13 @@ func _test_kill_shortens_extraction() -> void:
 		])
 	elif _game.kills != 1:
 		_failures.append("kill count expected 1, got %d" % _game.kills)
-	elif _game.weapon.reserve_ammo != expected_reserve:
-		_failures.append("kill ammo reward expected %d, got %d" % [
-			expected_reserve, _game.weapon.reserve_ammo
+	elif _total_reserve() != expected_reserve:
+		_failures.append("kill ammo reward expected %d across the arsenal, got %d" % [
+			expected_reserve, _total_reserve()
 		])
 	else:
 		print("PASS: kill removed %.1fs from the clock and awarded %d ammo" % [
-			_game.seconds_per_kill, _game.weapon.reserve_ammo - reserve_before
+			_game.seconds_per_kill, _total_reserve() - reserve_before
 		])
 
 
@@ -152,3 +158,17 @@ func _report() -> void:
 	for failure in _failures:
 		printerr("FAIL: %s" % failure)
 	quit(1)
+
+
+## Every round the player is carrying, in hand and holstered.
+##
+## reserve_for() is asked for each kind rather than summing the slot table
+## directly, because the slot entry for the weapon in hand is only written back
+## on a swap and is stale until then — the live figure lives on the weapon.
+func _total_reserve() -> int:
+	var total := 0
+
+	for slot_kind in WeaponTypes.order():
+		total += _game.weapon.reserve_for(slot_kind)
+
+	return total

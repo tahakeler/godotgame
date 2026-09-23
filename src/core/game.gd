@@ -715,7 +715,16 @@ func _on_zombie_died(death_position: Vector3, experience: int, ammo: int) -> voi
 
 	# Kills are the only source of ammunition, and the only way to shorten the
 	# round. Both rewards come from the same action by design.
-	weapon.add_reserve_ammo(ammo + ammo_bonus_per_kill)
+	#
+	# Routed rather than poured into whatever is in hand. add_reserve_ammo only
+	# ever fills the held weapon, so the arsenal-wide distribution — and the
+	# whole argument for it, that a weapon should be resupplied by how empty it
+	# is relative to its own ceiling — applied to supply caches and to nothing
+	# else, while kills, the only real source, ignored it. Measured over ten
+	# minutes: the pistol took not one round because it was never held, the
+	# shotgun filled to its ceiling and threw the rest away, and the rifle, the
+	# weapon actually being fired, drained the whole time.
+	weapon.distribute_reserve_ammo(ammo + ammo_bonus_per_kill)
 
 	# Only Extraction trades kills for clock. In Last Stand the timer is the
 	# whole challenge, and in Endless there is no clock to shorten.

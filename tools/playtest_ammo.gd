@@ -70,6 +70,8 @@ var _only := ""
 var _immortal := true
 ## Fixed by default so two runs of the same build agree; --seed= to resample.
 var _seed := 20260922
+## Declines every perk, isolating what the base economy pays on its own.
+var _no_upgrades := false
 var _last_wanted: WeaponTypes.Kind = WeaponTypes.Kind.PISTOL
 var _wanted_for := 0.0
 ## An upgrade offered but not yet taken. Applied a frame late on purpose — see
@@ -159,6 +161,8 @@ func _parse_arguments() -> void:
 			_roam = false
 		elif argument.begins_with("--seed="):
 			_seed = int(argument.split("=")[1])
+		elif argument == "--no-upgrades":
+			_no_upgrades = true
 
 
 func _process(delta: float) -> bool:
@@ -216,7 +220,15 @@ func _process(delta: float) -> bool:
 ##
 ## This is a probe, so it is allowed to be blunt about it.
 func _keep_playing() -> void:
-	if _pending_upgrade >= 0:
+	if _pending_upgrade == -2:
+		# Declined. Closing the menu unpauses, but handing the weapon and the
+		# player back is a separate job — _apply_upgrade ends by doing it, and
+		# skipping it leaves the stand-in alive, unpaused and unable to shoot,
+		# which would read as an ammunition surplus.
+		_pending_upgrade = -1
+		_game.upgrade_menu.close()
+		_game._on_resumed()
+	elif _pending_upgrade >= 0:
 		var upgrade := _pending_upgrade
 		_pending_upgrade = -1
 		_game._apply_upgrade(upgrade)
@@ -258,6 +270,11 @@ func _instrument() -> void:
 	# in the report by the reserve figures themselves.
 	_game.progression.levelled_up.connect(
 		func(_level: int, choices: Array[Dictionary]) -> void:
+			if _no_upgrades:
+				# The level-up still has to be dismissed or the round stays
+				# paused waiting for a choice; it just does not take one.
+				_pending_upgrade = -2
+				return
 			if not choices.is_empty():
 				_pending_upgrade = choices[0].id
 	)
