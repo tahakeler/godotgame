@@ -2,8 +2,8 @@
 
 <!-- STATUS -->
 Epic: Early Access push
-Feature: player-facing polish
-Task: interaction and pickup feedback
+Feature: map-switch regressions and polish
+Task: auditing what else still assumes the procedural cave
 <!-- /STATUS -->
 
 ## Baseline on main (2026-09-23)
@@ -70,6 +70,13 @@ PC only: keyboard and mouse, no gamepad anywhere.
 - Head bob on footfalls; sprint carry pose.
 - STATS shows the zombie kind that kills you most.
 - Death collapse (drop + roll away from the killing blow).
+- Resupply gains shown inline on the weapon chip ("2 SHOTGUN +1").
+- Map-switch regressions fixed (one root cause: code reading the procedural
+  cave's 4 m cell tables): no medkits on the labyrinth; all 6 caches in the
+  north half; all 3 Signal relays placed outside the map. Pickups and
+  objectives now use farthest-point placement on the largest connected
+  navmesh body; every one routes from the start with a 0.0 m gap.
+  Grep confirms no other consumer of the cell tables outside arena.gd.
 - Gate steps time out at 300 s (a hung step used to stall the gate forever).
 
 ## Open
