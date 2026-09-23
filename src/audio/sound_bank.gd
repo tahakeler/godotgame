@@ -56,6 +56,12 @@ const EVENTS := {
 	"footstep_crouch": [
 		"footstep00", "footstep01", "footstep02", "footstep03", "footstep04"
 	],
+	# No dedicated landing clip exists, so this borrows the same footstep pack —
+	# the same trick the two stances above already use — and lets the mix below
+	# do the work of making it read as weight instead of one more step.
+	"land": [
+		"footstep00", "footstep01", "footstep02", "footstep03", "footstep04"
+	],
 	# Swapping weapons costs real time, and time the player cannot shoot in has
 	# to be audible or the wait reads as input lag.
 	"weapon_switch": ["beltHandle1", "metalLatch"],
@@ -125,6 +131,9 @@ const MIX := {
 	# Twelve below a walk and dragged down. Near the floor of audibility on
 	# purpose — a crouch buys silence, and the player should hear that it did.
 	"footstep_crouch": {"volume": -30.0, "pitch": Vector2(0.72, 0.86)},
+	# Lower-pitched and louder than a walk's footstep — the same clip dragged
+	# down and pushed up reads as mass landing rather than one more step.
+	"land": {"volume": -9.0, "pitch": Vector2(0.55, 0.7)},
 	"weapon_switch": {"volume": -9.0, "pitch": Vector2(0.86, 0.96)},
 	"cache_resupply": {"volume": -11.0, "pitch": Vector2(0.8, 0.92)},
 	"medkit_used": {"volume": -7.0, "pitch": Vector2(0.9, 1.0)},
@@ -175,7 +184,10 @@ func _exit_tree() -> void:
 
 
 ## Play an event without a position — the player's own weapon and UI.
-func play(event: String) -> void:
+##
+## volume_offset_db shifts the event's mix for this one play, for an event
+## whose loudness is part of what it says (a landing's depth).
+func play(event: String, volume_offset_db := 0.0) -> void:
 	var stream := _pick(event)
 	if stream == null:
 		return
@@ -185,7 +197,7 @@ func play(event: String) -> void:
 
 	var mix: Dictionary = MIX.get(event, {})
 	voice.stream = stream
-	voice.volume_db = mix.get("volume", -6.0)
+	voice.volume_db = mix.get("volume", -6.0) + volume_offset_db
 	voice.pitch_scale = _pitch_for(mix)
 	voice.play()
 

@@ -27,6 +27,10 @@ const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
 const RELOAD_LOUDNESS := 0.3
 const FOOTSTEP_LOUDNESS := 0.22
 const CACHE_LOUDNESS := 0.45
+## Ceiling for a landing at full depth (depth == 1.0) — a hard fall gives away
+## your position the way a footstep does, only in one loud burst instead of a
+## constant patter. Scaled by depth so a soft step-down stays near-silent.
+const LANDING_LOUDNESS := 0.35
 ## Where an armed relay drops its reward kit, relative to the beacon. Off to one
 ## side so the kit is not inside the mast the player just spent three seconds
 ## standing at.
@@ -182,6 +186,12 @@ func _wire_audio() -> void:
 	# which end they chose.
 	player.footstep_taken.connect(func() -> void:
 		sounds.play(SoundBank.footstep_event(player.stance()))
+	)
+	# A fall has weight the step after it does not. Same threshold as the
+	# camera dip, so the thud and the dip always arrive together.
+	player.landed.connect(func(depth: float) -> void:
+		# Scaled so a step off a ledge is a footstep and a real drop is a thud.
+		sounds.play("land", linear_to_db(lerpf(0.35, 1.0, depth)))
 	)
 
 	# The one sound that means something changed about you rather than about
@@ -361,6 +371,10 @@ func _wire_noise() -> void:
 			player.global_position,
 			FOOTSTEP_LOUDNESS * player.stance_noise_scale()
 		)
+	)
+	# A hard landing is one loud footstep: it gives position away in a burst.
+	player.landed.connect(func(depth: float) -> void:
+		_make_noise(player.global_position, LANDING_LOUDNESS * depth)
 	)
 
 	# The throw is silent; only the landing speaks. That is the whole reason a
