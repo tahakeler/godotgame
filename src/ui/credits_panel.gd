@@ -22,7 +22,7 @@ const ASSET_PACKS := [
 	{
 		"name": "Modular Cave Kit",
 		"licence": "CC0 1.0",
-		"used": "The entire play space — chambers, corridors, raised decks and the rock used as cover",
+		"used": "The original procedural cave (still in the project; the shipped map is the Amethyst Labyrinth)",
 	},
 	{
 		"name": "Blaster Kit",
@@ -95,7 +95,7 @@ const ASSET_PACKS := [
 		"used": "Water dripping somewhere in the cave",
 	},
 	{
-		"name": "Breaking Rock and Moving Boulder — by themightyglider (OpenGameArt)",
+		"name": "Breaking Rock, Moving Boulder — by themightyglider (OpenGameArt)",
 		"licence": "CC0 1.0",
 		"used": "Rocks breaking and stones dropping in the dark",
 	},
@@ -118,8 +118,9 @@ const ASSET_PACKS := [
 
 ## Things made for this project rather than brought in.
 const ORIGINAL_WORK := [
-	"All game code, scenes, UI and the arena layout",
-	"The gunshot and the Brute's growl, synthesised by tools/generate_audio.gd",
+	"The Amethyst Labyrinth — the map, modelled in Blender for this game",
+	"All game code, scenes and UI",
+	"Gunshots, the Brute's growl, the Screamer, the cave bed and the tension pulse, synthesised by tools/generate_audio.gd",
 	"All lighting, materials and environment setup",
 ]
 
