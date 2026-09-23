@@ -146,6 +146,44 @@ const MIX := {
 @export var voice_count := 12
 @export var max_3d_distance := 28.0
 
+## Distance filtering for positional sounds: falloff and a low-pass that
+## tightens with range, so a far sound loses its top end the way stone and
+## air actually absorb it rather than just getting quieter. Inverse-distance
+## gives a physically-plausible curve for a corridor game — the logarithmic
+## default reads as too forgiving over the ranges a cave puts between the
+## player and a zombie. unit_size is the reference distance at which volume
+## is unchanged.
+@export var attenuation_model: AudioStreamPlayer3D.AttenuationModel = \
+	AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+@export var unit_size := 6.0
+@export var attenuation_filter_cutoff_hz := 5000.0
+@export var attenuation_filter_db := -18.0
+
+## Occlusion: a single ray, cast once at play time rather than tracked frame
+## to frame. That is deliberate — the point is "a wall is in the way," not a
+## live simulation the player could learn to read, since triangulating a
+## zombie's exact position from a moving muffle would undo the uncertainty
+## this whole feature exists to create. WORLD_LAYER matches `layer_1="world"`
+## in project.godot, the layer the arena's static geometry sits on by default
+## (see src/arena/arena.tscn) — player (layer 2) and zombie (layer 3) bodies
+## are on other layers and a mask of WORLD_LAYER alone never hits them.
+const WORLD_LAYER := 1
+
+## How much an occluded sound is knocked down and darkened. Not silenced —
+## a zombie behind a wall should still be heard, just harder to place.
+@export var occluded_volume_db := -7.0
+@export var occluded_cutoff_hz := 900.0
+
+## Sounds this close to the listener skip the occlusion check entirely; a
+## ray this short is noise-prone (grazing geometry, corner cases) and the
+## player's own immediate surroundings should never sound muffled.
+@export var occlusion_min_distance := 2.0
+
+## Sounds are positioned at a body's feet, on the floor. A ray that ends on the
+## floor grazes it and reads as occluded with nothing in the way, so the ray
+## aims at chest height above the source instead.
+@export var occlusion_target_lift := 1.0
+
 var _streams: Dictionary = {}
 var _voices: Array[AudioStreamPlayer] = []
 var _next_voice := 0
@@ -218,8 +256,66 @@ func play_at(event: String, position: Vector3) -> void:
 	player.pitch_scale = _pitch_for(mix)
 	player.max_distance = mix.get("distance", max_3d_distance)
 	player.global_position = position
+	player.attenuation_model = attenuation_model
+	player.unit_size = unit_size
+	player.attenuation_filter_cutoff_hz = attenuation_filter_cutoff_hz
+	player.attenuation_filter_db = attenuation_filter_db
+
+	var camera := _listener_camera()
+	if camera != null \
+			and camera.global_position.distance_to(position) >= occlusion_min_distance \
+			and is_occluded(
+				camera.global_position, position + Vector3.UP * occlusion_target_lift
+			):
+		player.volume_db += occluded_volume_db
+		player.attenuation_filter_cutoff_hz = occluded_cutoff_hz
+
 	player.finished.connect(player.queue_free)
 	player.play()
+
+
+## The active camera, if any. `play_at` uses this as the listener for
+## occlusion; there is no dedicated listener node in this game, the camera
+## the player sees through stands in for one.
+func _listener_camera() -> Camera3D:
+	if not is_inside_tree():
+		return null
+
+	var viewport := get_viewport()
+	if viewport == null:
+		return null
+
+	return viewport.get_camera_3d()
+
+
+## Whether a straight line from `from` to `to` is blocked by static world
+## geometry. Public so it can be tested directly, without going through
+## `play_at`'s audio side effects.
+##
+## Only WORLD_LAYER is tested, so the player's and zombies' own bodies never
+## occlude a sound — a zombie's own hitbox should not muffle the sound it is
+## making. Returns false (unoccluded) if this node is not in the tree or has
+## no World3D to query, rather than raising an error — a debug tool booting
+## this outside a running game should still hear something.
+##
+##   if sounds.is_occluded(camera.global_position, zombie.global_position):
+##       # a wall stands between the listener and the sound
+func is_occluded(from: Vector3, to: Vector3) -> bool:
+	if not is_inside_tree():
+		return false
+
+	# SoundBank is a plain Node, so the world comes from the viewport.
+	var world: World3D = get_viewport().find_world_3d() if get_viewport() != null else null
+	if world == null:
+		return false
+
+	var space_state: PhysicsDirectSpaceState3D = world.direct_space_state
+	if space_state == null:
+		return false
+
+	var query := PhysicsRayQueryParameters3D.create(from, to, WORLD_LAYER)
+	var result: Dictionary = space_state.intersect_ray(query)
+	return not result.is_empty()
 
 
 ## Which fire event a weapon uses. Kept here rather than in Game so that the

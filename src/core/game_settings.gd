@@ -248,6 +248,10 @@ const SFX_BUS := "SFX"
 ## them. Built at runtime rather than shipped as a default_bus_layout.tres so
 ## that headless tools, which boot without the project's audio configuration,
 ## still find the buses the sliders claim to control.
+##
+## There is no default_bus_layout.tres in this project (project.godot has no
+## `bus_layout` entry), so this is the only place the SFX reverb can live
+## without the two fighting over the same bus.
 static func ensure_buses() -> void:
 	for bus_name in [MUSIC_BUS, SFX_BUS]:
 		if AudioServer.get_bus_index(bus_name) >= 0:
@@ -257,6 +261,56 @@ static func ensure_buses() -> void:
 		AudioServer.add_bus(index)
 		AudioServer.set_bus_name(index, bus_name)
 		AudioServer.set_bus_send(index, "Master")
+
+	_ensure_sfx_reverb()
+
+
+## Cave acoustics: a stone room, not a rehearsal hall. room_size and damping
+## are tuned for a mid-sized chamber with soft, absorbent reflections — rock
+## and dirt, not tile — and spread keeps the tail from collapsing into a mono
+## smear. hipass trims the low-end boom a small tail otherwise turns to mud.
+## wet is kept low: this should read as "walls exist," not as a change of
+## venue, so the dry signal (dry) still carries almost all of what the player
+## hears. predelay_msec gives the ear a beat to place the dry attack before
+## the tail arrives, which is what keeps a nearby sound readable as *close*
+## instead of *reverberant*; predelay_feedback shapes how quickly that early
+## reflection re-triggers rather than how loud the tail eventually gets.
+##
+## Music stays untouched — only the SFX bus gets this effect — so the score
+## does not pick up a cave it was never mixed for.
+const REVERB_ROOM_SIZE := 0.72
+const REVERB_DAMPING := 0.55
+const REVERB_SPREAD := 0.8
+const REVERB_HIPASS := 0.15
+const REVERB_DRY := 1.0
+const REVERB_WET := 0.22
+const REVERB_PREDELAY_MSEC := 40.0
+const REVERB_PREDELAY_FEEDBACK := 0.25
+
+
+## Add the cave reverb to the SFX bus, once. Idempotent: called every time
+## `ensure_buses()` runs (every scene boot, every settings apply), so it scans
+## the bus's existing effects first rather than appending a duplicate each
+## time it is called.
+static func _ensure_sfx_reverb() -> void:
+	var sfx_index := AudioServer.get_bus_index(SFX_BUS)
+	if sfx_index < 0:
+		return
+
+	for i in AudioServer.get_bus_effect_count(sfx_index):
+		if AudioServer.get_bus_effect(sfx_index, i) is AudioEffectReverb:
+			return
+
+	var reverb := AudioEffectReverb.new()
+	reverb.room_size = REVERB_ROOM_SIZE
+	reverb.damping = REVERB_DAMPING
+	reverb.spread = REVERB_SPREAD
+	reverb.hipass = REVERB_HIPASS
+	reverb.dry = REVERB_DRY
+	reverb.wet = REVERB_WET
+	reverb.predelay_msec = REVERB_PREDELAY_MSEC
+	reverb.predelay_feedback = REVERB_PREDELAY_FEEDBACK
+	AudioServer.add_bus_effect(sfx_index, reverb)
 
 
 func apply_audio() -> void:
