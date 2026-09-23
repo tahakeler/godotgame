@@ -77,6 +77,7 @@ var _threat_elapsed := 0.0
 @onready var hud: HUD = $HUD
 @onready var sounds: SoundBank = $SoundBank
 @onready var ambience: Ambience = $Ambience
+@onready var dread: DreadDirector = $DreadDirector
 @onready var effects: EffectSpawner = $EffectSpawner
 @onready var pause_menu: PauseMenu = $PauseMenu
 @onready var progression: Progression = $Progression
@@ -113,6 +114,9 @@ func _ready() -> void:
 
 	_capture_baselines()
 	_wire_audio()
+	# The director only ever needs to know where the player is and which way
+	# the camera is looking — never the spawner, never the HUD.
+	dread.bind(sounds, player, weapon.get_parent() as Camera3D)
 	_wire_statistics()
 	_wire_noise()
 	_wire_caches()
@@ -511,6 +515,7 @@ func _process(delta: float) -> void:
 		return
 
 	relays.tick(delta)
+	dread.tick(delta, ambience.threat())
 
 	# A mode with no win clock counts up as a score rather than down as a
 	# deadline. Everything else is a countdown to a win.
@@ -572,6 +577,9 @@ func start_round() -> void:
 	relays.set_enabled(mode == GameSettings.Mode.RELAY)
 	relays.reset()
 	relays.set_active(true)
+
+	dread.reset()
+	dread.set_active(true)
 
 	spawner.reset()
 	spawner.begin(arena, player)
@@ -704,6 +712,7 @@ func _toggle_pause() -> void:
 		player.set_look_enabled(false)
 		player.interactor.set_input_enabled(false)
 		relays.set_active(false)
+		dread.set_active(false)
 
 
 func _on_resumed() -> void:
@@ -715,6 +724,7 @@ func _on_resumed() -> void:
 	player.set_look_enabled(true)
 	player.interactor.set_input_enabled(true)
 	relays.set_active(true)
+	dread.set_active(true)
 
 
 func _on_zombie_died(death_position: Vector3, experience: int, ammo: int) -> void:
@@ -762,6 +772,7 @@ func _on_levelled_up(level: int, choices: Array[Dictionary]) -> void:
 	player.set_look_enabled(false)
 	player.interactor.set_input_enabled(false)
 	relays.set_active(false)
+	dread.set_active(false)
 	upgrade_menu.open(level, choices)
 
 

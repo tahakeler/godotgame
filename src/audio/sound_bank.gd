@@ -72,6 +72,20 @@ const EVENTS := {
 	"medkit_used": ["cloth1"],
 	"round_won": ["doorOpen_1"],
 	"round_lost": ["bookClose"],
+
+	# Phantom sounds, played by DreadDirector. Every one of these is fake: a
+	# positional 3D sound of presence that never corresponds to anything in
+	# the world. They reuse existing clips for now — a proper phantom set is
+	# being sourced separately — but the events already carry their own mix
+	# so the swap only ever touches this block.
+	"phantom_step": [
+		"footstep00", "footstep01", "footstep02", "footstep03", "footstep04"
+	],
+	# Same clips as zombie_groan (see above) — a call from too far away to
+	# place, mixed to reach much further than anything real does.
+	"phantom_distant": ["creak1", "creak2", "creak3"],
+	"phantom_settle": ["creak1", "creak2", "creak3"],
+	"phantom_breath": ["cloth1"],
 }
 
 ## Per-event volume in dB and pitch range, so one pack of generic clips can
@@ -137,6 +151,12 @@ const MIX := {
 	"weapon_switch": {"volume": -9.0, "pitch": Vector2(0.86, 0.96)},
 	"cache_resupply": {"volume": -11.0, "pitch": Vector2(0.8, 0.92)},
 	"medkit_used": {"volume": -7.0, "pitch": Vector2(0.9, 1.0)},
+	# Phantoms: quiet enough to doubt. A phantom that is as loud as the real
+	# thing is just a false alarm; one at the edge of hearing is a question.
+	"phantom_step": {"volume": -16.0, "pitch": Vector2(0.85, 1.0)},
+	"phantom_distant": {"volume": -14.0, "pitch": Vector2(0.5, 0.62), "distance": 60.0},
+	"phantom_settle": {"volume": -15.0, "pitch": Vector2(0.5, 0.7), "distance": 40.0},
+	"phantom_breath": {"volume": -20.0, "pitch": Vector2(0.7, 0.8)},
 	"round_won": {"volume": -3.0, "pitch": Vector2(0.9, 1.0)},
 	"round_lost": {"volume": -3.0, "pitch": Vector2(0.7, 0.8)},
 }
