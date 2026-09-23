@@ -57,6 +57,19 @@ const COMPASS_VISIBLE_ARC := 160.0
 
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
+## How long a weapon chip's resupply pulse takes to fade back to its resting
+## colour. Long enough to register as "that gun changed," short enough that
+## it has cleared before the player has finished glancing at the strip.
+@export var resupply_pulse_duration := 1.2
+## Widest resupply suffix every chip reserves room for, so a chip growing from
+## "2 SHOTGUN" to "2 SHOTGUN +12" never pushes its neighbours sideways.
+##
+## The gain is shown inline for a reason. It was first a separate label above
+## the strip — which made the strip taller and pushed the weapon names off the
+## bottom of the screen — then a label floating over it, which landed on top of
+## the ammo caption directly above. There is no free space above or below the
+## strip, so the number has to live in the chip's own text.
+@export var gain_suffix_reserve := " +99"
 
 var _game: Game
 var _player: Player
@@ -165,6 +178,7 @@ func _process(delta: float) -> void:
 	_tick_health_delta(delta)
 	_tick_map(delta)
 	_tick_melee(delta)
+	_tick_resupply_pulses(delta)
 
 	# The bearing changes every time the player turns, which is constantly.
 	_compass.queue_redraw()
@@ -200,6 +214,7 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 	weapon.dry_fired.connect(_on_dry_fired)
 	weapon.fired.connect(_on_weapon_fired)
 	weapon.weapon_switched.connect(_on_weapon_switched)
+	weapon.reserve_gained.connect(_on_reserve_gained)
 	_on_weapon_switched(weapon.kind, weapon.display_name)
 
 	spawner.population_changed.connect(_on_population_changed)
@@ -1049,6 +1064,21 @@ var _map_sample_cooldown := 0.0
 ## Fades the weapon caption back to normal after a switch, so the change is seen.
 var _switch_flash := 0.0
 
+## Per-weapon resupply pulse strength, WeaponTypes.Kind -> 0..1. Reaching a
+## weapon by kind (rather than by chip index) keeps this correct even if the
+## chip row is ever rebuilt or reordered.
+var _resupply_flash: Dictionary = {}
+## Per-weapon rounds shown on the "+N" label, WeaponTypes.Kind -> int. Cleared
+## once its pulse fully fades, so a gain arriving after a long quiet moment
+## starts counting from zero instead of resuming a stale total.
+var _resupply_gain: Dictionary = {}
+## Each weapon chip, and its text without any resupply suffix, in
+## WeaponTypes.order() order. The resting text is kept rather than re-derived so
+## the pulse can add " +N" and take it off again without knowing how a chip is
+## labelled. Populated by _build_weapon_chips(), read by _apply_resupply_pulse().
+var _weapon_chip_labels: Array[Label] = []
+var _weapon_chip_texts: Array[String] = []
+
 @onready var _minimap: Control = %MiniMap
 @onready var _weapon_row: HBoxContainer = %WeaponRow
 
@@ -1473,16 +1503,92 @@ func _build_weapon_chips() -> void:
 			chip.add_theme_constant_override("outline_size", 2)
 			_weapon_row.add_child(chip)
 
+	_weapon_chip_labels.clear()
+	_weapon_chip_texts.clear()
+
 	for index in mini(_weapon_row.get_child_count(), kinds.size()):
 		var chip: Label = _weapon_row.get_child(index)
 		var kind: WeaponTypes.Kind = kinds[index]
 		var active := _weapon != null and _weapon.kind == kind
-		chip.text = "%s%d %s" % [
+		var text := "%s%d %s" % [
 			"▸" if active else " ", index + 1, WeaponTypes.display_name(kind)
 		]
+		chip.text = text
 		chip.modulate = (
 			Color(0.96, 0.96, 0.97, 1.0) if active else Color(0.55, 0.58, 0.64, 0.6)
 		)
+		# Wide enough for the name plus the largest suffix it will ever carry,
+		# measured in the chip's own font, so a pulse lengthens the text
+		# without moving anything else in the row.
+		var font := chip.get_theme_font("font")
+		var font_px := chip.get_theme_font_size("font_size")
+		chip.custom_minimum_size.x = font.get_string_size(
+			text + gain_suffix_reserve, HORIZONTAL_ALIGNMENT_LEFT, -1, font_px
+		).x
+		_weapon_chip_labels.append(chip)
+		_weapon_chip_texts.append(text)
+
+	# A rebuild (or a switch, which triggers one) wipes the modulate set by
+	# the tick below. Reapplying immediately means a pulse in flight when the
+	# active weapon changes does not visibly reset for a frame.
+	for index in kinds.size():
+		_apply_resupply_pulse(kinds[index])
+
+
+## Reserve ammo landed on a weapon. Pulse its chip to the accent colour and
+## show how many rounds arrived, both fading back over `resupply_pulse_duration`.
+##
+## The routing in Weapon.distribute_reserve_ammo() picks whichever weapon is
+## emptiest relative to its own capacity, which is often not the one in the
+## player's hands. Without this, rounds can land on a holstered weapon with
+## zero on-screen indication it happened at all.
+func _on_reserve_gained(kind: WeaponTypes.Kind, amount: int) -> void:
+	# A gain that lands mid-fade tops the pulse back up and adds to the
+	# running total instead of starting a second, overlapping label.
+	_resupply_flash[kind] = 1.0
+	_resupply_gain[kind] = int(_resupply_gain.get(kind, 0)) + amount
+	_apply_resupply_pulse(kind)
+
+
+## Advance every in-flight resupply pulse and repaint the chips that changed.
+func _tick_resupply_pulses(delta: float) -> void:
+	if _resupply_flash.is_empty():
+		return
+
+	for kind in _resupply_flash:
+		var strength: float = _resupply_flash[kind]
+		if strength <= 0.0:
+			continue
+
+		strength = maxf(0.0, strength - delta / maxf(resupply_pulse_duration, 0.001))
+		_resupply_flash[kind] = strength
+		if strength <= 0.0:
+			# Fully faded — drop the total so the next gain starts counting
+			# fresh rather than resuming whatever this one left behind.
+			_resupply_gain[kind] = 0
+		_apply_resupply_pulse(kind)
+
+
+## Paint one weapon chip and its "+N" label from the current pulse state.
+func _apply_resupply_pulse(kind: WeaponTypes.Kind) -> void:
+	var kinds: Array = WeaponTypes.order()
+	var index := kinds.find(kind)
+	if index < 0 or index >= _weapon_chip_labels.size():
+		return
+
+	var strength := float(_resupply_flash.get(kind, 0.0))
+	var accent := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	var active := _weapon != null and _weapon.kind == kind
+	var resting := (
+		Color(0.96, 0.96, 0.97, 1.0) if active else Color(0.55, 0.58, 0.64, 0.6)
+	)
+
+	var chip := _weapon_chip_labels[index]
+	chip.modulate = resting.lerp(accent, strength)
+
+	var amount := int(_resupply_gain.get(kind, 0))
+	var suffix := " +%d" % amount if strength > 0.0 and amount > 0 else ""
+	chip.text = _weapon_chip_texts[index] + suffix
 
 
 ## Fade the weapon caption back from the accent colour after a switch.
