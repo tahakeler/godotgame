@@ -19,6 +19,10 @@ signal look_sensitivity_changed(value: float)
 signal damage_taken(amount: float, direction_angle: float)
 signal died()
 signal footstep_taken()
+## A landing worth feeling — `over` (fall speed past `landing_speed_floor`)
+## was positive, the same threshold the camera dip uses, so sound and dip
+## always agree. `depth` is the 0..1 fraction of a landing_speed_full fall.
+signal landed(depth: float)
 ## Carries a Stance value. Typed as int because the enum is declared below the
 ## signals, and GDScript resolves a signal's argument types at parse time.
 signal stance_changed(stance: int)
@@ -769,6 +773,7 @@ func _tick_landing(delta: float) -> void:
 			# applies to it like everything else — a player who turned shake
 			# off has said they do not want the camera shaken by impacts.
 			add_trauma(landing_trauma * depth)
+			landed.emit(depth)
 
 	_was_on_floor = grounded
 
