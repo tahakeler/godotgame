@@ -62,27 +62,57 @@ const ASSET_PACKS := [
 	{
 		"name": "Female High Pitched Scream SFX — by WuxiaScrub (OpenGameArt)",
 		"licence": "CC0 1.0",
-		"used": "The distant scream",
+		"used": "A far-off call, dragged down in pitch past recognition",
 	},
 	{
 		"name": "Wolf Monster Sound — by CaveboyTup (OpenGameArt)",
 		"licence": "CC0 1.0",
-		"used": "The distant howl",
+		"used": "A howl from deep in the tunnels",
 	},
 	{
 		"name": "Metal Impact Sounds — by BMacZero (OpenGameArt)",
 		"licence": "CC0 1.0",
-		"used": "The distant metal clang",
+		"used": "Metal the labyrinth moves on its own",
 	},
 	{
 		"name": "Footsteps — by GboxMikeFozzy (OpenGameArt)",
 		"licence": "CC0 1.0",
-		"used": "Footsteps that are not yours",
+		"used": "Footsteps behind you that are not yours",
 	},
 	{
 		"name": "Dark Stinger 1 — by Kresiek The Furry (OpenGameArt)",
 		"licence": "CC0 1.0",
-		"used": "The sudden low hit",
+		"used": "The swell when a long quiet finally breaks",
+	},
+	{
+		"name": "Horror Breathing — by primbal (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "Breathing you should not be hearing",
+	},
+	{
+		"name": "Water Drops — by ceoxblackj (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "Water dripping somewhere in the cave",
+	},
+	{
+		"name": "Breaking Rock and Moving Boulder — by themightyglider (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "Rocks breaking and stones dropping in the dark",
+	},
+	{
+		"name": "Horror Hit Soundpack 1 — by psychhead (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The low hit when something finds you up close",
+	},
+	{
+		"name": "Undead Moans — by antumdeluge (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "A moan from somewhere far away",
+	},
+	{
+		"name": "Ghost/Monster Voice — by qubodup (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "Something calling that is not a person",
 	},
 ]
 

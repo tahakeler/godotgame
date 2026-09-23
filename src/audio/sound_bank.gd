@@ -43,10 +43,18 @@ const SOURCED_EVENTS := {
 		"oneshots/footstep_dirt_01.ogg", "oneshots/footstep_dirt_02.ogg",
 		"oneshots/footstep_dirt_03.ogg", "oneshots/footstep_dirt_04.ogg",
 	],
-	"phantom_distant": ["oneshots/distant_scream_01.ogg", "oneshots/distant_howl_01.mp3"],
+	"phantom_distant": [
+		"oneshots/distant_scream_01.ogg", "oneshots/distant_howl_01.mp3",
+		"oneshots/distant_moan_01.ogg", "oneshots/distant_ghost_moan_01.mp3",
+	],
 	"phantom_settle": [
 		"oneshots/distant_rock_fall_01.ogg", "oneshots/distant_metal_clang_01.wav",
+		"oneshots/debris_rock_break_01.ogg", "oneshots/debris_boulder_drop_01.ogg",
+		"oneshots/water_drip_01.mp3",
 	],
+	"phantom_breath": ["oneshots/breath_heavy_01.ogg"],
+	# A low hit under a notice made at arm's length. Wired in Game.
+	"notice_close_hit": ["stingers/hit_low_01.wav", "stingers/hit_low_02.wav"],
 }
 
 ## event name -> clip names. Multiple entries are chosen at random so repeated
@@ -92,9 +100,6 @@ const EVENTS := {
 	"round_won": ["doorOpen_1"],
 	"round_lost": ["bookClose"],
 
-	# The one phantom still on a Kenney clip (the rest are in SOURCED_EVENTS):
-	# no CC0 breath recording is in the project yet.
-	"phantom_breath": ["cloth1"],
 }
 
 ## Per-event volume in dB and pitch range, so one pack of generic clips can
@@ -165,7 +170,8 @@ const MIX := {
 	"phantom_step": {"volume": -16.0, "pitch": Vector2(0.85, 1.0)},
 	"phantom_distant": {"volume": -16.0, "pitch": Vector2(0.55, 0.72), "distance": 60.0},
 	"phantom_settle": {"volume": -15.0, "pitch": Vector2(0.5, 0.7), "distance": 40.0},
-	"phantom_breath": {"volume": -20.0, "pitch": Vector2(0.7, 0.8)},
+	"phantom_breath": {"volume": -22.0, "pitch": Vector2(0.9, 1.0), "distance": 8.0},
+	"notice_close_hit": {"volume": -7.0, "pitch": Vector2(0.95, 1.05)},
 	"round_won": {"volume": -3.0, "pitch": Vector2(0.9, 1.0)},
 	"round_lost": {"volume": -3.0, "pitch": Vector2(0.7, 0.8)},
 }
