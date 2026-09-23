@@ -63,8 +63,9 @@ headless frame timing is not deterministic. Consequences:
 - head.position.y → `_tick_eye_height` (stance − landing offset)
 - head.rotation.z → `_tick_lean`
 - head.position.x/z → `_tick_flinch`
-- weapon.position → one line: sway + bob + melee + reload + fire kick
-- weapon.rotation.x → fire tip; weapon.rotation.z → reload roll
+- weapon.position → one line: sway + bob + melee + reload + swap + fire +
+  throw + sprint (+ hold, in flight)
+- weapon.rotation.x → fire tip; weapon.rotation.z → reload + swap + sprint roll
 - FREE: nothing obvious on the player rig — compose, do not add writers
 
 ## Done this session (all merged, all measured)
@@ -85,6 +86,11 @@ headless frame timing is not deterministic. Consequences:
 - STATS shows the zombie kind that kills you most.
 - Death collapse (drop + roll away from the killing blow).
 - Resupply gains shown inline on the weapon chip ("2 SHOTGUN +1").
+- Weapon swap drops the old gun and raises the new one (model hands over at
+  the midpoint; stats still at the end). Decoy throw flick.
+- Signal-mode doors verified: both map doors open through the interactor.
+- Screamer alarm reaches along routes, not through rock (11.0 -> 8.6
+  recruits per scream at 36.4 m). The 36.4 m radius itself is the owner's call.
 - Map-switch regressions fixed (one root cause: code reading the procedural
   cave's 4 m cell tables): no medkits on the labyrinth; all 6 caches in the
   north half; all 3 Signal relays placed outside the map. Pickups and
