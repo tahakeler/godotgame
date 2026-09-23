@@ -156,6 +156,28 @@ func threat_level(from: Vector3) -> float:
 	return clampf(total / maxf(threat_saturation, 0.01), 0.0, 1.0)
 
 
+## Distance to the closest zombie actually hunting the player, or INF if none.
+##
+## A different question than threat_level above: that meter answers "how much
+## danger, in aggregate," saturating and falling off so a crowd across the map
+## does not read the same as one at the door. This answers "is there a
+## specific hunter right next to me," which the aggregate throws away on the
+## way to its total. Built for flicker_director.gd's near-panic trigger —
+## proximity to one real threat, not the overall pressure of the round.
+func nearest_hunter_distance(from: Vector3) -> float:
+	var nearest := INF
+
+	for zombie in _alive:
+		if not is_instance_valid(zombie) or not zombie.is_hunting():
+			continue
+
+		var distance := zombie.global_position.distance_to(from)
+		if distance < nearest:
+			nearest = distance
+
+	return nearest
+
+
 ## Pass one zombie's belief to the ones near it.
 ##
 ## Measured along walkable routes, like hearing — see _scream_reaches. This was

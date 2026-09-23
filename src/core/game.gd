@@ -84,6 +84,7 @@ var _last_close_hit_msec := -CLOSE_NOTICE_COOLDOWN_MSEC
 @onready var sounds: SoundBank = $SoundBank
 @onready var ambience: Ambience = $Ambience
 @onready var vitals: VitalsAudio = $VitalsAudio
+@onready var flicker: FlickerDirector = $FlickerDirector
 @onready var dread: DreadDirector = $DreadDirector
 @onready var effects: EffectSpawner = $EffectSpawner
 @onready var pause_menu: PauseMenu = $PauseMenu
@@ -125,6 +126,7 @@ func _ready() -> void:
 	# The director only ever needs to know where the player is and which way
 	# the camera is looking — never the spawner, never the HUD.
 	dread.bind(sounds, player, weapon.get_parent() as Camera3D)
+	flicker.bind(player.flashlight, spawner, player)
 	_wire_statistics()
 	_wire_noise()
 	_wire_caches()
@@ -544,6 +546,7 @@ func _process(delta: float) -> void:
 	vitals.tick(delta)
 
 	relays.tick(delta)
+	flicker.tick(delta, ambience.threat())
 	dread.tick(delta, ambience.threat())
 
 	# A mode with no win clock counts up as a score rather than down as a
@@ -607,6 +610,8 @@ func start_round() -> void:
 	relays.set_enabled(mode == GameSettings.Mode.RELAY)
 	relays.reset()
 	relays.set_active(true)
+
+	flicker.reset()
 
 	dread.reset()
 	dread.set_active(true)

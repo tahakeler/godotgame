@@ -58,7 +58,27 @@ signal toggled(is_on: bool)
 ## in the next chamber and meeting it in this one.
 @export var lit_visibility_scale := 1.45
 
+@export_group("Flicker")
+## Darkest and brightest fraction of beam_energy a flicker step can land on.
+## The low end is not 0 on principle — a torch that fully cuts out reads as a
+## different mechanic (the light failing) than the one intended here (the
+## light stuttering).
+@export var flicker_min_scale := 0.05
+@export var flicker_max_scale := 0.35
+## Seconds between one stutter step and the next. Randomised per step so the
+## pattern does not read as a metronome, which would make it identifiable —
+## and identifiable is the one thing this effect must never become. See
+## flicker_director.gd for why.
+@export var flicker_step_min := 0.03
+@export var flicker_step_max := 0.09
+
 var is_on := false
+
+## Seconds remaining in the current flicker; 0 when not flickering.
+var _flicker_time_left := 0.0
+var _flicker_step_timer := 0.0
+var _flicker_dark := false
+var _flicker_rng: RandomNumberGenerator
 
 
 func _ready() -> void:
@@ -111,5 +131,74 @@ func visibility_scale() -> float:
 	return lit_visibility_scale if is_on else 1.0
 
 
+## Stutter the beam for `duration` seconds, then restore it exactly.
+##
+## Called by flicker_director.gd, never on its own timer — this method knows
+## only how to flicker, not when. Whether a given flicker means a hunter is
+## close or means nothing at all lives entirely in the caller; this function
+## must not leak that distinction; a `near` flicker and a `calm` flicker have
+## to be indistinguishable from in here, or the paranoia the director is
+## built for falls apart the first time a player learns to tell them apart.
+##
+## Does nothing if the torch is off — a flicker on a light that is not lit
+## would be a state change nobody asked for and nothing sees.
+##
+## light_energy only; visibility_scale() reads is_on, not light_energy, so a
+## flicker never touches how far a zombie can see the player. The torch looks
+## like it is failing; the game does not treat it as failing.
+func flicker(duration: float, rng: RandomNumberGenerator = null) -> void:
+	if not is_on:
+		return
+
+	_flicker_rng = rng
+	if _flicker_rng == null:
+		_flicker_rng = RandomNumberGenerator.new()
+		_flicker_rng.randomize()
+
+	_flicker_time_left = duration
+	_flicker_step_timer = 0.0
+	_flicker_dark = false
+
+
+func is_flickering() -> bool:
+	return _flicker_time_left > 0.0
+
+
+func _process(delta: float) -> void:
+	if _flicker_time_left <= 0.0:
+		return
+
+	_flicker_time_left -= delta
+	if _flicker_time_left <= 0.0:
+		_end_flicker()
+		return
+
+	_flicker_step_timer -= delta
+	if _flicker_step_timer > 0.0:
+		return
+
+	_flicker_dark = not _flicker_dark
+	if _flicker_dark:
+		var scale := _flicker_rng.randf_range(flicker_min_scale, flicker_max_scale)
+		light_energy = scale * beam_energy
+	else:
+		light_energy = beam_energy
+
+	_flicker_step_timer = _flicker_rng.randf_range(flicker_step_min, flicker_step_max)
+
+
+func _end_flicker() -> void:
+	_flicker_time_left = 0.0
+	_flicker_step_timer = 0.0
+	light_energy = beam_energy
+
+
 func _apply() -> void:
 	visible = is_on
+
+	# Toggling off mid-flicker ends it outright rather than letting it play out
+	# unseen — a flicker that finished after the torch was already dark would
+	# restore light_energy on a light nobody can see change, and the next
+	# toggle-on would inherit whatever stray value was left mid-stutter.
+	if not is_on and _flicker_time_left > 0.0:
+		_end_flicker()
