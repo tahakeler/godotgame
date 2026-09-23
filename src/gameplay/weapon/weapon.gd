@@ -117,6 +117,17 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## worked there, and there is nothing to animate through it.
 @export var reload_up_fraction := 0.28
 
+@export_group("Swap motion")
+## How far the held weapon drops (local -Y) at the midpoint of a swap, in
+## metres. The full swap dips to this and rises back out of it, so the pose
+## the incoming weapon is revealed in is also the pose it has to climb out of.
+@export var swap_drop_distance := 0.25
+## How far the weapon rolls (around its own local Z) at the midpoint of a
+## swap, in degrees. Same shorthand as the reload roll — a weapon dropped and
+## canted away reads as "not ready" before the HUD or the cooldown has to say
+## so.
+@export var swap_roll_degrees := 28.0
+
 @export_group("Last resort")
 ## Seconds between scrounged rounds once the player is completely out.
 ##
@@ -182,6 +193,20 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## Landing volume relative to a gunshot. Just under, so firing stays the
 ## loudest thing the player can do.
 @export var decoy_loudness := 0.7
+
+@export_group("Throw motion")
+## How far the weapon dips (local -Y) at full extension of a throw, in
+## metres.
+@export var throw_motion_dip_distance := 0.05
+## How far the weapon pushes forward (local -Z) at full extension of a throw,
+## in metres.
+@export var throw_motion_forward_distance := 0.08
+## Seconds to reach full extension. Fast on purpose, same rationale as the
+## fire kick's and the melee jab's out time — the flick has to read as a
+## snap of the wrist, not a drift.
+@export var throw_motion_out_time := 0.1
+## Seconds to ease back to rest.
+@export var throw_motion_return_time := 0.25
 
 @export_group("Feel")
 @export var recoil_pitch_degrees := 1.4
@@ -326,7 +351,31 @@ var _fire_start_weight := 0.0
 var _sprint_weight := 0.0
 var _sprint_offset := Vector3.ZERO
 var _sprint_roll := 0.0
-## Sum of the four offsets above. Kept as its own field only so the
+## Swap dip and roll: the outgoing weapon drops out of view over the first
+## half of a swap, the visible model hands over at the midpoint (see
+## `_tick_swap`), and the incoming weapon rises back into place over the
+## second half. Driven purely from `_swap_remaining` against the target's own
+## `swap_duration`, the same way `_reload_offset` is driven from
+## `_reload_remaining` — there is no separate timer here to drift out of sync
+## with the swap it is illustrating.
+var _swap_offset := Vector3.ZERO
+var _swap_roll := 0.0
+## True once the visible model has been handed over for the swap in progress.
+## Reset whenever a new swap begins, so the handover in `_tick_swap` happens
+## exactly once, at the midpoint, rather than on every frame past it.
+var _swap_model_shown := false
+## Throw flick: a local-space offset driven off one timer, the same shape as
+## the fire kick (see `_apply_fire_kick`/`_tick_fire_motion`) but with a fixed
+## peak rather than one scaled by a per-weapon stat — a decoy throw is the
+## same flick no matter which weapon is in the other hand.
+var _throw_offset := Vector3.ZERO
+var _throw_anim_time := 0.0
+var _throw_anim_active := false
+## How far through the rise the flick was when it was last restarted, as a
+## fraction of peak — same purpose as `_fire_start_weight`, see
+## `_apply_throw_kick`.
+var _throw_start_weight := 0.0
+## Sum of the six offsets above. Kept as its own field only so the
 ## composition into `position` (in `_tick_viewmodel`) has one visible site
 ## instead of separate writers fighting over the same property.
 var _action_offset := Vector3.ZERO
@@ -357,7 +406,9 @@ func _process(delta: float) -> void:
 	_tick_recoil_climb(delta)
 	_tick_melee_motion(delta)
 	_tick_reload_motion()
+	_tick_swap_motion()
 	_tick_fire_motion(delta)
+	_tick_throw_motion(delta)
 	_tick_sprint_motion(delta)
 	_tick_muzzle_flash(delta)
 	_tick_viewmodel(delta)
@@ -464,6 +515,13 @@ func _equip_now(target: WeaponTypes.Kind) -> void:
 	_sprint_weight = 0.0
 	_sprint_offset = Vector3.ZERO
 	_sprint_roll = 0.0
+	_swap_offset = Vector3.ZERO
+	_swap_roll = 0.0
+	_swap_model_shown = false
+	_throw_anim_time = 0.0
+	_throw_anim_active = false
+	_throw_offset = Vector3.ZERO
+	_throw_start_weight = 0.0
 
 	var slot: Dictionary = _slots[target]
 	var stats: Dictionary = slot.stats
@@ -526,9 +584,18 @@ func equip(target: WeaponTypes.Kind) -> bool:
 	_sprint_weight = 0.0
 	_sprint_offset = Vector3.ZERO
 	_sprint_roll = 0.0
+	_throw_anim_time = 0.0
+	_throw_anim_active = false
+	_throw_offset = Vector3.ZERO
+	_throw_start_weight = 0.0
 
 	_swap_target = target
 	_swap_remaining = maxf(_slots[target].stats.swap_duration, 0.0)
+	# `_equip_now` already clears this at the end of every swap, but setting
+	# it again here means a fresh swap's midpoint handover does not depend on
+	# remembering that fact — it is armed at the same place `_swap_target`
+	# and `_swap_remaining` are.
+	_swap_model_shown = false
 	switch_started.emit(_swap_remaining)
 
 	if is_zero_approx(_swap_remaining):
@@ -564,6 +631,22 @@ func _tick_swap(delta: float) -> void:
 		return
 
 	_swap_remaining = maxf(0.0, _swap_remaining - delta)
+
+	# The visible model hands over at the midpoint, ahead of the stats and
+	# ammo swap below in `_finish_swap`. The two are deliberately split: the
+	# gameplay-relevant swap (what can be fired, what the magazine holds) still
+	# only ever happens at the end, exactly as `_swap_remaining` reaching zero
+	# already guaranteed, but the model the player sees can change earlier
+	# because `_show_model` only touches what is displayed — it does not read
+	# or write `kind`, ammo or any exported stat. That is what makes handing
+	# the model over here, instead of in `_finish_swap`, safe to do at all.
+	# Gated on `_swap_model_shown` so the handover fires exactly once per swap
+	# rather than every frame past the midpoint.
+	if not _swap_model_shown and _swap_elapsed_fraction() >= 0.5:
+		_swap_model_shown = true
+		var target_stats: Dictionary = _slots[_swap_target].stats
+		_show_model(target_stats.get("model", ""), target_stats.get("tint", Color.WHITE) as Color)
+
 	if _swap_remaining <= 0.0:
 		_finish_swap()
 
@@ -572,6 +655,16 @@ func _finish_swap() -> void:
 	_store_current_slot()
 	_swap_remaining = 0.0
 	_equip_now(_swap_target)
+
+
+## Fraction of the current swap that has elapsed, timed against the target
+## weapon's own `swap_duration` rather than whatever `swap_duration` currently
+## reads — that exported field still belongs to the weapon being swapped
+## away from until `_finish_swap` runs, so dividing by it here would drift
+## the moment the two weapons disagree on how long a swap takes.
+func _swap_elapsed_fraction() -> float:
+	var total: float = _slots[_swap_target].stats.swap_duration
+	return 1.0 - clampf(_swap_remaining / maxf(total, 0.001), 0.0, 1.0)
 
 
 func _read_switch_input() -> void:
@@ -768,6 +861,7 @@ func try_throw_decoy() -> Decoy:
 	_world_parent().add_child(decoy)
 	decoy.launch(_throw_origin(), _throw_velocity())
 
+	_apply_throw_motion()
 	decoy_thrown.emit(decoy)
 	return decoy
 
@@ -1223,17 +1317,22 @@ func _tick_viewmodel(delta: float) -> void:
 		target_sway + bob, clampf(sway_smoothing * delta, 0.0, 1.0)
 	)
 
-	# Melee, reload, the fire kick and the sprint carry each write a temporary
-	# offset elsewhere (see `_tick_melee_motion`, `_tick_reload_motion`,
-	# `_tick_fire_motion` and `_tick_sprint_motion`); summed in here rather
-	# than in a second `position` write, so this stays the only place the
-	# weapon's position is actually set.
-	_action_offset = _melee_offset + _reload_offset + _fire_offset + _sprint_offset
+	# Melee, reload, the swap dip, the fire kick, the throw flick and the
+	# sprint carry each write a temporary offset elsewhere (see
+	# `_tick_melee_motion`, `_tick_reload_motion`, `_tick_swap_motion`,
+	# `_tick_fire_motion`, `_tick_throw_motion` and `_tick_sprint_motion`);
+	# summed in here rather than in a second `position` write, so this stays
+	# the only place the weapon's position is actually set.
+	_action_offset = (
+		_melee_offset + _reload_offset + _swap_offset + _fire_offset
+		+ _throw_offset + _sprint_offset
+	)
 	position = _rest_position + _sway_offset + _action_offset
 	# The weapon node's own rotation has two writers and no more: rotation.z
-	# sums the reload roll and the sprint cant, rotation.x is the fire kick's
-	# muzzle tip. Recoil still drives the camera's pitch, never this.
-	rotation.z = _reload_roll + _sprint_roll
+	# sums the reload roll, the swap roll and the sprint cant, rotation.x is
+	# the fire kick's muzzle tip. Recoil still drives the camera's pitch,
+	# never this.
+	rotation.z = _reload_roll + _swap_roll + _sprint_roll
 	rotation.x = _fire_tip
 
 
@@ -1297,6 +1396,41 @@ func _tick_reload_motion() -> void:
 	_reload_roll = deg_to_rad(reload_roll_degrees) * weight
 
 
+## Dips and rolls the weapon through a swap: the outgoing weapon drops out of
+## view over the first half with an ease-in, and the incoming weapon — shown
+## at the midpoint by `_tick_swap` — rises back into place over the second
+## half with an ease-out. The result reads as one continuous "down, handover,
+## up" swap rather than a countdown with a gun that pops in at the end.
+##
+## Driven from `_swap_remaining` against `_swap_elapsed_fraction` rather than
+## its own timer, for the same reason `_tick_reload_motion` reads
+## `_reload_remaining`: the countdown that actually gates firing already
+## exists and has to stay authoritative, so this only ever samples it and
+## never drives it.
+func _tick_swap_motion() -> void:
+	if _swap_remaining <= 0.0:
+		_swap_offset = Vector3.ZERO
+		_swap_roll = 0.0
+		return
+
+	var elapsed_fraction := _swap_elapsed_fraction()
+	var weight := 0.0
+
+	if elapsed_fraction < 0.5:
+		# Ease-in: slow to start, accelerating toward the low point, so the
+		# drop reads as a deliberate pull down and away rather than a snap.
+		var down_t := elapsed_fraction / 0.5
+		weight = down_t * down_t
+	else:
+		# Ease-out: fast off the low point, slowing into rest, so the rise
+		# reads as the new weapon arriving rather than drifting to a stop.
+		var up_t := (elapsed_fraction - 0.5) / 0.5
+		weight = 1.0 - up_t * up_t
+
+	_swap_offset = Vector3(0.0, -swap_drop_distance, 0.0) * weight
+	_swap_roll = deg_to_rad(swap_roll_degrees) * weight
+
+
 ## Drives the fire kick: a fast snap to full extension, then a slower ease
 ## back to rest. Same shape as `_tick_melee_motion` — a sine rise for the
 ## snap, a smoothstep fall for the recovery — so the two read as the same
@@ -1331,6 +1465,33 @@ func _tick_fire_motion(delta: float) -> void:
 
 	_fire_offset = _fire_kick_peak * weight
 	_fire_tip = _fire_tip_peak * weight
+
+
+## Drives the decoy throw flick: a fast snap to full extension, then a slower
+## ease back to rest. Same shape as `_tick_fire_motion` — a sine rise for the
+## snap, blending up from `_throw_start_weight` rather than zero so a
+## retriggered throw does not pop, and a smoothstep fall for the recovery.
+func _tick_throw_motion(delta: float) -> void:
+	if not _throw_anim_active:
+		return
+
+	_throw_anim_time += delta
+	var total_duration := throw_motion_out_time + throw_motion_return_time
+
+	if _throw_anim_time >= total_duration:
+		_throw_anim_active = false
+		_throw_offset = Vector3.ZERO
+		return
+
+	var weight := 0.0
+	if _throw_anim_time < throw_motion_out_time:
+		var out_t := _throw_anim_time / maxf(throw_motion_out_time, 0.001)
+		weight = lerpf(_throw_start_weight, 1.0, sin(out_t * PI * 0.5))
+	else:
+		var back_t := (_throw_anim_time - throw_motion_out_time) / maxf(throw_motion_return_time, 0.001)
+		weight = 1.0 - smoothstep(0.0, 1.0, back_t)
+
+	_throw_offset = Vector3(0.0, -throw_motion_dip_distance, -throw_motion_forward_distance) * weight
 
 
 ## Eases the weapon into, or out of, a sprint carry pose: dropped and canted
@@ -1435,6 +1596,27 @@ func _apply_fire_kick() -> void:
 	_fire_anim_active = true
 	_fire_kick_peak = Vector3(0.0, 0.0, fire_kick_back_per_degree * recoil_pitch_degrees)
 	_fire_tip_peak = deg_to_rad(fire_muzzle_tip_per_degree * recoil_pitch_degrees)
+
+
+## Trigger the viewmodel flick for one decoy throw.
+##
+## Same shape as `_apply_fire_kick`: restarts the timer rather than adding to
+## whatever offset is already in flight, so the offset is always bounded by
+## one flick's peak no matter how fast the throw is retriggered, and captures
+## `_throw_start_weight` from the offset already in flight so a restarted
+## flick blends up from there instead of popping back to rest for a frame.
+## Y is read rather than Z because dip can never be tuned to zero the way the
+## fire kick's Z sometimes is on a weapon with no recoil — it is always a safe
+## denominator.
+func _apply_throw_motion() -> void:
+	_throw_start_weight = 0.0
+	if _throw_anim_active:
+		_throw_start_weight = clampf(
+			_throw_offset.y / minf(-throw_motion_dip_distance, -0.0001), 0.0, 1.0
+		)
+
+	_throw_anim_time = 0.0
+	_throw_anim_active = true
 
 
 ## The cone every pellet is jittered inside, widened by accumulated climb.
