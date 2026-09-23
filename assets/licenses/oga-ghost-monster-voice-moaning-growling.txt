@@ -1,0 +1,13 @@
+Ghost/Monster Voice (moaning, growling)
+by qubodup (OpenGameArt)
+
+Source page: https://opengameart.org/content/ghost-monster-voice-moaning-growling
+Author:      qubodup
+Licence:     CC0 (Creative Commons Zero 1.0 Universal, public domain dedication)
+Licence URL: http://creativecommons.org/publicdomain/zero/1.0/
+
+Licence statement as shown on the source page:
+  License(s): CC0  (links to http://creativecommons.org/publicdomain/zero/1.0/)
+
+Verified on the source page on 2026-09-23 (re-checked by the lead).
+Files used in this project: assets/audio/sourced/oneshots/distant_ghost_moan_01.mp3 (GhostMoan01)

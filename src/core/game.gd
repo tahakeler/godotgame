@@ -27,6 +27,11 @@ const MAIN_MENU_SCENE := "res://src/ui/main_menu.tscn"
 const RELOAD_LOUDNESS := 0.3
 const FOOTSTEP_LOUDNESS := 0.22
 const CACHE_LOUDNESS := 0.45
+## A notice closer than this lands a low hit under the rasp: the one moment the
+## game is allowed to startle. Further out a notice is information, not a
+## scare. A cooldown keeps a crowd turning at once from stacking hits.
+const CLOSE_NOTICE_DISTANCE := 6.0
+const CLOSE_NOTICE_COOLDOWN_MSEC := 15000
 ## Ceiling for a landing at full depth (depth == 1.0) — a hard fall gives away
 ## your position the way a footstep does, only in one loud burst instead of a
 ## constant patter. Scaled by depth so a soft step-down stays near-silent.
@@ -69,6 +74,7 @@ var shots_fired := 0
 var shots_hit := 0
 var _threat_remaining := 0.0
 var _threat_elapsed := 0.0
+var _last_close_hit_msec := -CLOSE_NOTICE_COOLDOWN_MSEC
 
 @onready var arena: Arena = $Arena
 @onready var player: Player = $Player
@@ -205,6 +211,7 @@ func _wire_audio() -> void:
 		func(at: Vector3, kind: ZombieTypes.Kind) -> void:
 			sounds.play_at(SoundBank.notice_event(kind), at)
 			ambience.on_first_notice()
+			_play_close_notice_hit(at, kind)
 	)
 
 	# A Brute announces itself with something lower than the crowd, so it can be
@@ -416,6 +423,20 @@ func _tick_threat(delta: float) -> void:
 
 	_threat_remaining = THREAT_SAMPLE_INTERVAL
 	_threat_elapsed = 0.0
+
+
+## The startle: a low hit when something notices you at arm's length. Not for
+## a Stalker, whose whole design is that its notice makes no sound at all.
+func _play_close_notice_hit(at: Vector3, kind: ZombieTypes.Kind) -> void:
+	if SoundBank.notice_event(kind).is_empty():
+		return
+	if at.distance_to(player.global_position) > CLOSE_NOTICE_DISTANCE:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _last_close_hit_msec < CLOSE_NOTICE_COOLDOWN_MSEC:
+		return
+	_last_close_hit_msec = now
+	sounds.play("notice_close_hit")
 
 
 ## Emit a sound into the world and tell the HUD what it cost.

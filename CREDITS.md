@@ -44,6 +44,13 @@ The dread system's music beds, phantom one-shots and stingers are CC0 works by t
 | Metal Impact Sounds | BMacZero | https://opengameart.org/content/metal-impact-sounds | CC0 1.0 | Phantom distant metal clang |
 | Footsteps | GboxMikeFozzy | https://opengameart.org/content/footsteps-0 | CC0 1.0 | Phantom footsteps (4 variants) |
 | Dark Stinger 1 | Kresiek The Furry | https://opengameart.org/content/dark-stinger-1 | CC0 1.0 | Horror stinger |
+| Horror Breathing | primbal | https://opengameart.org/content/horror-breathing | CC0 1.0 | A breath at your shoulder, once a round |
+| Water Drops | ceoxblackj | https://opengameart.org/content/water-drops | CC0 1.0 | Water dripping somewhere in the cave |
+| Breaking Rock | themightyglider | https://opengameart.org/content/breaking-rock | CC0 1.0 | Small rocks breaking in the dark |
+| Moving Boulder | themightyglider | https://opengameart.org/content/moving-boulder | CC0 1.0 | A stone dropping somewhere unseen |
+| Horror Hit Soundpack 1 | psychhead | https://opengameart.org/content/horror-hit-soundpack-1 | CC0 1.0 | Low hits (two clips, trimmed to 2.8 s) |
+| Undead Moans | antumdeluge | https://opengameart.org/content/undead-moans | CC0 1.0 | A distant moan |
+| Ghost/Monster Voice | qubodup | https://opengameart.org/content/ghost-monster-voice-moaning-growling | CC0 1.0 | A distant, inhuman moan |
 
 Each pack's original `License.txt` is preserved verbatim under
 `assets/licenses/`.
