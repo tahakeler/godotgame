@@ -1330,7 +1330,7 @@ func _apply_recoil() -> void:
 ## weapon's peak no matter how fast the trigger is pulled. Restarting the
 ## timer alone would make `_tick_fire_motion` start its next rise from
 ## `sin(0) == 0`, snapping the offset back to rest for a frame before it
-## rises again — audible as a pop on every round of a burst. `_fire_start_weight`
+## rises again — a visible pop on every round of a burst. `_fire_start_weight`
 ## captures how far through the previous kick's rise the weapon already was,
 ## as a fraction of the peak that is about to be replaced, so the new rise
 ## blends up from there instead. A weapon whose `fire_cooldown` is shorter
