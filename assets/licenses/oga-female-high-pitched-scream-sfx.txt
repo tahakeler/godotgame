@@ -1,0 +1,13 @@
+Female High Pitched Scream SFX
+by WuxiaScrub (OpenGameArt)
+
+Source page: https://opengameart.org/content/female-high-pitched-scream-sfx
+Author:      WuxiaScrub
+Licence:     CC0 (Creative Commons Zero 1.0 Universal, public domain dedication)
+Licence URL: http://creativecommons.org/publicdomain/zero/1.0/
+
+Licence statement as shown on the source page:
+  License(s): CC0  (links to http://creativecommons.org/publicdomain/zero/1.0/)
+
+Verified on the source page on 2026-09-23.
+Files used in this project: assets/audio/sourced/oneshots/distant_scream_01.ogg

@@ -28,6 +28,23 @@ supporting the work is encouraged at [kenney.nl](https://kenney.nl/).
 | [RPG Audio](https://kenney.nl/assets/rpg-audio) | 1.0 | CC0 1.0 | All sound effects — firing, dry-fire, reload, impacts, zombie groans, footsteps, round results |
 | [Animated Characters: Survivors](https://kenney.nl/assets/animated-characters-survivors) | 1.0 | CC0 1.0 | The zombies — rigged character mesh, zombie skins, and the idle/run animations |
 
+### Sourced horror audio (OpenGameArt, CC0)
+
+The dread system's music beds, phantom one-shots and stingers are CC0 works by the authors below, downloaded from OpenGameArt. Each page's licence is recorded under `assets/licenses/oga-*.txt`.
+
+| Title | Author | Source URL | Licence | Used for |
+|-------|--------|------------|---------|----------|
+| Ancient Caverns | congusbongus | https://opengameart.org/content/ancient-caverns-horror-ambient-loop | CC0 1.0 | Exploration drone bed (`music/ancient_caverns_drone_loop.ogg`) |
+| Dark Cavern Ambient | Paul Wortmann | https://opengameart.org/content/dark-cavern-ambient | CC0 1.0 | Second exploration bed (`music/dark_cavern_ambient_loop.ogg`) |
+| A Lurking Evil | congusbongus | https://opengameart.org/content/a-lurking-evil-horror-ambience | CC0 1.0 | Tense bed (`music/lurking_evil_tense_loop.ogg`) |
+| Cave In | StarNinjas | https://opengameart.org/content/cave-in | CC0 1.0 | Phantom distant rock fall |
+| Heartbeat Sounds | bart | https://opengameart.org/content/heartbeat-sounds | CC0 1.0 | Phantom heartbeat |
+| Female High Pitched Scream SFX | WuxiaScrub | https://opengameart.org/content/female-high-pitched-scream-sfx | CC0 1.0 | Phantom distant scream |
+| Wolf Monster Sound | CaveboyTup | https://opengameart.org/content/wolf-monster-sound | CC0 1.0 | Phantom distant howl |
+| Metal Impact Sounds | BMacZero | https://opengameart.org/content/metal-impact-sounds | CC0 1.0 | Phantom distant metal clang |
+| Footsteps | GboxMikeFozzy | https://opengameart.org/content/footsteps-0 | CC0 1.0 | Phantom footsteps (4 variants) |
+| Dark Stinger 1 | Kresiek The Furry | https://opengameart.org/content/dark-stinger-1 | CC0 1.0 | Horror stinger |
+
 Each pack's original `License.txt` is preserved verbatim under
 `assets/licenses/`.
 
