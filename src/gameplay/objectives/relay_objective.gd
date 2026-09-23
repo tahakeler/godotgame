@@ -86,14 +86,46 @@ func bind(arena: Arena, player: Node3D, interactor: Interactor) -> void:
 	_interactor = interactor
 	relays.clear()
 
+	# An authored map has no RELAY_PLACEMENTS of its own. The table is in the
+	# procedural cave's 4 m cells, and read on the labyrinth it put all three
+	# relays 44-48 m from the centre of a map that ends at 38.6 m — inside the
+	# rock, unreachable, and Signal mode could not be finished. The arena is
+	# asked for spread walkable points instead, and each relay is named for
+	# the direction it actually lies in.
+	if arena.is_authored():
+		for point in arena.objective_points(RELAY_PLACEMENTS.size()):
+			_add_relay(
+				arena, point, "DEEP %s" % _compass_name(point),
+				"SignalRelay_%d_%d" % [roundi(point.x), roundi(point.z)]
+			)
+		return
+
 	for entry in RELAY_PLACEMENTS:
-		var relay := SignalRelay.new()
-		relay.name = "SignalRelay_%d_%d" % [entry.cell.x, entry.cell.y]
-		relay.label = entry.label
-		relay.position = arena._cell_to_world(entry.cell) + entry.offset
-		arena.add_child(relay)
-		relay.armed.connect(_on_relay_armed)
-		relays.append(relay)
+		_add_relay(
+			arena, arena._cell_to_world(entry.cell) + entry.offset, entry.label,
+			"SignalRelay_%d_%d" % [entry.cell.x, entry.cell.y]
+		)
+
+
+func _add_relay(arena: Arena, at: Vector3, label: String, node_name: String) -> void:
+	var relay := SignalRelay.new()
+	relay.name = node_name
+	relay.label = label
+	relay.position = at
+	arena.add_child(relay)
+	relay.armed.connect(_on_relay_armed)
+	relays.append(relay)
+
+
+## The compass direction of a point from the map's centre, as the objective
+## line names it. North is -Z, the same convention the HUD compass and the
+## minimap's north tick use, so "DEEP NORTH" is where the compass says north is.
+func _compass_name(point: Vector3) -> String:
+	var names := ["NORTH", "NORTH-EAST", "EAST", "SOUTH-EAST",
+		"SOUTH", "SOUTH-WEST", "WEST", "NORTH-WEST"]
+	var bearing := fposmod(atan2(point.x, -point.z), TAU)
+	var sector := int(round(bearing / (TAU / 8.0))) % 8
+	return names[sector]
 
 
 ## Whether this mode uses the chain at all. Off in EXTRACTION, TIMED, ENDLESS,

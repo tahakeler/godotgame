@@ -676,6 +676,9 @@ var _prune_attempts := 0
 ## Frames to give the navigation server before accepting the spawns unchecked.
 const PRUNE_ATTEMPT_LIMIT := 30
 var _external_cells: Dictionary = {}
+## Navmesh sample points on the main connected walkable body, for pickups and
+## objectives. See _main_navigation_samples.
+var _reachable_samples: Array[Vector3] = []
 ## Half-extent reported by get_play_radius(), measured from the map when there
 ## is one.
 var _play_radius := 10.0
@@ -754,8 +757,12 @@ func _adopt_external_map() -> void:
 	_external_cells = _cells_from_navigation()
 	_play_radius = _measure_play_radius(walkable)
 	_build_external_spawn_points(walkable)
-	_build_external_caches(walkable)
-	_build_external_medkits(walkable)
+	# Pickups use only the main walkable body of the mesh. Spawn points have
+	# their own route check (prune_unreachable_spawns); a crate has nothing
+	# after it to catch one placed on an island.
+	_reachable_samples = _main_navigation_samples()
+	_build_external_caches(_reachable_samples)
+	_build_external_medkits(_reachable_samples)
 	_adopt_doors()
 
 
@@ -822,6 +829,74 @@ func _navigation_samples() -> Array[Vector3]:
 		samples.append(centre / float(polygon.size()))
 
 	return samples
+
+
+## Centroids of only the polygons in the largest connected piece of the mesh.
+##
+## A baked navmesh is rarely one piece: the tops of plinths, ledges and props
+## come out as small islands a player cannot walk onto. Placing a pickup or an
+## objective on one makes it unreachable, and it happened — a Signal relay
+## landed where the walking route stopped 2.8 m short. Connectivity is worked
+## out from the mesh itself, polygons joined by a shared edge, because the
+## navigation server is not synchronised yet while the arena is being built,
+## so a path query here would fail for every point.
+func _main_navigation_samples() -> Array[Vector3]:
+	var samples: Array[Vector3] = []
+	if navigation_mesh == null:
+		return samples
+
+	var count := navigation_mesh.get_polygon_count()
+	var parent: Array[int] = []
+	for index in count:
+		parent.append(index)
+
+	# Union-find over polygons that share an edge.
+	var edge_owner: Dictionary = {}
+	for index in count:
+		var polygon := navigation_mesh.get_polygon(index)
+		for corner in polygon.size():
+			var a: int = polygon[corner]
+			var b: int = polygon[(corner + 1) % polygon.size()]
+			var key := Vector2i(mini(a, b), maxi(a, b))
+			if edge_owner.has(key):
+				_union(parent, index, edge_owner[key])
+			else:
+				edge_owner[key] = index
+
+	var sizes: Dictionary = {}
+	for index in count:
+		var root := _find(parent, index)
+		sizes[root] = int(sizes.get(root, 0)) + 1
+
+	var largest := -1
+	for root in sizes:
+		if largest < 0 or sizes[root] > sizes[largest]:
+			largest = root
+
+	var vertices := navigation_mesh.get_vertices()
+	for index in count:
+		if _find(parent, index) != largest:
+			continue
+		var polygon := navigation_mesh.get_polygon(index)
+		if polygon.size() < 3:
+			continue
+		var centre := Vector3.ZERO
+		for vertex_index in polygon:
+			centre += vertices[vertex_index]
+		samples.append(centre / float(polygon.size()))
+
+	return samples
+
+
+func _find(parent: Array[int], index: int) -> int:
+	while parent[index] != index:
+		parent[index] = parent[parent[index]]
+		index = parent[index]
+	return index
+
+
+func _union(parent: Array[int], a: int, b: int) -> void:
+	parent[_find(parent, a)] = _find(parent, b)
 
 
 ## Which CELL-sized grid squares the map can be walked on.
@@ -920,6 +995,30 @@ func declared_cache_count() -> int:
 ## broke in a different way when the pitch changed.
 func grid_cell_size() -> float:
 	return EXTERNAL_CELL if _external else CELL
+
+
+## True when this arena is running an authored map rather than the procedural
+## cave. Callers that place things from the cave's cell tables must ask this
+## first: those tables are in 4 m cells laid out for a different level, and on
+## the labyrinth they land outside the map.
+func is_authored() -> bool:
+	return _external
+
+
+## Walkable points for an objective, spread as far as possible from the start,
+## the caches, the medkits and each other.
+##
+## For authored maps, which have no hand-placed objective table. The same
+## farthest-point selection the pickups use, so an objective never shares a
+## corner with a crate and the chain sends the player across the whole map.
+func objective_points(count: int) -> Array[Vector3]:
+	var avoid: Array[Vector3] = [external_player_start]
+	for cache in ammo_caches:
+		avoid.append(cache.position)
+	for kit in find_children("*", "Medkit", true, false):
+		avoid.append((kit as Node3D).position)
+
+	return _spread_points(_reachable_samples, count, avoid)
 
 
 ## Grid conversions matching `_occupied_cells()`, whichever arena is running.
