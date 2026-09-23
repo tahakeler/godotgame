@@ -69,6 +69,7 @@ PC only: keyboard and mouse, no gamepad anywhere.
   (UserDataGuard, proven in a sandbox both ways).
 - Head bob on footfalls; sprint carry pose.
 - STATS shows the zombie kind that kills you most.
+- Death collapse (drop + roll away from the killing blow).
 - Gate steps time out at 300 s (a hung step used to stall the gate forever).
 
 ## Open
@@ -84,6 +85,11 @@ PC only: keyboard and mouse, no gamepad anywhere.
   Verify every claim against code — a report is not evidence.
 - Throwaway Godot scripts must quit(); two orphans once ran for an hour.
 - No parallel Godot runs while benchmarking.
+- If a tool call or guard is refused, agents must report it — never route
+  around it (one wrapped a blocked HOME= override in a .sh; benign intent,
+  wrong pattern).
+- Capture and look at every visual change; two layout bugs this session
+  were invisible to the gate (chips clipped off-screen, labels over caption).
 - Judge the gate by exit code only. Probes use a private HOME.
 - Blender geometry is the source of truth; integrate, never redesign.
 - New gate checks only for real regressions or high-risk systems.
