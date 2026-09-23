@@ -37,7 +37,12 @@ const ASSET_PACKS := [
 	{
 		"name": "Animated Characters: Survivors",
 		"licence": "CC0 1.0",
-		"used": "The zombies — rigged mesh, skins, and the idle and run animations",
+		"used": "The earlier zombie model (still in the project files, not used in play)",
+	},
+	{
+		"name": "MakeHuman community assets — MPFB, system assets, Mindfront Aksel skin",
+		"licence": "CC0 1.0",
+		"used": "The source bodies, rig, clothing, eyes and skins of the zombie pack",
 	},
 	{
 		"name": "Ancient Caverns and A Lurking Evil — by congusbongus (OpenGameArt)",
@@ -118,6 +123,7 @@ const ASSET_PACKS := [
 
 ## Things made for this project rather than brought in.
 const ORIGINAL_WORK := [
+	"The zombie pack — the normal, heavy and runner zombies, their textures and animations, made in Blender for this game",
 	"The Amethyst Labyrinth — the map, modelled in Blender for this game",
 	"All game code, scenes and UI",
 	"Gunshots, the Brute's growl, the Screamer, the cave bed and the tension pulse, synthesised by tools/generate_audio.gd",
