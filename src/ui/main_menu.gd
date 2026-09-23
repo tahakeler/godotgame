@@ -406,7 +406,32 @@ func _describe_career(career: Dictionary) -> String:
 		% [career.kills, _describe_accuracy(career), _describe_duration(career.duration)]
 	)
 
+	var deaths_by_kind: Dictionary = career.get("deaths_by_kind", {})
+	if not deaths_by_kind.is_empty():
+		lines.append(_describe_deadliest(deaths_by_kind))
+
 	return "\n".join(lines)
+
+
+## The zombie kind that has killed the player the most, across every run.
+##
+## Keys in deaths_by_kind round-trip through ConfigFile, which hands String
+## keys back on some load paths and int keys on others depending on how the
+## section was last written — int() normalizes either before it is used to
+## look up both the count and the kind's display name.
+func _describe_deadliest(deaths_by_kind: Dictionary) -> String:
+	var best_kind := -1
+	var best_count := -1
+
+	for raw_key in deaths_by_kind:
+		var kind := int(raw_key)
+		var count: int = deaths_by_kind[raw_key]
+		if count > best_count:
+			best_kind = kind
+			best_count = count
+
+	var kind_name: String = ZombieTypes.definition(best_kind as ZombieTypes.Kind).name
+	return "Most often killed by %s (%d)" % [kind_name, best_count]
 
 
 ## Shots hit against shots fired, or a flat statement when nothing was fired.

@@ -1574,6 +1574,8 @@ func _try_land_hit() -> void:
 	_attack_landed = true
 	hit_player.emit(contact_damage, global_position)
 
+	if _target.has_method("note_attacker"):
+		_target.note_attacker(kind)
 	if _target.has_method("take_damage"):
 		_target.take_damage(contact_damage, global_position, Vector3.ZERO)
 
