@@ -103,7 +103,7 @@ const STRIKE_FRACTION := 0.48
 @export var draw_distance := 42.0
 
 ## body name -> shared AnimationLibrary, built on first use.
-static var _libraries := {}
+static var _libraries = null
 
 var _body := ""
 var _model: Node3D
@@ -131,6 +131,8 @@ var _glow_colour := Color.BLACK
 var _glow_energy := 0.0
 ## Per-instance eye material carrying the awareness tell.
 var _eye_material: StandardMaterial3D
+## Physical flinch on the skeleton, layered over whatever clip is playing.
+var _hit_react: HitReactModifier
 static var _flash_material: StandardMaterial3D
 ## Live bodies sharing the static caches. When the last one leaves the tree the
 ## caches are dropped, so shared materials and clips do not outlive the scene
@@ -146,8 +148,10 @@ func _exit_tree() -> void:
 	_live_bodies -= 1
 	if _live_bodies <= 0:
 		_live_bodies = 0
-		_libraries.clear()
-		_tinted.clear()
+		# Null rather than cleared: an empty Dictionary still holds pooled
+		# memory, and scripts outlive the tree at exit.
+		_libraries = null
+		_tinted = null
 		_flash_material = null
 
 
@@ -284,6 +288,12 @@ func play_alert(duration := 0.0) -> void:
 	var length := _animation_player.get_animation("Alert").length
 	var hold := duration if duration > 0.0 else length / 1.2
 	_play_one_shot("Alert", clampf(length / maxf(hold, 0.2), 0.6, 2.0), hold, 0.15)
+
+
+## Knock the torso the way the round was travelling. `strength` 0..1.
+func react_to_hit(direction: Vector3, strength: float) -> void:
+	if _hit_react != null and not _is_corpse:
+		_hit_react.react(direction, strength)
 
 
 ## Briefly overlay a hot colour so a hit registers visually.
@@ -428,6 +438,12 @@ func _build_body(body: String) -> void:
 		if String(mesh.name).ends_with(EYE_MESH_SUFFIX):
 			_eye_meshes.append(mesh)
 
+	var skeleton := _model.find_child("Skeleton3D", true, false) as Skeleton3D
+	_hit_react = null
+	if skeleton != null:
+		_hit_react = HitReactModifier.new()
+		skeleton.add_child(_hit_react)
+
 	_animation_player = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
 	if _animation_player != null:
 		var library := _library_for(body)
@@ -449,7 +465,7 @@ func _apply_scale() -> void:
 
 ## Materials are shared per (body, tint) so twenty zombies of a kind draw with
 ## the same handful of materials and batch together.
-static var _tinted := {}
+static var _tinted = null
 
 func _apply_tint() -> void:
 	for mesh in _meshes:
@@ -462,6 +478,8 @@ func _apply_tint() -> void:
 			if _tint.is_equal_approx(Color.WHITE):
 				mesh.set_surface_override_material(i, null)
 				continue
+			if _tinted == null:
+				_tinted = {}
 			var key := "%s|%s|%s" % [_body, source.get_instance_id(), _tint.to_html()]
 			if not _tinted.has(key):
 				var tinted := source.duplicate() as BaseMaterial3D
@@ -505,6 +523,8 @@ static func _get_flash_material() -> StandardMaterial3D:
 ## tracks re-addressed to this body's rig. Loops are set here because the
 ## import leaves every clip as play-once.
 static func _library_for(body: String) -> AnimationLibrary:
+	if _libraries == null:
+		_libraries = {}
 	if _libraries.has(body):
 		return _libraries[body]
 
