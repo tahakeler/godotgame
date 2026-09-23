@@ -281,7 +281,11 @@ func play_hit(stagger: float) -> void:
 ## `duration` <= 0 plays the clip once through (a Screamer's inhale passes
 ## its own wind-up so the rear lasts exactly as long as the breath).
 func play_alert(duration := 0.0) -> void:
-	if not _has("Alert") or _one_shot != "":
+	if not _has("Alert"):
+		return
+	# A timed rear (a Screamer's breath) overrides a flinch: a hit mid-breath
+	# restarts the inhale, and the body has to show that it did.
+	if _one_shot != "" and not (duration > 0.0 and _one_shot == "Hit"):
 		return
 	if duration <= 0.0 and _last_speed > alert_max_speed:
 		return
@@ -315,8 +319,13 @@ func detach_as_corpse(collapse_time: float) -> Node3D:
 		return null
 
 	var transform := global_transform
+	# Held up across the hand-off: the exit and re-entry below would otherwise
+	# read as "the last body left" when this is the only zombie alive, and wipe
+	# the shared clips and materials every later zombie should reuse.
+	_live_bodies += 1
 	get_parent().remove_child(self)
 	world.add_child(self)
+	_live_bodies -= 1
 	global_transform = transform
 
 	_is_corpse = true
