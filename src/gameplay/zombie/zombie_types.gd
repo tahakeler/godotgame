@@ -38,6 +38,8 @@ const DEFINITIONS := {
 		## Two metres is deliberately a head taller than the 1.8m player.
 		"height": 2.0,
 		"tint": Color(1.0, 1.0, 1.0),
+		## Which body from the zombie pack it wears (ZombieVisual.BODIES).
+		"body": "normal",
 		"experience": 1,
 		## Nothing. The commonest kill in the game funds nothing, which is the only
 		## way the average round-per-kill lands below what a kill costs to make —
@@ -113,6 +115,7 @@ const DEFINITIONS := {
 		"damage": 8.0,
 		"height": 1.85,
 		"tint": Color(0.78, 1.0, 0.82),
+		"body": "runner",
 		"experience": 2,
 		"ammo": 1,
 		"hearing": 32.0,
@@ -152,7 +155,10 @@ const DEFINITIONS := {
 		"speed": 2.0,
 		"damage": 28.0,
 		"height": 2.6,
-		"tint": Color(0.95, 0.62, 0.58),
+		# Softer than the old flat-colour red: the heavy body already reads at a
+		# glance, and a strong tint on photographic skin reads as sunburn.
+		"tint": Color(0.92, 0.8, 0.76),
+		"body": "heavy",
 		"experience": 5,
 		"ammo": 4,
 		"hearing": 42.0,
@@ -200,6 +206,8 @@ const DEFINITIONS := {
 		# Near-black slate. It is meant to be genuinely hard to pick out
 		# against unlit rock — that is the entire enemy.
 		"tint": Color(0.34, 0.37, 0.44),
+		# The runner body: lean and young, the one shape built to close fast.
+		"body": "runner",
 		"experience": 3,
 		"ammo": 1,
 		"hearing": 30.0,
@@ -243,6 +251,7 @@ const DEFINITIONS := {
 		"damage": 4.0,
 		"height": 1.7,
 		"tint": Color(1.0, 0.92, 0.45),
+		"body": "normal",
 		# Priced as the kill it is. Dropping one fast should feel rewarded
 		# rather than like a magazine spent on a weakling.
 		"experience": 4,

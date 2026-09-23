@@ -520,7 +520,7 @@ func configure(zombie_kind: ZombieTypes.Kind) -> void:
 	health.current_health = definition.health
 
 	var height: float = definition.height
-	_visual.apply_kind(height, definition.tint)
+	_visual.apply_kind(height, definition.tint, definition.get("body", "normal"))
 
 	# The capsule is built from the same height the model was scaled to, so
 	# what you shoot at is what you hit. These used to come from separate
@@ -698,6 +698,10 @@ func _set_awareness(next: Awareness) -> void:
 		# finds them again pays the full wind-up a second time, so breaking its
 		# line of sight is a real answer and not merely a delay.
 		_begin_inhale()
+		# After the inhale, which claims the body for its whole breath if this
+		# is a Screamer; anything else rears up once, if standing still.
+		if _visual != null:
+			_visual.play_alert()
 
 	if previous == Awareness.HUNTING and next != Awareness.HUNTING:
 		_inhaling = false
@@ -1189,6 +1193,7 @@ func _begin_inhale() -> void:
 	# reads at range.
 	if _visual != null:
 		_visual.apply_glow(INHALE_GLOW, INHALE_GLOW_ENERGY * glow_scale)
+		_visual.play_alert(alarm_windup)
 
 	# Sound does the heavier lifting: light needs line of sight and a corridor
 	# denies it. groaned is emitted deliberately rather than only the new
@@ -1532,6 +1537,7 @@ func _begin_windup() -> void:
 	_attack_state = AttackState.WINDING_UP
 	_attack_state_remaining = attack_windup
 	_attack_landed = false
+	_visual.play_attack(attack_windup)
 	attack_telegraphed.emit(self, global_position)
 
 
@@ -1628,6 +1634,7 @@ func _stagger() -> void:
 		return
 
 	_stagger_remaining = stagger_duration
+	_visual.play_hit(stagger_duration)
 
 	# A hit knocks the breath out of it. The archetype table has claimed since
 	# the Screamer landed that "any hit at all buys a pause in the screaming

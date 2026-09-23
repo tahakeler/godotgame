@@ -162,19 +162,17 @@ func _zombie() -> Zombie:
 
 func _skin(zombie: Zombie) -> StandardMaterial3D:
 	var visual: ZombieVisual = zombie.get_node("Visual")
-	return visual._skin_material
+	return visual._eye_material
 
 
 func _glow_energy(zombie: Zombie) -> float:
-	var skin := _skin(zombie)
-	if skin == null or not skin.emission_enabled:
-		return 0.0
-	return skin.emission_energy_multiplier
+	var visual: ZombieVisual = zombie.get_node("Visual")
+	return visual.glow_energy()
 
 
 func _glow_colour(zombie: Zombie) -> Color:
-	var skin := _skin(zombie)
-	return Color.BLACK if skin == null else skin.emission
+	var visual: ZombieVisual = zombie.get_node("Visual")
+	return visual.glow_colour()
 
 
 func _report() -> void:
