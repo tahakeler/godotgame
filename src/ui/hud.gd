@@ -61,10 +61,15 @@ const COMPASS_VISIBLE_ARC := 160.0
 ## colour. Long enough to register as "that gun changed," short enough that
 ## it has cleared before the player has finished glancing at the strip.
 @export var resupply_pulse_duration := 1.2
-## Vertical offset, in pixels, of a weapon chip's "+N" resupply label above
-## the chip. The label is a child of the chip rather than a row sibling, so
-## this only ever moves it — it never adds height to the weapon strip.
-@export var gain_offset := 14.0
+## Widest resupply suffix every chip reserves room for, so a chip growing from
+## "2 SHOTGUN" to "2 SHOTGUN +12" never pushes its neighbours sideways.
+##
+## The gain is shown inline for a reason. It was first a separate label above
+## the strip — which made the strip taller and pushed the weapon names off the
+## bottom of the screen — then a label floating over it, which landed on top of
+## the ammo caption directly above. There is no free space above or below the
+## strip, so the number has to live in the chip's own text.
+@export var gain_suffix_reserve := " +99"
 
 var _game: Game
 var _player: Player
@@ -1067,11 +1072,12 @@ var _resupply_flash: Dictionary = {}
 ## once its pulse fully fades, so a gain arriving after a long quiet moment
 ## starts counting from zero instead of resuming a stale total.
 var _resupply_gain: Dictionary = {}
-## The two labels making up each weapon chip, in WeaponTypes.order() order:
-## the chip name/number, and the small "+N" gain label stacked above it.
-## Populated by _build_weapon_chips() and read by _apply_resupply_pulse().
+## Each weapon chip, and its text without any resupply suffix, in
+## WeaponTypes.order() order. The resting text is kept rather than re-derived so
+## the pulse can add " +N" and take it off again without knowing how a chip is
+## labelled. Populated by _build_weapon_chips(), read by _apply_resupply_pulse().
 var _weapon_chip_labels: Array[Label] = []
-var _weapon_gain_labels: Array[Label] = []
+var _weapon_chip_texts: Array[String] = []
 
 @onready var _minimap: Control = %MiniMap
 @onready var _weapon_row: HBoxContainer = %WeaponRow
@@ -1495,46 +1501,32 @@ func _build_weapon_chips() -> void:
 			chip.add_theme_font_size_override("font_size", 11)
 			chip.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
 			chip.add_theme_constant_override("outline_size", 2)
-
-			# The "+N" resupply label is a child of the chip rather than a
-			# row sibling, so it floats above the strip instead of taking
-			# layout space in it — the row's height (and the margin below
-			# the weapon names) must not change when a pulse is showing.
-			var gain_label := Label.new()
-			gain_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			gain_label.add_theme_font_size_override("font_size", 11)
-			gain_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
-			gain_label.add_theme_constant_override("outline_size", 2)
-			gain_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			gain_label.text = ""
-			gain_label.anchor_left = 0.0
-			gain_label.anchor_right = 1.0
-			gain_label.offset_left = 0.0
-			gain_label.offset_right = 0.0
-			chip.add_child(gain_label)
-
 			_weapon_row.add_child(chip)
 
 	_weapon_chip_labels.clear()
-	_weapon_gain_labels.clear()
+	_weapon_chip_texts.clear()
 
 	for index in mini(_weapon_row.get_child_count(), kinds.size()):
 		var chip: Label = _weapon_row.get_child(index)
-		var gain_label: Label = chip.get_child(0)
 		var kind: WeaponTypes.Kind = kinds[index]
 		var active := _weapon != null and _weapon.kind == kind
-		chip.text = "%s%d %s" % [
+		var text := "%s%d %s" % [
 			"▸" if active else " ", index + 1, WeaponTypes.display_name(kind)
 		]
+		chip.text = text
 		chip.modulate = (
 			Color(0.96, 0.96, 0.97, 1.0) if active else Color(0.55, 0.58, 0.64, 0.6)
 		)
-		# Keep the floating label centred over whatever width the chip's
-		# text currently occupies, since the two-round pistol chip and the
-		# longer rifle chip are not the same width.
-		gain_label.position = Vector2(0, -gain_offset)
+		# Wide enough for the name plus the largest suffix it will ever carry,
+		# measured in the chip's own font, so a pulse lengthens the text
+		# without moving anything else in the row.
+		var font := chip.get_theme_font("font")
+		var font_px := chip.get_theme_font_size("font_size")
+		chip.custom_minimum_size.x = font.get_string_size(
+			text + gain_suffix_reserve, HORIZONTAL_ALIGNMENT_LEFT, -1, font_px
+		).x
 		_weapon_chip_labels.append(chip)
-		_weapon_gain_labels.append(gain_label)
+		_weapon_chip_texts.append(text)
 
 	# A rebuild (or a switch, which triggers one) wipes the modulate set by
 	# the tick below. Reapplying immediately means a pulse in flight when the
@@ -1591,15 +1583,12 @@ func _apply_resupply_pulse(kind: WeaponTypes.Kind) -> void:
 		Color(0.96, 0.96, 0.97, 1.0) if active else Color(0.55, 0.58, 0.64, 0.6)
 	)
 
-	_weapon_chip_labels[index].modulate = resting.lerp(accent, strength)
+	var chip := _weapon_chip_labels[index]
+	chip.modulate = resting.lerp(accent, strength)
 
-	var gain_label := _weapon_gain_labels[index]
 	var amount := int(_resupply_gain.get(kind, 0))
-	if strength > 0.0 and amount > 0:
-		gain_label.text = "+%d" % amount
-		gain_label.modulate = Color(accent.r, accent.g, accent.b, strength)
-	else:
-		gain_label.text = ""
+	var suffix := " +%d" % amount if strength > 0.0 and amount > 0 else ""
+	chip.text = _weapon_chip_texts[index] + suffix
 
 
 ## Fade the weapon caption back from the accent colour after a switch.
