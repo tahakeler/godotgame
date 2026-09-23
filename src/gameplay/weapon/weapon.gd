@@ -202,6 +202,33 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 @export var bob_frequency := 9.0
 @export var bob_amount := 0.012
 
+@export_group("Firing motion")
+## Seconds for the viewmodel to snap to full kick after a shot. Fast on
+## purpose — same rationale as the melee jab's out time — so it reads as an
+## impact rather than a drift.
+@export var fire_kick_out_time := 0.04
+## Seconds to ease back from full kick to rest.
+@export var fire_kick_return_time := 0.15
+## Metres the weapon snaps back (local +Z, toward the camera) per degree of
+## the equipped weapon's `recoil_pitch_degrees`. Riding on a stat every
+## weapon already carries — rather than a second per-weapon table that would
+## have to be kept in sync with it — is what makes the shotgun thump, the
+## rifle chatter and the pistol snap without this file knowing which weapon
+## is in hand.
+@export var fire_kick_back_per_degree := 0.012
+## Degrees the muzzle tips up (this node's own rotation.x) per degree of
+## `recoil_pitch_degrees`. Shares the same reference stat as the position
+## kick so the two always scale together.
+@export var fire_muzzle_tip_per_degree := 0.55
+## Light energy the muzzle flash jumps to on every shot. Mirrors the
+## OmniLight3D's authored energy in the scene, kept here as well so both can
+## be tuned from one place without opening the scene file.
+@export var muzzle_flash_peak_energy := 6.0
+## Seconds for the muzzle flash to decay from peak to off. A few tens of
+## milliseconds reads as a flash; longer starts to look like the light was
+## simply left on.
+@export var muzzle_flash_decay_time := 0.035
+
 var magazine_ammo := 0
 var reserve_ammo := 0
 ## Which of the three is in hand.
@@ -251,9 +278,23 @@ var _melee_anim_active := false
 ## of sync with the reload it is illustrating.
 var _reload_offset := Vector3.ZERO
 var _reload_roll := 0.0
-## Sum of the two offsets above. Kept as its own field only so the
+## Fire kick: a local-space offset plus a muzzle-tip rotation, both driven
+## off one timer. `_fire_kick_peak` and `_fire_tip_peak` are computed once
+## per shot in `_apply_fire_kick` and the timer is restarted rather than
+## added to — see the comment there for why a rifle burst does not run away.
+var _fire_offset := Vector3.ZERO
+var _fire_tip := 0.0
+var _fire_kick_peak := Vector3.ZERO
+var _fire_tip_peak := 0.0
+var _fire_anim_time := 0.0
+var _fire_anim_active := false
+## How far through the rise the kick was when it was last restarted, as a
+## fraction of peak. Lets a restarted kick blend up from where it already was
+## instead of popping back to zero — see `_apply_fire_kick`.
+var _fire_start_weight := 0.0
+## Sum of the three offsets above. Kept as its own field only so the
 ## composition into `position` (in `_tick_viewmodel`) has one visible site
-## instead of two separate writers fighting over the same property.
+## instead of separate writers fighting over the same property.
 var _action_offset := Vector3.ZERO
 
 @onready var _camera: Camera3D = _resolve_camera()
@@ -266,6 +307,11 @@ func _ready() -> void:
 	_build_slots()
 	_equip_now(starting_kind)
 	_muzzle_flash.visible = false
+	# Seeded at zero rather than left at the scene's authored peak, so the
+	# first shot is the first time the light is ever seen lit — otherwise the
+	# very first `visible = true` would flash at whatever energy the editor
+	# saved the node with.
+	_muzzle_flash.light_energy = 0.0
 	ammo_changed.emit(magazine_ammo, reserve_ammo)
 
 
@@ -277,6 +323,8 @@ func _process(delta: float) -> void:
 	_tick_recoil_climb(delta)
 	_tick_melee_motion(delta)
 	_tick_reload_motion()
+	_tick_fire_motion(delta)
+	_tick_muzzle_flash(delta)
 	_tick_viewmodel(delta)
 
 	if not _input_enabled:
@@ -364,14 +412,20 @@ func _equip_now(target: WeaponTypes.Kind) -> void:
 	_swap_target = target
 	_swap_remaining = 0.0
 	_recoil_climb_amount = 0.0
-	# A new weapon in hand starts from a clean pose. Without this, a swing or
-	# a reload interrupted by an instant equip (round start, `reset_state`)
-	# would hand the next weapon a leftover offset or roll it never earned.
+	# A new weapon in hand starts from a clean pose. Without this, a swing, a
+	# reload or a fire kick interrupted by an instant equip (round start,
+	# `reset_state`) would hand the next weapon a leftover offset or roll it
+	# never earned.
 	_melee_anim_time = 0.0
 	_melee_anim_active = false
 	_melee_offset = Vector3.ZERO
 	_reload_offset = Vector3.ZERO
 	_reload_roll = 0.0
+	_fire_anim_time = 0.0
+	_fire_anim_active = false
+	_fire_offset = Vector3.ZERO
+	_fire_tip = 0.0
+	_fire_start_weight = 0.0
 
 	var slot: Dictionary = _slots[target]
 	var stats: Dictionary = slot.stats
@@ -422,10 +476,15 @@ func equip(target: WeaponTypes.Kind) -> bool:
 	_reload_offset = Vector3.ZERO
 	_reload_roll = 0.0
 	# A swing does not survive a swap either — the weapon coming up is not
-	# the one that was mid-jab.
+	# the one that was mid-jab. Same for a fire kick still playing out.
 	_melee_anim_time = 0.0
 	_melee_anim_active = false
 	_melee_offset = Vector3.ZERO
+	_fire_anim_time = 0.0
+	_fire_anim_active = false
+	_fire_offset = Vector3.ZERO
+	_fire_tip = 0.0
+	_fire_start_weight = 0.0
 
 	_swap_target = target
 	_swap_remaining = maxf(_slots[target].stats.swap_duration, 0.0)
@@ -847,6 +906,7 @@ func try_fire() -> bool:
 	ammo_changed.emit(magazine_ammo, reserve_ammo)
 
 	_apply_recoil()
+	_apply_fire_kick()
 	_show_muzzle_flash()
 	_trace_shot()
 	return true
@@ -1113,15 +1173,18 @@ func _tick_viewmodel(delta: float) -> void:
 		target_sway + bob, clampf(sway_smoothing * delta, 0.0, 1.0)
 	)
 
-	# Melee and reload each write a temporary offset elsewhere (see
-	# `_tick_melee_motion` and `_tick_reload_motion`); summed in here rather
-	# than in a second `position` write, so this stays the only place the
-	# weapon's position is actually set.
-	_action_offset = _melee_offset + _reload_offset
+	# Melee, reload and the fire kick each write a temporary offset elsewhere
+	# (see `_tick_melee_motion`, `_tick_reload_motion` and
+	# `_tick_fire_motion`); summed in here rather than in a second `position`
+	# write, so this stays the only place the weapon's position is actually
+	# set.
+	_action_offset = _melee_offset + _reload_offset + _fire_offset
 	position = _rest_position + _sway_offset + _action_offset
-	# The weapon node's own rotation has no other writer — recoil drives the
-	# camera's pitch, not this. Reload is the only thing that rolls it.
+	# The weapon node's own rotation has two writers and no more: reload
+	# rolls it, the fire kick tips it. Recoil still drives the camera's
+	# pitch, never this.
 	rotation.z = _reload_roll
+	rotation.x = _fire_tip
 
 
 ## Drives the melee jab: a fast rise to full extension, then a slower ease
@@ -1184,6 +1247,42 @@ func _tick_reload_motion() -> void:
 	_reload_roll = deg_to_rad(reload_roll_degrees) * weight
 
 
+## Drives the fire kick: a fast snap to full extension, then a slower ease
+## back to rest. Same shape as `_tick_melee_motion` — a sine rise for the
+## snap, a smoothstep fall for the recovery — so the two read as the same
+## family of motion on the same weapon. `_fire_kick_peak`/`_fire_tip_peak`
+## already carry the per-weapon scale, computed once in `_apply_fire_kick`.
+func _tick_fire_motion(delta: float) -> void:
+	if not _fire_anim_active:
+		return
+
+	_fire_anim_time += delta
+	var total_duration := fire_kick_out_time + fire_kick_return_time
+
+	if _fire_anim_time >= total_duration:
+		_fire_anim_active = false
+		_fire_offset = Vector3.ZERO
+		_fire_tip = 0.0
+		return
+
+	var weight := 0.0
+	if _fire_anim_time < fire_kick_out_time:
+		# Quick rise to full extension — the "snap" of the shot. Blends up
+		# from `_fire_start_weight` rather than from zero, so a kick that was
+		# restarted mid-recovery (see `_apply_fire_kick`) continues from
+		# wherever it already was instead of popping back to rest for a
+		# frame before rising again.
+		var out_t := _fire_anim_time / maxf(fire_kick_out_time, 0.001)
+		weight = lerpf(_fire_start_weight, 1.0, sin(out_t * PI * 0.5))
+	else:
+		# Slower, eased fall back to rest.
+		var back_t := (_fire_anim_time - fire_kick_out_time) / maxf(fire_kick_return_time, 0.001)
+		weight = 1.0 - smoothstep(0.0, 1.0, back_t)
+
+	_fire_offset = _fire_kick_peak * weight
+	_fire_tip = _fire_tip_peak * weight
+
+
 ## Record look movement so the viewmodel can lag behind it.
 func report_look(relative: Vector2) -> void:
 	_look_delta += relative
@@ -1224,6 +1323,33 @@ func _apply_recoil() -> void:
 	)
 
 
+## Trigger the viewmodel kick for one shot.
+##
+## Restarts the timer and recomputes the peak rather than adding to whatever
+## offset is already in flight, so the offset is always bounded by one
+## weapon's peak no matter how fast the trigger is pulled. Restarting the
+## timer alone would make `_tick_fire_motion` start its next rise from
+## `sin(0) == 0`, snapping the offset back to rest for a frame before it
+## rises again — audible as a pop on every round of a burst. `_fire_start_weight`
+## captures how far through the previous kick's rise the weapon already was,
+## as a fraction of the peak that is about to be replaced, so the new rise
+## blends up from there instead. A weapon whose `fire_cooldown` is shorter
+## than `fire_kick_out_time + fire_kick_return_time` — the rifle, at a 0.09s
+## cooldown against a ~0.19s kick — hits this on every round of a burst, not
+## just as an edge case.
+func _apply_fire_kick() -> void:
+	_fire_start_weight = 0.0
+	if _fire_anim_active:
+		_fire_start_weight = clampf(
+			_fire_offset.z / maxf(_fire_kick_peak.z, 0.0001), 0.0, 1.0
+		)
+
+	_fire_anim_time = 0.0
+	_fire_anim_active = true
+	_fire_kick_peak = Vector3(0.0, 0.0, fire_kick_back_per_degree * recoil_pitch_degrees)
+	_fire_tip_peak = deg_to_rad(fire_muzzle_tip_per_degree * recoil_pitch_degrees)
+
+
 ## The cone every pellet is jittered inside, widened by accumulated climb.
 ##
 ## Tying spread to the same climb as the kick is what makes sustained rifle
@@ -1233,13 +1359,29 @@ func current_spread_degrees() -> float:
 	return spread_degrees * (1.0 + _recoil_climb_amount)
 
 
+## Jump the muzzle light to its peak. `_tick_muzzle_flash` owns bringing it
+## back down every frame — see that function for why a pulse replaces the old
+## visible on/off switch.
 func _show_muzzle_flash() -> void:
+	_muzzle_flash.light_energy = muzzle_flash_peak_energy
 	_muzzle_flash.visible = true
-	var timer := get_tree().create_timer(0.05)
-	timer.timeout.connect(func() -> void:
-		if is_instance_valid(_muzzle_flash):
-			_muzzle_flash.visible = false
-	)
+
+
+## Decay the muzzle light from its peak back to off.
+##
+## A binary `visible = true` then a timer flipping it back off reads as a
+## light switch, not a flash — real muzzle flashes are a spike that fades,
+## not a step function. Doing the fade here, once per frame, is also cheaper
+## than the old approach's per-shot `SceneTreeTimer` and closure.
+func _tick_muzzle_flash(delta: float) -> void:
+	if not _muzzle_flash.visible:
+		return
+
+	var decay_rate := muzzle_flash_peak_energy / maxf(muzzle_flash_decay_time, 0.001)
+	_muzzle_flash.light_energy = move_toward(_muzzle_flash.light_energy, 0.0, decay_rate * delta)
+
+	if is_zero_approx(_muzzle_flash.light_energy):
+		_muzzle_flash.visible = false
 
 
 ## Trace every pellet of one trigger pull.
