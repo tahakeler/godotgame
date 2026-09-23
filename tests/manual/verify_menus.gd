@@ -40,6 +40,11 @@ func _process(_delta: float) -> bool:
 	# and @onready vars are not assigned before _ready runs either.
 	if not _started:
 		_started = true
+		# Installed explicitly, not just relied on via DeterministicSettings,
+		# because this test writes probe values straight through the live
+		# settings object and must never leave the player's real
+		# settings.cfg changed.
+		UserDataGuard.install(root)
 		DeterministicSettings.apply(root)
 		return false
 
