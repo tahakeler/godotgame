@@ -21,6 +21,15 @@ var _sample_frames := 400
 var _game: Game
 var _frames := 0
 var _samples: Array[float] = []
+## Physics and script time per sampled frame, averaged in the report.
+##
+## Sampled every frame rather than read once at the end. The report used to
+## print a single get_monitor reading taken at report time, which is one
+## frame's figure, not a mean — and set next to a 400-frame mean frame time it
+## read as 12.7 ms of physics inside an 11.7 ms frame, which is impossible and
+## sent one analysis looking for a cause that did not exist.
+var _physics_samples: Array[float] = []
+var _process_samples: Array[float] = []
 var _configured := false
 
 
@@ -61,6 +70,8 @@ func _process(delta: float) -> bool:
 		return false
 
 	_samples.append(delta)
+	_physics_samples.append(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS))
+	_process_samples.append(Performance.get_monitor(Performance.TIME_PROCESS))
 
 	if _samples.size() < _sample_frames:
 		return false
@@ -105,12 +116,22 @@ func _report() -> void:
 	print("video memory       %.1f MB" % (
 		Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0
 	))
-	print("physics time       %.2f ms" % (
-		Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
-	))
+	print("physics time       %.2f ms mean, %.2f ms worst" % [
+		_mean(_physics_samples) * 1000.0, _physics_samples.max() * 1000.0
+	])
+	print("script time        %.2f ms mean" % (_mean(_process_samples) * 1000.0))
 	print("=".repeat(62))
 
 	root.remove_child(_game)
 	_game.free()
 	_game = null
 	quit(0)
+
+
+func _mean(values: Array[float]) -> float:
+	if values.is_empty():
+		return 0.0
+	var total := 0.0
+	for value in values:
+		total += value
+	return total / float(values.size())
