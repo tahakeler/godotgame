@@ -33,6 +33,11 @@ const TEST_DIFFICULTY := GameSettings.Difficulty.SOLDIER
 ## `from` is any node already inside the tree; the autoload is looked up
 ## through it the same way the game does.
 static func apply(from: Node) -> bool:
+	# Installed first, before anything below touches settings.cfg or
+	# records.cfg, so the guard's snapshot is the file as the test found it —
+	# not as this function already left it.
+	UserDataGuard.install(from)
+
 	# Looked up as a direct child of root rather than by absolute path.
 	# get_node("/root/...") is refused while the tree is not yet running, which
 	# is exactly when a test needs to pin settings — before anything reads them.

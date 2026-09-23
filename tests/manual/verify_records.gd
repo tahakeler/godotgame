@@ -20,6 +20,10 @@ var _started := false
 func _process(_delta: float) -> bool:
 	if not _started:
 		_started = true
+		# This test does not go through DeterministicSettings at all, and it
+		# deletes records.cfg outright to clear state between assertions, so
+		# it must install its own guard before that first deletion happens.
+		UserDataGuard.install(root)
 		return false
 
 	_clear_records()
