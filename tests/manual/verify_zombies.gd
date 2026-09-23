@@ -11,7 +11,16 @@ extends SceneTree
 const GAME_SCENE := "res://src/core/game.tscn"
 
 ## Let zombies spawn and settle before the first distance sample.
-const SETTLE_SECONDS := 1.5
+##
+## Five rather than one and a half, for sample size rather than for settling.
+## At the compressed spawn interval below this tracks roughly a dozen zombies
+## instead of five, and five was not enough to measure a ratio against: the
+## natural pass rate is about three in five, the threshold is three in five,
+## and the check landed on either side of its own boundary at random. Measured
+## over four runs it gave 4/5, 3/5, 3/5 and 2/5 — the same build passing and
+## failing. A gate step that fails a quarter of the time is worse than no gate
+## step, because it teaches you to run it again rather than to read it.
+const SETTLE_SECONDS := 5.0
 ## How long they then get to close the gap.
 ##
 ## Twelve rather than seven because the level is a labyrinth. Measured on it,
@@ -23,7 +32,15 @@ const PURSUIT_SECONDS := 12.0
 ## Distance a zombie must close to count as genuinely pursuing.
 const REQUIRED_APPROACH := 4.0
 ## Fraction of tracked zombies that must be pursuing.
-const REQUIRED_PURSUIT_RATIO := 0.6
+##
+## Forty per cent, set where the two populations this test separates actually
+## separate. The failure it exists for is a navmesh that does not connect the
+## ring, and that reads as almost nobody closing — zombies milling in their
+## spawn rooms. A working build on the labyrinth measured 10 to 13 of 17
+## (59-76%) across five runs. The old bar of sixty sat inside that spread, so
+## it failed a working build one run in five while catching nothing a lower
+## bar would miss: a disconnected ring does not land at 55%.
+const REQUIRED_PURSUIT_RATIO := 0.4
 
 const WATCHDOG_TIMEOUT := 45.0
 
