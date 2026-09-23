@@ -94,6 +94,22 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## player press a key to confirm it is friction, not tension.
 @export var auto_reload := true
 
+@export_group("Reload motion")
+## How far the weapon drops (local -Y) at the low point of a reload, in
+## metres.
+@export var reload_dip_distance := 0.06
+## How far the weapon rolls (around its own local Z) at the low point, in
+## degrees. Combined with the dip, this is what makes "I cannot fire right
+## now" readable at a glance rather than requiring a look at the HUD.
+@export var reload_roll_degrees := 14.0
+## Fraction of `reload_duration` spent dropping to the low point.
+@export var reload_down_fraction := 0.22
+## Fraction of `reload_duration` spent rising back to rest, timed to land
+## exactly as the reload completes. Whatever is left between the two
+## fractions is held at the low point — the magazine is actually being
+## worked there, and there is nothing to animate through it.
+@export var reload_up_fraction := 0.28
+
 @export_group("Last resort")
 ## Seconds between scrounged rounds once the player is completely out.
 ##
@@ -133,6 +149,22 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## than a normal swing and near the 0.6 of being hit, because the swing went
 ## nowhere and the player needs to feel that rather than infer it.
 @export var melee_unmoved_trauma := 0.42
+
+@export_group("Melee motion")
+## How far the weapon drives forward (local -Z) at full extension, in
+## metres. Small on purpose — this is a first-person weapon a few
+## centimetres from the camera, not a sword seen from outside.
+@export var melee_motion_forward := 0.16
+## Sideways drift (local X) at full extension, in metres. Positive is to
+## the right, so the jab reads as a cross-body bash rather than a straight
+## poke.
+@export var melee_motion_side := 0.05
+## Seconds to reach full extension. Fast on purpose — the strike has to
+## read as an impact, not a drift.
+@export var melee_out_time := 0.08
+## Seconds to ease back to rest. Slower than the way out, so the recovery
+## reads as the weapon settling rather than snapping back like elastic.
+@export var melee_return_time := 0.25
 
 @export_group("Decoy")
 @export var throw_speed := 14.0
@@ -207,6 +239,22 @@ var _rest_position := Vector3.ZERO
 var _dry_remaining := 0.0
 var _throw_cooldown_remaining := 0.0
 var _melee_cooldown_remaining := 0.0
+## Melee jab: a local-space offset composed into `position`, plus the timer
+## and flag that drive it. Reset on every swing in `try_melee`, and zeroed on
+## any weapon swap or round reset so a swing can never leave the model stuck
+## mid-animation.
+var _melee_offset := Vector3.ZERO
+var _melee_anim_time := 0.0
+var _melee_anim_active := false
+## Reload dip and roll. Driven purely from `_is_reloading` and
+## `_reload_remaining` rather than its own timer, so it can never drift out
+## of sync with the reload it is illustrating.
+var _reload_offset := Vector3.ZERO
+var _reload_roll := 0.0
+## Sum of the two offsets above. Kept as its own field only so the
+## composition into `position` (in `_tick_viewmodel`) has one visible site
+## instead of two separate writers fighting over the same property.
+var _action_offset := Vector3.ZERO
 
 @onready var _camera: Camera3D = _resolve_camera()
 @onready var _muzzle: Node3D = $Muzzle
@@ -227,6 +275,8 @@ func _process(delta: float) -> void:
 	_tick_reload(delta)
 	_tick_recoil(delta)
 	_tick_recoil_climb(delta)
+	_tick_melee_motion(delta)
+	_tick_reload_motion()
 	_tick_viewmodel(delta)
 
 	if not _input_enabled:
@@ -314,6 +364,14 @@ func _equip_now(target: WeaponTypes.Kind) -> void:
 	_swap_target = target
 	_swap_remaining = 0.0
 	_recoil_climb_amount = 0.0
+	# A new weapon in hand starts from a clean pose. Without this, a swing or
+	# a reload interrupted by an instant equip (round start, `reset_state`)
+	# would hand the next weapon a leftover offset or roll it never earned.
+	_melee_anim_time = 0.0
+	_melee_anim_active = false
+	_melee_offset = Vector3.ZERO
+	_reload_offset = Vector3.ZERO
+	_reload_roll = 0.0
 
 	var slot: Dictionary = _slots[target]
 	var stats: Dictionary = slot.stats
@@ -361,6 +419,13 @@ func equip(target: WeaponTypes.Kind) -> bool:
 	# free value that makes switching the answer to everything.
 	_is_reloading = false
 	_reload_remaining = 0.0
+	_reload_offset = Vector3.ZERO
+	_reload_roll = 0.0
+	# A swing does not survive a swap either — the weapon coming up is not
+	# the one that was mid-jab.
+	_melee_anim_time = 0.0
+	_melee_anim_active = false
+	_melee_offset = Vector3.ZERO
 
 	_swap_target = target
 	_swap_remaining = maxf(_slots[target].stats.swap_duration, 0.0)
@@ -717,6 +782,12 @@ func try_melee() -> bool:
 
 	_melee_cooldown_remaining = melee_cooldown
 
+	# Restart the jab from the top on every swing, hit or miss — the visual
+	# has to fire on the same terms as `melee_swung` does below, or a whiffed
+	# swing would read as a dropped input rather than an attempt.
+	_melee_anim_time = 0.0
+	_melee_anim_active = true
+
 	var origin := _camera.global_position
 	var direction := -_camera.global_basis.z
 	var destination := origin + direction * melee_range
@@ -1041,7 +1112,76 @@ func _tick_viewmodel(delta: float) -> void:
 	_sway_offset = _sway_offset.lerp(
 		target_sway + bob, clampf(sway_smoothing * delta, 0.0, 1.0)
 	)
-	position = _rest_position + _sway_offset
+
+	# Melee and reload each write a temporary offset elsewhere (see
+	# `_tick_melee_motion` and `_tick_reload_motion`); summed in here rather
+	# than in a second `position` write, so this stays the only place the
+	# weapon's position is actually set.
+	_action_offset = _melee_offset + _reload_offset
+	position = _rest_position + _sway_offset + _action_offset
+	# The weapon node's own rotation has no other writer — recoil drives the
+	# camera's pitch, not this. Reload is the only thing that rolls it.
+	rotation.z = _reload_roll
+
+
+## Drives the melee jab: a fast rise to full extension, then a slower ease
+## back to rest. Triggered once per swing from `try_melee`, on a hit or a
+## miss alike — a whiffed swing still has to look like an attempt.
+func _tick_melee_motion(delta: float) -> void:
+	if not _melee_anim_active:
+		return
+
+	_melee_anim_time += delta
+	var total_duration := melee_out_time + melee_return_time
+
+	if _melee_anim_time >= total_duration:
+		_melee_anim_active = false
+		_melee_offset = Vector3.ZERO
+		return
+
+	var weight := 0.0
+	if _melee_anim_time < melee_out_time:
+		# Quick rise to full extension — the "snap" of the strike.
+		var out_t := _melee_anim_time / maxf(melee_out_time, 0.001)
+		weight = sin(out_t * PI * 0.5)
+	else:
+		# Slower, eased fall back to rest — the recovery. Smoothstep leaves
+		# and arrives gently rather than snapping into place at full speed,
+		# which is what a raw cosine ease-out does here.
+		var back_t := (_melee_anim_time - melee_out_time) / maxf(melee_return_time, 0.001)
+		weight = 1.0 - smoothstep(0.0, 1.0, back_t)
+
+	_melee_offset = Vector3(melee_motion_side, 0.0, -melee_motion_forward) * weight
+
+
+## Dips and rolls the weapon through a reload: down over `reload_down_fraction`
+## of the reload, held low through the middle, and back up over the final
+## `reload_up_fraction` so it reaches rest exactly as the reload completes.
+##
+## Driven from `_reload_remaining` against `reload_duration` rather than its
+## own timer, so the shape always lands correctly whether it is a 1.6s pistol
+## reload or a much longer shotgun one — there is nothing here to fall out of
+## sync with.
+func _tick_reload_motion() -> void:
+	if not _is_reloading:
+		_reload_offset = Vector3.ZERO
+		_reload_roll = 0.0
+		return
+
+	var elapsed_fraction := 1.0 - clampf(_reload_remaining / maxf(reload_duration, 0.001), 0.0, 1.0)
+	var weight := 0.0
+
+	if elapsed_fraction < reload_down_fraction:
+		var down_t := elapsed_fraction / maxf(reload_down_fraction, 0.001)
+		weight = smoothstep(0.0, 1.0, down_t)
+	elif elapsed_fraction < 1.0 - reload_up_fraction:
+		weight = 1.0
+	else:
+		var up_t := (elapsed_fraction - (1.0 - reload_up_fraction)) / maxf(reload_up_fraction, 0.001)
+		weight = smoothstep(0.0, 1.0, 1.0 - up_t)
+
+	_reload_offset = Vector3(0.0, -reload_dip_distance, 0.0) * weight
+	_reload_roll = deg_to_rad(reload_roll_degrees) * weight
 
 
 ## Record look movement so the viewmodel can lag behind it.
