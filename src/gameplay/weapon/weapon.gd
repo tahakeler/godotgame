@@ -229,6 +229,21 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## simply left on.
 @export var muzzle_flash_decay_time := 0.035
 
+@export_group("Sprint carry")
+## How far the weapon drops (local -Y) at full sprint, in metres. A few
+## centimetres — this is a carry pose, not a holster — so it reads as "held
+## low and loose" without the model leaving the frame.
+@export var sprint_carry_drop_distance := 0.04
+## How far the weapon cants inward (around its own local Z) at full sprint,
+## in degrees. The same silhouette shorthand games and film use for "running,
+## not aiming" — legible at a glance, ahead of the HUD's speed or FOV change
+## catching up.
+@export var sprint_carry_roll_degrees := 10.0
+## Seconds to ease fully into, or out of, the sprint pose. One value for both
+## directions so starting and stopping a sprint read as the same motion
+## played forward and back, rather than snapping in and drifting out.
+@export var sprint_carry_ease_time := 0.2
+
 var magazine_ammo := 0
 var reserve_ammo := 0
 ## Which of the three is in hand.
@@ -292,7 +307,19 @@ var _fire_anim_active := false
 ## fraction of peak. Lets a restarted kick blend up from where it already was
 ## instead of popping back to zero — see `_apply_fire_kick`.
 var _fire_start_weight := 0.0
-## Sum of the three offsets above. Kept as its own field only so the
+## Sprint carry: a local-space offset plus a roll, same shape as the reload
+## dip above. Unlike the reload, melee and fire motions — each a fixed-length
+## animation triggered once and left to play out — sprinting is a stance that
+## can start or stop on any frame, so there is no timer to drive this from.
+## `_sprint_weight` is instead a plain 0..1 ramp, advanced every frame by
+## `_tick_sprint_motion` at a constant rate toward whichever end the current
+## stance points at; smoothstep is applied to it at the point of use (not
+## stored) so the ramp itself stays linear while the pose still eases in and
+## out rather than moving at constant speed.
+var _sprint_weight := 0.0
+var _sprint_offset := Vector3.ZERO
+var _sprint_roll := 0.0
+## Sum of the four offsets above. Kept as its own field only so the
 ## composition into `position` (in `_tick_viewmodel`) has one visible site
 ## instead of separate writers fighting over the same property.
 var _action_offset := Vector3.ZERO
@@ -324,6 +351,7 @@ func _process(delta: float) -> void:
 	_tick_melee_motion(delta)
 	_tick_reload_motion()
 	_tick_fire_motion(delta)
+	_tick_sprint_motion(delta)
 	_tick_muzzle_flash(delta)
 	_tick_viewmodel(delta)
 
@@ -426,6 +454,9 @@ func _equip_now(target: WeaponTypes.Kind) -> void:
 	_fire_offset = Vector3.ZERO
 	_fire_tip = 0.0
 	_fire_start_weight = 0.0
+	_sprint_weight = 0.0
+	_sprint_offset = Vector3.ZERO
+	_sprint_roll = 0.0
 
 	var slot: Dictionary = _slots[target]
 	var stats: Dictionary = slot.stats
@@ -485,6 +516,9 @@ func equip(target: WeaponTypes.Kind) -> bool:
 	_fire_offset = Vector3.ZERO
 	_fire_tip = 0.0
 	_fire_start_weight = 0.0
+	_sprint_weight = 0.0
+	_sprint_offset = Vector3.ZERO
+	_sprint_roll = 0.0
 
 	_swap_target = target
 	_swap_remaining = maxf(_slots[target].stats.swap_duration, 0.0)
@@ -1173,17 +1207,17 @@ func _tick_viewmodel(delta: float) -> void:
 		target_sway + bob, clampf(sway_smoothing * delta, 0.0, 1.0)
 	)
 
-	# Melee, reload and the fire kick each write a temporary offset elsewhere
-	# (see `_tick_melee_motion`, `_tick_reload_motion` and
-	# `_tick_fire_motion`); summed in here rather than in a second `position`
-	# write, so this stays the only place the weapon's position is actually
-	# set.
-	_action_offset = _melee_offset + _reload_offset + _fire_offset
+	# Melee, reload, the fire kick and the sprint carry each write a temporary
+	# offset elsewhere (see `_tick_melee_motion`, `_tick_reload_motion`,
+	# `_tick_fire_motion` and `_tick_sprint_motion`); summed in here rather
+	# than in a second `position` write, so this stays the only place the
+	# weapon's position is actually set.
+	_action_offset = _melee_offset + _reload_offset + _fire_offset + _sprint_offset
 	position = _rest_position + _sway_offset + _action_offset
-	# The weapon node's own rotation has two writers and no more: reload
-	# rolls it, the fire kick tips it. Recoil still drives the camera's
-	# pitch, never this.
-	rotation.z = _reload_roll
+	# The weapon node's own rotation has two writers and no more: rotation.z
+	# sums the reload roll and the sprint cant, rotation.x is the fire kick's
+	# muzzle tip. Recoil still drives the camera's pitch, never this.
+	rotation.z = _reload_roll + _sprint_roll
 	rotation.x = _fire_tip
 
 
@@ -1281,6 +1315,43 @@ func _tick_fire_motion(delta: float) -> void:
 
 	_fire_offset = _fire_kick_peak * weight
 	_fire_tip = _fire_tip_peak * weight
+
+
+## Eases the weapon into, or out of, a sprint carry pose: dropped and canted
+## while the owning body is sprinting, back to rest otherwise.
+##
+## Unlike the melee jab, reload dip and fire kick above — each a fixed-length
+## animation fired once and left to play out — sprinting is a stance that can
+## start or stop on any given frame, so there is no shot or swing to time an
+## animation from. This instead advances `_sprint_weight`, a plain 0..1 ramp,
+## toward whichever end the current stance points at, at a constant rate set
+## by `sprint_carry_ease_time`; smoothstep is applied on top at the point of
+## use so the pose still eases in and out rather than moving at a constant
+## speed, without the ramp itself needing a start time to ease relative to.
+##
+## Reads the stance through `has_method` rather than typing the body as
+## `Player`, so this file never has to hard-depend on the player script —
+## the same indirection `_owner_body` already keeps by returning a plain
+## `CharacterBody3D`.
+func _tick_sprint_motion(delta: float) -> void:
+	var body := _owner_body()
+	# `body.stance()` is a dynamic call — CharacterBody3D itself does not
+	# declare it — so its result comes back untyped. `has_method` guards the
+	# call rather than a hard `is Player` check, which is the dependency this
+	# file is avoiding; the explicit `bool` below is only there because an
+	# untyped operand keeps the whole `and` chain untyped for `:=` to infer.
+	var sprinting: bool = (
+		body != null
+		and body.has_method("stance")
+		and body.stance() == Player.Stance.SPRINTING
+	)
+
+	var rate := 1.0 / maxf(sprint_carry_ease_time, 0.001)
+	_sprint_weight = move_toward(_sprint_weight, 1.0 if sprinting else 0.0, rate * delta)
+	var weight := smoothstep(0.0, 1.0, _sprint_weight)
+
+	_sprint_offset = Vector3(0.0, -sprint_carry_drop_distance, 0.0) * weight
+	_sprint_roll = deg_to_rad(sprint_carry_roll_degrees) * weight
 
 
 ## Record look movement so the viewmodel can lag behind it.
