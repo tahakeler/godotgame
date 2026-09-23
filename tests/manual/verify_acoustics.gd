@@ -74,6 +74,7 @@ func _process(_delta: float) -> bool:
 	test_a_wall_between_camera_and_point_occludes_it()
 	test_a_clear_line_of_sight_is_not_occluded()
 	test_ensure_buses_adds_exactly_one_reverb_to_the_sfx_bus()
+	test_every_sound_event_loads_a_clip()
 
 	_report()
 	return true
@@ -137,6 +138,22 @@ func test_ensure_buses_adds_exactly_one_reverb_to_the_sfx_bus() -> void:
 			"expected exactly one AudioEffectReverb on the SFX bus after "
 			+ "calling ensure_buses twice, found %d" % reverb_count
 		)
+
+
+## A renamed or missing file does not crash: the event just goes silent, and
+## nobody notices a phantom that never plays. Every event in every table must
+## resolve to at least one stream.
+func test_every_sound_event_loads_a_clip() -> void:
+	var silent: Array[String] = []
+	for table in [SoundBank.EVENTS, SoundBank.GENERATED_EVENTS, SoundBank.SOURCED_EVENTS]:
+		for event in table:
+			if _sounds._pick(event) == null:
+				silent.append(event)
+
+	if silent.is_empty():
+		print("PASS: every sound event loads at least one clip")
+	else:
+		_failures.append("events with no loadable clip: %s" % ", ".join(silent))
 
 
 func _report() -> void:

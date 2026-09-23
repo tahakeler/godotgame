@@ -12,6 +12,9 @@ extends Node
 
 const BASE := "res://assets/audio/%s.ogg"
 const GENERATED := "res://assets/audio/generated/%s.wav"
+## Sourced CC0 clips (see CREDITS.md) keep their own extension, so the table
+## names the file relative to the folder rather than a bare stem.
+const SOURCED := "res://assets/audio/sourced/%s"
 
 ## Events whose clips are synthesised rather than from the Kenney pack.
 const GENERATED_EVENTS := {
@@ -28,6 +31,22 @@ const GENERATED_EVENTS := {
 	"brute_growl": ["brute_growl"],
 	"decoy_land": ["decoy_land"],
 	"zombie_alerted": ["zombie_alerted"],
+}
+
+## Phantom sounds on sourced CC0 clips. A different footstep recording from
+## the player's own is deliberate: someone else's feet, on the same stone.
+## The distant call is a scream and a howl dragged down in pitch until they
+## stop being a person or an animal, and the settling is rock and metal the
+## labyrinth moves on its own.
+const SOURCED_EVENTS := {
+	"phantom_step": [
+		"oneshots/footstep_dirt_01.ogg", "oneshots/footstep_dirt_02.ogg",
+		"oneshots/footstep_dirt_03.ogg", "oneshots/footstep_dirt_04.ogg",
+	],
+	"phantom_distant": ["oneshots/distant_scream_01.ogg", "oneshots/distant_howl_01.mp3"],
+	"phantom_settle": [
+		"oneshots/distant_rock_fall_01.ogg", "oneshots/distant_metal_clang_01.wav",
+	],
 }
 
 ## event name -> clip names. Multiple entries are chosen at random so repeated
@@ -73,18 +92,8 @@ const EVENTS := {
 	"round_won": ["doorOpen_1"],
 	"round_lost": ["bookClose"],
 
-	# Phantom sounds, played by DreadDirector. Every one of these is fake: a
-	# positional 3D sound of presence that never corresponds to anything in
-	# the world. They reuse existing clips for now — a proper phantom set is
-	# being sourced separately — but the events already carry their own mix
-	# so the swap only ever touches this block.
-	"phantom_step": [
-		"footstep00", "footstep01", "footstep02", "footstep03", "footstep04"
-	],
-	# Same clips as zombie_groan (see above) — a call from too far away to
-	# place, mixed to reach much further than anything real does.
-	"phantom_distant": ["creak1", "creak2", "creak3"],
-	"phantom_settle": ["creak1", "creak2", "creak3"],
+	# The one phantom still on a Kenney clip (the rest are in SOURCED_EVENTS):
+	# no CC0 breath recording is in the project yet.
 	"phantom_breath": ["cloth1"],
 }
 
@@ -154,7 +163,7 @@ const MIX := {
 	# Phantoms: quiet enough to doubt. A phantom that is as loud as the real
 	# thing is just a false alarm; one at the edge of hearing is a question.
 	"phantom_step": {"volume": -16.0, "pitch": Vector2(0.85, 1.0)},
-	"phantom_distant": {"volume": -14.0, "pitch": Vector2(0.5, 0.62), "distance": 60.0},
+	"phantom_distant": {"volume": -16.0, "pitch": Vector2(0.55, 0.72), "distance": 60.0},
 	"phantom_settle": {"volume": -15.0, "pitch": Vector2(0.5, 0.7), "distance": 40.0},
 	"phantom_breath": {"volume": -20.0, "pitch": Vector2(0.7, 0.8)},
 	"round_won": {"volume": -3.0, "pitch": Vector2(0.9, 1.0)},
@@ -409,6 +418,9 @@ func _preload_streams() -> void:
 
 	for event in GENERATED_EVENTS:
 		_streams[event] = _load_all(GENERATED_EVENTS[event], GENERATED)
+
+	for event in SOURCED_EVENTS:
+		_streams[event] = _load_all(SOURCED_EVENTS[event], SOURCED)
 
 
 func _load_all(names: Array, pattern: String) -> Array[AudioStream]:
