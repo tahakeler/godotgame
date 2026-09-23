@@ -33,6 +33,20 @@ PC only: keyboard and mouse, no gamepad anywhere.
   ConcavePolygonShape3D map colliders. The map is the owner's content:
   simpler collision there would be the biggest win, but it is their call.
 
+## Measurement caveat — read before trusting any playtest_ammo number
+
+The probe is bimodal. Same commit (1c4e6f9), same seed (22), same day: 9 kills,
+then 56. A run either roams into contact-rich routes or it does not, and
+headless frame timing is not deterministic. Consequences:
+- Never compare two builds on one run each. Use >= 5 runs per side.
+- An apparent drop from 54 to ~12 kills was investigated and is noise: the
+  scream change (15 before / 12 after), the death collapse (stand-in never
+  dies) and the commit itself were each ruled out.
+- The kill-routing fix stands on its code evidence (pistol never fed; held
+  path discarded overflow), not on the forced-switch counts.
+- spawn_route_ceiling = 45 came from 3 seeds per value. The route scoring is
+  sound; the exact number deserves a re-sweep with more runs.
+
 ## Performance (labyrinth, 1920x1080, M2 Pro, tools/benchmark.gd)
 
 - Frame time is render-bound: ~11.5 ms mean at 5 or 20 zombies.
