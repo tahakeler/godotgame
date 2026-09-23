@@ -23,7 +23,7 @@ supporting the work is encouraged at [kenney.nl](https://kenney.nl/).
 
 | Pack | Version | Licence | Used for |
 |------|---------|---------|----------|
-| [Modular Cave Kit](https://kenney.nl/assets/modular-cave-kit) | 1.0 | CC0 1.0 | The entire play space — central chamber, corridors, side rooms, and the rock formations used as cover |
+| [Modular Cave Kit](https://kenney.nl/assets/modular-cave-kit) | 1.0 | CC0 1.0 | The original procedural cave generator. Kept in the project; the shipped map is the Amethyst Labyrinth, modelled in Blender for this game |
 | [Blaster Kit](https://kenney.nl/assets/blaster-kit) | 2.1 | CC0 1.0 | The player's weapon viewmodel (`blaster-a`) and the weapon cases used as floor dressing |
 | [RPG Audio](https://kenney.nl/assets/rpg-audio) | 1.0 | CC0 1.0 | All sound effects — firing, dry-fire, reload, impacts, zombie groans, footsteps, round results |
 | [Animated Characters: Survivors](https://kenney.nl/assets/animated-characters-survivors) | 1.0 | CC0 1.0 | The zombies — rigged character mesh, zombie skins, and the idle/run animations |
@@ -76,7 +76,8 @@ third-party licence applies to them.
 ## Self-Created Content
 
 - All GDScript source code in `src/`
-- All scene files (`.tscn`), the UI theme, and the arena layout
+- The Amethyst Labyrinth map (`amethyst_labyrinth/`), modelled in Blender for this game
+- All scene files (`.tscn`) and the UI theme
 - The gunshot and Brute growl, synthesised by `tools/generate_audio.gd`
 - All lighting, materials, and environment setup
 - Project icon (`icon.svg`)
