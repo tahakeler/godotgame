@@ -421,7 +421,10 @@ func _tick_threat(delta: float) -> void:
 		return
 
 	ambience.set_threat(
-		spawner.threat_level(player.global_position), _threat_elapsed
+		# Once the round is over nothing is hunting anyone: the mix relaxes
+		# instead of tracking a horde frozen in place behind the results.
+		spawner.threat_level(player.global_position) if state == RoundState.PLAYING else 0.0,
+		_threat_elapsed
 	)
 	hud.set_threat(ambience.threat())
 

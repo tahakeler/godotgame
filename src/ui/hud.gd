@@ -239,7 +239,10 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 ## still running when it is not. The results screen should be the only thing
 ## asking for attention.
 func _set_round_readouts_visible(shown: bool) -> void:
-	for node in [_crosshair, _top_bar, _objective_block, _vitals_block, _ammo_block]:
+	# The vignettes too: they are driven by live threat and health, and a frame
+	# still pulsing with danger behind "EXTRACTED" says the fight goes on.
+	for node in [_crosshair, _top_bar, _objective_block, _vitals_block, _ammo_block,
+			_vignette, _hurt_vignette]:
 		if node != null:
 			node.visible = shown
 
