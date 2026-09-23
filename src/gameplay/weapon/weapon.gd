@@ -261,6 +261,24 @@ signal melee_swung(hit: bool, staggered: bool, at: Vector3)
 ## simply left on.
 @export var muzzle_flash_decay_time := 0.035
 
+@export_group("Hold motion")
+## How far the weapon drops (local -Y) while a hold interaction — a medkit, an
+## armed Signal relay — is in progress, in metres. Kept out of the way rather
+## than left raised, since a raised gun during a two-second hold reads as
+## "still ready", which during a hold is untrue — try_fire refuses while one
+## is in progress. The pose is the visible half of that rule.
+@export var hold_drop_distance := 0.18
+## How far the weapon cants (around its own local Z) while a hold is in
+## progress, in degrees. Same shorthand as the sprint carry's cant — a dropped,
+## canted weapon reads as "not the point of this moment" at a glance.
+@export var hold_cant_degrees := 15.0
+## Seconds to ease into the lowered pose once a hold begins.
+@export var hold_ease_in_time := 0.2
+## Seconds to ease back to rest once the hold completes or is let go. Slower
+## than the way down, so recovering reads as the weapon coming back up to meet
+## the player rather than snapping into place.
+@export var hold_ease_out_time := 0.25
+
 @export_group("Sprint carry")
 ## How far the weapon drops (local -Y) at full sprint, in metres. A few
 ## centimetres — this is a carry pose, not a holster — so it reads as "held
@@ -351,6 +369,16 @@ var _fire_start_weight := 0.0
 var _sprint_weight := 0.0
 var _sprint_offset := Vector3.ZERO
 var _sprint_roll := 0.0
+## Hold motion: same 0..1 ramp shape as `_sprint_weight` above, and for the
+## same reason — a hold interaction can start or stop on any frame (the key
+## can be let go, or the hold can complete, at any point), so there is no
+## fixed-length animation to trigger this from either. Driven by
+## `Interactor.hold_progress()` through `_owner_body()`, read with the same
+## `has_method` indirection `_tick_sprint_motion` uses for `stance()` — this
+## file has no hard dependency on the player or interactor classes.
+var _hold_weight := 0.0
+var _hold_offset := Vector3.ZERO
+var _hold_roll := 0.0
 ## Swap dip and roll: the outgoing weapon drops out of view over the first
 ## half of a swap, the visible model hands over at the midpoint (see
 ## `_tick_swap`), and the incoming weapon rises back into place over the
@@ -410,6 +438,7 @@ func _process(delta: float) -> void:
 	_tick_fire_motion(delta)
 	_tick_throw_motion(delta)
 	_tick_sprint_motion(delta)
+	_tick_hold_motion(delta)
 	_tick_muzzle_flash(delta)
 	_tick_viewmodel(delta)
 
@@ -515,6 +544,9 @@ func _equip_now(target: WeaponTypes.Kind) -> void:
 	_sprint_weight = 0.0
 	_sprint_offset = Vector3.ZERO
 	_sprint_roll = 0.0
+	_hold_weight = 0.0
+	_hold_offset = Vector3.ZERO
+	_hold_roll = 0.0
 	_swap_offset = Vector3.ZERO
 	_swap_roll = 0.0
 	_swap_model_shown = false
@@ -584,6 +616,9 @@ func equip(target: WeaponTypes.Kind) -> bool:
 	_sprint_weight = 0.0
 	_sprint_offset = Vector3.ZERO
 	_sprint_roll = 0.0
+	_hold_weight = 0.0
+	_hold_offset = Vector3.ZERO
+	_hold_roll = 0.0
 	_throw_anim_time = 0.0
 	_throw_anim_active = false
 	_throw_offset = Vector3.ZERO
@@ -849,6 +884,9 @@ func _tick_dry_resupply(delta: float) -> void:
 func try_throw_decoy() -> Decoy:
 	if reserve_ammo <= 0 or _throw_cooldown_remaining > 0.0:
 		return null
+	# Hands busy with a hold — the same rule as try_fire.
+	if _is_holding_interaction():
+		return null
 
 	reserve_ammo -= 1
 	_throw_cooldown_remaining = throw_cooldown
@@ -971,6 +1009,9 @@ func melee_cooldown_remaining() -> float:
 func try_melee() -> bool:
 	if not _input_enabled or _melee_cooldown_remaining > 0.0:
 		return false
+	# Hands busy with a hold — the same rule as try_fire.
+	if _is_holding_interaction():
+		return false
 	if _camera == null:
 		return false
 
@@ -1029,6 +1070,14 @@ func try_fire() -> bool:
 	if _swap_remaining > 0.0:
 		return false
 	if _is_reloading or _cooldown_remaining > 0.0:
+		return false
+	# Hands busy. A medkit is meant to cost "two seconds of standing still, so
+	# it is still a decision", and arming a relay is meant to be exposed — but
+	# nothing stopped the trigger during a hold, so both could be done while
+	# fighting and neither was a decision at all. The weapon is visibly lowered
+	# for the length of a hold (_tick_hold_motion); letting go of the interact
+	# key brings it back up, which is the choice the design asks for.
+	if _is_holding_interaction():
 		return false
 
 	if magazine_ammo <= 0:
@@ -1317,22 +1366,23 @@ func _tick_viewmodel(delta: float) -> void:
 		target_sway + bob, clampf(sway_smoothing * delta, 0.0, 1.0)
 	)
 
-	# Melee, reload, the swap dip, the fire kick, the throw flick and the
-	# sprint carry each write a temporary offset elsewhere (see
+	# Melee, reload, the swap dip, the fire kick, the throw flick, the sprint
+	# carry and the hold motion each write a temporary offset elsewhere (see
 	# `_tick_melee_motion`, `_tick_reload_motion`, `_tick_swap_motion`,
-	# `_tick_fire_motion`, `_tick_throw_motion` and `_tick_sprint_motion`);
-	# summed in here rather than in a second `position` write, so this stays
-	# the only place the weapon's position is actually set.
+	# `_tick_fire_motion`, `_tick_throw_motion`, `_tick_sprint_motion` and
+	# `_tick_hold_motion`); summed in here rather than in a second `position`
+	# write, so this stays the only place the weapon's position is actually
+	# set.
 	_action_offset = (
 		_melee_offset + _reload_offset + _swap_offset + _fire_offset
-		+ _throw_offset + _sprint_offset
+		+ _throw_offset + _sprint_offset + _hold_offset
 	)
 	position = _rest_position + _sway_offset + _action_offset
 	# The weapon node's own rotation has two writers and no more: rotation.z
-	# sums the reload roll, the swap roll and the sprint cant, rotation.x is
-	# the fire kick's muzzle tip. Recoil still drives the camera's pitch,
-	# never this.
-	rotation.z = _reload_roll + _swap_roll + _sprint_roll
+	# sums the reload roll, the swap roll, the sprint cant and the hold cant,
+	# rotation.x is the fire kick's muzzle tip. Recoil still drives the
+	# camera's pitch, never this.
+	rotation.z = _reload_roll + _swap_roll + _sprint_roll + _hold_roll
 	rotation.x = _fire_tip
 
 
@@ -1529,6 +1579,57 @@ func _tick_sprint_motion(delta: float) -> void:
 
 	_sprint_offset = Vector3(0.0, -sprint_carry_drop_distance, 0.0) * weight
 	_sprint_roll = deg_to_rad(sprint_carry_roll_degrees) * weight
+
+
+## Eases the weapon down and canted while the player is mid-hold — a medkit, an
+## armed Signal relay — and back up once the hold completes or is let go.
+##
+## Design intent: a hold interaction should read as the player's attention
+## leaving the weapon, the same way the sprint carry reads as their attention
+## leaving aim. Implements that reading for the same reason `_tick_sprint_motion`
+## exists — a raised gun during a two-second stand-still otherwise looks like
+## nothing is happening.
+##
+## Same ramp shape as `_tick_sprint_motion`: a hold, like a sprint, can begin
+## or end on any given frame — the player can release the key, or the hold can
+## finish, at any point — so there is no fixed-length animation to trigger this
+## from. `_hold_weight` is instead a plain 0..1 ramp advanced at a constant
+## rate toward whichever end `Interactor.hold_progress()` points at, with
+## smoothstep applied on top at the point of use so the pose still eases rather
+## than moving at constant speed. Unlike the sprint carry, the two directions
+## use different rates — `hold_ease_in_time` down, `hold_ease_out_time` up —
+## because the design calls for lowering and raising to read as different
+## costs, not one motion played forward and back.
+##
+## Reads the interactor through `get`/`has_method` rather than typing the body
+## as `Player`, for the same reason `_tick_sprint_motion` reads `stance()` that
+## way: this file must not take a hard dependency on the player or interactor
+## classes to answer a question about a stance.
+func _tick_hold_motion(delta: float) -> void:
+	var holding := _is_holding_interaction()
+
+	var ease_time := hold_ease_in_time if holding else hold_ease_out_time
+	var rate := 1.0 / maxf(ease_time, 0.001)
+	_hold_weight = move_toward(_hold_weight, 1.0 if holding else 0.0, rate * delta)
+	var weight := smoothstep(0.0, 1.0, _hold_weight)
+
+	_hold_offset = Vector3(0.0, -hold_drop_distance, 0.0) * weight
+	_hold_roll = deg_to_rad(hold_cant_degrees) * weight
+
+
+## Whether the owner is part-way through a hold interaction — a medkit, a
+## Signal relay. Read through get/has_method so this file keeps no hard
+## dependency on the player or interactor classes.
+func _is_holding_interaction() -> bool:
+	var body := _owner_body()
+	if body == null:
+		return false
+	var interactor: Variant = body.get("interactor")
+	return (
+		interactor != null
+		and interactor.has_method("hold_progress")
+		and float(interactor.hold_progress()) > 0.0
+	)
 
 
 ## Record look movement so the viewmodel can lag behind it.
