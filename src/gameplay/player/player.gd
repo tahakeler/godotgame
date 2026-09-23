@@ -119,6 +119,27 @@ enum Stance { WALKING, SPRINTING, CROUCHING }
 ## settings. Zero disables camera shake completely.
 var shake_scale := 1.0
 
+@export_group("Head bob")
+## How far the view dips vertically per step at a walk, in metres. Kept small
+## on purpose — the weapon viewmodel already carries its own bob (see
+## weapon.gd bob_amount), and two big bobs stacked together reads as seasick.
+@export var head_bob_height := 0.012
+## How far the view sways sideways per step, in metres. Smaller than the
+## vertical dip, so the sway reads as weight shifting underfoot rather than a
+## second beat competing with the footstep rhythm.
+@export var head_bob_side := 0.006
+## Amplitude multiplier while crouched, on top of the speed-based scale
+## below. A crouching player is placing each foot deliberately, not striding.
+@export var head_bob_crouch_scale := 0.5
+## Horizontal speed at which the bob reaches its authored size. Sprint speed
+## sits above this, so sprinting still overshoots to a bigger bob rather than
+## capping out at the same size as a walk.
+@export var head_bob_reference_speed := 4.5
+## How quickly bob amplitude chases its speed-based target, so starting or
+## stopping a stride fades the bob in and out instead of snapping the camera
+## level the instant the player releases a movement key.
+@export var head_bob_ease := 8.0
+
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
 @onready var health: Health = $Health
@@ -139,6 +160,17 @@ var _landing_target := 0.0
 ## and head.position.z have no other writer, which is what makes this safe.
 var _flinch := Vector2.ZERO
 var _flinch_target := Vector2.ZERO
+## Head bob amplitude, eased toward a speed-based target every frame rather
+## than snapping — see _tick_head_bob. _bob_vertical and _bob_side are the
+## per-frame offsets composed into head.position.y (_tick_eye_height) and
+## head.position.x (_tick_flinch), the two functions that already own those
+## axes. _step_sign flips on every footstep (in _tick_footsteps) so the
+## sideways sway alternates left/right instead of swaying the same way twice
+## in a row.
+var _bob_amplitude := 0.0
+var _bob_vertical := 0.0
+var _bob_side := 0.0
+var _step_sign := 1.0
 ## The lean must lerp from its own value, not from the composed
 ## head.rotation.z — anything else composed onto that axis (the flinch roll)
 ## would otherwise feed back into the lean's source every frame and linger.
@@ -326,6 +358,7 @@ func _physics_process(delta: float) -> void:
 	_tick_landing(delta)
 	_tick_lean(input_vector, delta)
 	_tick_flinch(delta)
+	_tick_head_bob(delta)
 	_tick_footsteps(delta)
 	_tick_shake(delta)
 
@@ -343,6 +376,7 @@ func _tick_footsteps(delta: float) -> void:
 	_distance_since_footstep += speed * delta
 	if _distance_since_footstep >= footstep_distance:
 		_distance_since_footstep = 0.0
+		_step_sign = -_step_sign
 		footstep_taken.emit()
 
 
@@ -445,6 +479,11 @@ func reset_to_spawn() -> void:
 	_flinch = Vector2.ZERO
 	_flinch_target = Vector2.ZERO
 	_lean_roll = 0.0
+	_distance_since_footstep = 0.0
+	_bob_amplitude = 0.0
+	_bob_vertical = 0.0
+	_bob_side = 0.0
+	_step_sign = 1.0
 	head.position.x = 0.0
 	head.position.z = 0.0
 	head.rotation.z = 0.0
@@ -560,10 +599,11 @@ func _tick_eye_height(delta: float) -> void:
 		crouch_eye_height if _stance == Stance.CROUCHING else stand_eye_height
 	)
 	_eye_height = move_toward(_eye_height, target, stance_ease_speed * delta)
-	# The landing drop is composed into the stance height rather than written
-	# separately, because both want to own head.position.y and the last writer
-	# in a frame would otherwise simply erase the other.
-	head.position.y = _eye_height - _landing_offset
+	# The landing drop and the head bob are composed into the stance height
+	# rather than written separately, because all three want to own
+	# head.position.y and the last writer in a frame would otherwise simply
+	# erase the others.
+	head.position.y = _eye_height - _landing_offset + _bob_vertical
 
 	var fov_target := (
 		_base_fov + sprint_fov_bonus if _stance == Stance.SPRINTING else _base_fov
@@ -693,10 +733,12 @@ func _tick_lean(input_vector: Vector2, delta: float) -> void:
 
 ## Knock the view away from a hit, then settle it back.
 ##
-## head.position.x and head.position.z have no other writer, which is what
-## makes it safe to push them here — unlike the axes _tick_shake, _tick_lean
-## and _tick_eye_height already own, where a second write would just fight
-## the first one every frame. take_damage sets _flinch_target the instant a
+## head.position.z has no other writer, which is what makes it safe to push
+## here — unlike the axes _tick_shake, _tick_lean and _tick_eye_height already
+## own, where a second write would just fight the first one every frame.
+## head.position.x is shared with the head bob's sideways sway; the two are
+## composed together in the assignment below rather than each writing on its
+## own, for the same reason. take_damage sets _flinch_target the instant a
 ## hit lands; this only ever chases that target and, once caught, chases zero.
 func _tick_flinch(delta: float) -> void:
 	# A live (non-zero) target means the shove is still outbound; once it is
@@ -709,5 +751,38 @@ func _tick_flinch(delta: float) -> void:
 	if chasing_shove and _flinch.is_equal_approx(_flinch_target):
 		_flinch_target = Vector2.ZERO
 
-	head.position.x = _flinch.x
+	head.position.x = _flinch.x + _bob_side
 	head.position.z = _flinch.y
+
+
+## Head bob rides the same distance accumulator the footstep sound uses
+## (_distance_since_footstep) instead of running its own timer, so the bob
+## can never drift apart from the footfall it is supposed to land on. Runs
+## before _tick_footsteps in _physics_process, so phase is one frame behind
+## the distance travelled this tick — the same lag _tick_eye_height already
+## accepts from _landing_offset, and just as imperceptible here.
+func _tick_head_bob(delta: float) -> void:
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	var stance_scale := head_bob_crouch_scale if _stance == Stance.CROUCHING else 1.0
+
+	var target := 0.0
+	if is_on_floor():
+		target = clampf(horizontal_speed / head_bob_reference_speed, 0.0, 1.4)
+	target *= stance_scale * shake_scale
+
+	# Eased rather than snapped, so releasing the move key fades the bob out
+	# instead of the camera jumping back to level mid-stride.
+	_bob_amplitude = lerpf(_bob_amplitude, target, clampf(head_bob_ease * delta, 0.0, 1.0))
+
+	# 0..1 across one footstep, resetting to 0 exactly when the accumulator
+	# wraps — the same instant the footstep sound fires.
+	var phase := _distance_since_footstep / maxf(footstep_distance, 0.001)
+	# cos(phase * TAU) is +1 at phase 0 and 1 (the footfall) and -1 at phase
+	# 0.5 (mid-stride), so negating it puts the dip — the low point — right
+	# on the footfall, which is the whole point of driving this off the
+	# footstep accumulator rather than an independent timer.
+	_bob_vertical = -head_bob_height * _bob_amplitude * cos(phase * TAU)
+	# Half that frequency, and sign-flipped by _tick_footsteps on every
+	# footfall, so the sway crosses centre on each step and alternates which
+	# way it leans instead of swaying the same direction twice in a row.
+	_bob_side = head_bob_side * _bob_amplitude * _step_sign * sin(phase * PI)
