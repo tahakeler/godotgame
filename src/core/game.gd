@@ -204,6 +204,7 @@ func _wire_audio() -> void:
 	spawner.zombie_noticed_player.connect(
 		func(at: Vector3, kind: ZombieTypes.Kind) -> void:
 			sounds.play_at(SoundBank.notice_event(kind), at)
+			ambience.on_first_notice()
 	)
 
 	# A Brute announces itself with something lower than the crowd, so it can be
@@ -581,6 +582,8 @@ func start_round() -> void:
 	dread.reset()
 	dread.set_active(true)
 
+	ambience.begin_round()
+
 	spawner.reset()
 	spawner.begin(arena, player)
 
@@ -786,6 +789,7 @@ func _on_player_died() -> void:
 		if player.last_attacker_kind >= 0:
 			Records.tally_death(player.last_attacker_kind)
 		_end_round(RoundState.LOST)
+		ambience.fade_out()
 
 
 func _end_round(result: RoundState) -> void:
