@@ -158,9 +158,12 @@ func threat_level(from: Vector3) -> float:
 
 ## Pass one zombie's belief to the ones near it.
 ##
-## Straight-line range on purpose, unlike hearing. This is a crowd noticing
-## which way the one next to it is going, not a sound carrying down a corridor,
-## and it should not reach through a wall into the next chamber.
+## Measured along walkable routes, like hearing — see _scream_reaches. This was
+## once a straight-line range, on the reasoning that it is a crowd noticing
+## which way its neighbour is going and "should not reach through a wall into
+## the next chamber". On an open cave the straight line roughly honoured that;
+## on the labyrinth it did the opposite, reaching through every wall in range.
+## The route is what actually keeps the alarm out of the next chamber.
 ## The radius is the raiser's own rather than the spawner's flat one, because
 ## how far a zombie's voice carries is a property of the zombie. A Screamer
 ## reaches most of a chamber complex; a Stalker reaches nobody at all. Both are
