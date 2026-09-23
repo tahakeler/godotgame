@@ -92,6 +92,23 @@ enum Stance { WALKING, SPRINTING, CROUCHING }
 ## How quickly the roll follows the input, and returns when it stops.
 @export var lean_speed := 7.0
 
+@export_group("Hit flinch")
+## How far the view is shoved sideways/back at full strength, in metres. Small
+## on purpose — this reads as a shove, not a stagger the player has to fight.
+@export var flinch_distance := 0.06
+## How far the view rolls to match the shove, in degrees. Composed into the
+## same head.rotation.z assignment _tick_lean already owns, not a second write.
+@export var flinch_roll_degrees := 2.5
+## How quickly the view reaches the shoved position — fast, so it reads as an
+## impact rather than a lean.
+@export var flinch_out_speed := 0.6
+## How quickly the view settles back afterwards — slower than the shove out,
+## so the return does not itself read as a second hit.
+@export var flinch_recover_speed := 0.17
+## Damage at which the flinch reaches full strength. A Brute's claw is close
+## to this; a Shambler's graze is a fraction of it.
+@export var flinch_full_damage := 35.0
+
 @export_group("Camera shake")
 @export var shake_decay := 2.4
 @export var shake_frequency := 26.0
@@ -117,6 +134,15 @@ var _distance_since_footstep := 0.0
 ## Current landing drop, in metres, composed into the stance eye height.
 var _landing_offset := 0.0
 var _landing_target := 0.0
+## Directional hit flinch, in the head's local x/z plane: x is sideways, y
+## (despite the name) stands in for local z, forward/back. head.position.x
+## and head.position.z have no other writer, which is what makes this safe.
+var _flinch := Vector2.ZERO
+var _flinch_target := Vector2.ZERO
+## The lean must lerp from its own value, not from the composed
+## head.rotation.z — anything else composed onto that axis (the flinch roll)
+## would otherwise feed back into the lean's source every frame and linger.
+var _lean_roll := 0.0
 ## Whether the player was on the floor last frame, and how fast they were
 ## falling before they touched it. Sampled before move_and_slide, because that
 ## is the call that zeroes the downward velocity on contact.
@@ -163,7 +189,15 @@ func take_damage(amount: float, from_position := Vector3.ZERO,
 	if applied <= 0.0:
 		return 0.0
 
-	damage_taken.emit(applied, get_angle_to_source(from_position))
+	var bearing := get_angle_to_source(from_position)
+	damage_taken.emit(applied, bearing)
+
+	# Scaled by the accessibility shake setting at the point of entry, same as
+	# add_trauma below — a player who turned shake off has said they do not
+	# want the view shoved either, not just that they do not want it shaken.
+	var strength := clampf(applied / flinch_full_damage, 0.0, 1.0) * shake_scale
+	_flinch_target = Vector2(-sin(bearing), cos(bearing)) * flinch_distance * strength
+
 	return applied
 
 
@@ -291,6 +325,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_tick_landing(delta)
 	_tick_lean(input_vector, delta)
+	_tick_flinch(delta)
 	_tick_footsteps(delta)
 	_tick_shake(delta)
 
@@ -407,6 +442,12 @@ func reset_to_spawn() -> void:
 	camera.fov = _base_fov
 	_eye_height = stand_eye_height
 	head.position.y = stand_eye_height
+	_flinch = Vector2.ZERO
+	_flinch_target = Vector2.ZERO
+	_lean_roll = 0.0
+	head.position.x = 0.0
+	head.position.z = 0.0
+	head.rotation.z = 0.0
 	_set_stance(Stance.WALKING)
 	health.reset()
 
@@ -641,6 +682,32 @@ func _tick_lean(input_vector: Vector2, delta: float) -> void:
 	if is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.6:
 		wanted = -input_vector.x * deg_to_rad(lean_degrees)
 
-	head.rotation.z = lerpf(
-		head.rotation.z, wanted, clampf(lean_speed * delta, 0.0, 1.0)
-	)
+	_lean_roll = lerpf(_lean_roll, wanted, clampf(lean_speed * delta, 0.0, 1.0))
+
+	# The flinch's roll rides on top of the lean rather than through a second
+	# write to head.rotation.z — _tick_lean is the one place that axis is
+	# assigned, so both effects have to leave through this single line.
+	var flinch_roll := -_flinch.x / maxf(flinch_distance, 0.001) * deg_to_rad(flinch_roll_degrees)
+	head.rotation.z = _lean_roll + flinch_roll
+
+
+## Knock the view away from a hit, then settle it back.
+##
+## head.position.x and head.position.z have no other writer, which is what
+## makes it safe to push them here — unlike the axes _tick_shake, _tick_lean
+## and _tick_eye_height already own, where a second write would just fight
+## the first one every frame. take_damage sets _flinch_target the instant a
+## hit lands; this only ever chases that target and, once caught, chases zero.
+func _tick_flinch(delta: float) -> void:
+	# A live (non-zero) target means the shove is still outbound; once it is
+	# reached the target drops to zero and every later call is the recovery
+	# leg, which is what lets one move_toward serve both speeds.
+	var chasing_shove := not _flinch_target.is_zero_approx()
+	var speed := flinch_out_speed if chasing_shove else flinch_recover_speed
+	_flinch = _flinch.move_toward(_flinch_target, speed * delta)
+
+	if chasing_shove and _flinch.is_equal_approx(_flinch_target):
+		_flinch_target = Vector2.ZERO
+
+	head.position.x = _flinch.x
+	head.position.z = _flinch.y
