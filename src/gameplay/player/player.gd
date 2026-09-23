@@ -119,6 +119,30 @@ enum Stance { WALKING, SPRINTING, CROUCHING }
 ## settings. Zero disables camera shake completely.
 var shake_scale := 1.0
 
+@export_group("Death")
+## How long the collapse takes from the killing blow to fully down, in
+## seconds.
+@export var death_duration := 0.9
+## Eye height once the collapse finishes, in metres. Near the floor rather
+## than flat on it, so the last frame still reads as a body coming to rest
+## instead of the camera clipping into the ground.
+@export var death_eye_height := 0.35
+## How far the view has rolled to one side by the time the collapse
+## finishes, in degrees.
+@export var death_roll_degrees := 70.0
+## Fraction of the collapse's timeline spent on the initial knee-buckle,
+## before the slower body-fall takes over.
+@export_range(0.0, 1.0) var death_knee_fraction := 0.15
+## Fraction of the total drop covered during that initial knee-buckle, so the
+## first visible motion reads as the knees giving out rather than the whole
+## body already sinking.
+@export_range(0.0, 1.0) var death_knee_depth_fraction := 0.35
+## Camera shake added the instant death starts — the same kind of jolt a hard
+## landing gives, scaled up for a body giving out entirely. Routed through
+## add_trauma(), same as landing_trauma, so a player who turned shake off
+## does not get shaken by this either.
+@export var death_trauma := 0.35
+
 @export_group("Head bob")
 ## How far the view dips vertically per step at a walk, in metres. Kept small
 ## on purpose — the weapon viewmodel already carries its own bob (see
@@ -189,6 +213,21 @@ var _stance: int = Stance.WALKING
 ## the body moving instead of the camera teleporting.
 var _eye_height := 0.0
 var _base_fov := 0.0
+## True from the moment health reaches zero. Gates _tick_death and tells
+## _tick_head_bob / _tick_lean to stop reacting to residual velocity or
+## input, so a corpse does not keep wobbling on whatever motion it had at the
+## instant it died.
+var _dying := false
+var _death_time := 0.0
+## Composed into head.position.y by _tick_eye_height, the axis's one writer.
+var _death_drop := 0.0
+## Composed into head.rotation.z by _tick_lean, the axis's one writer.
+var _death_roll := 0.0
+## Which way the collapse rolls, captured once at the moment of death from
+## whichever side the last hit had already shoved the view toward — a body
+## drops toward the side it was leaning, not a fixed direction chosen ahead
+## of time.
+var _death_roll_sign := 1.0
 
 ## The ZombieTypes.Kind of whichever zombie most recently landed contact,
 ## or -1 when nothing has. Kept separate from take_damage() rather than added
@@ -205,7 +244,7 @@ func _ready() -> void:
 	_eye_height = stand_eye_height
 	head.position.y = stand_eye_height
 	_apply_collider_height(stand_height)
-	health.died.connect(func() -> void: died.emit())
+	health.died.connect(_on_health_died)
 	capture_mouse()
 
 
@@ -248,6 +287,17 @@ func take_damage(amount: float, from_position := Vector3.ZERO,
 ## and its signature must not change for them.
 func note_attacker(kind: int) -> void:
 	last_attacker_kind = kind
+
+
+## Starts the death collapse (see _tick_death) and forwards the Health
+## component's signal on as the player's own died signal, which is what the
+## round manager and HUD actually listen for.
+func _on_health_died() -> void:
+	_dying = true
+	_death_time = 0.0
+	_death_roll_sign = -1.0 if _flinch.x < 0.0 else 1.0
+	add_trauma(death_trauma)
+	died.emit()
 
 
 ## Add camera shake. 0.2 is a gunshot, 0.6 is being hit.
@@ -335,6 +385,11 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# Runs first: _tick_stance (below) calls _tick_eye_height, which composes
+	# _death_drop into head.position.y this same frame, so the collapse has to
+	# be current before that read rather than a frame behind it.
+	_tick_death(delta)
+
 	var input_vector := Input.get_vector(
 		"move_left", "move_right", "move_forward", "move_back"
 	)
@@ -504,6 +559,13 @@ func reset_to_spawn() -> void:
 	head.position.x = 0.0
 	head.position.z = 0.0
 	head.rotation.z = 0.0
+	# Stand the player back up instantly rather than easing out of the
+	# collapse — a restart is a clean slate, not a recovery the player watches.
+	_dying = false
+	_death_time = 0.0
+	_death_drop = 0.0
+	_death_roll = 0.0
+	_death_roll_sign = 1.0
 	_set_stance(Stance.WALKING)
 	health.reset()
 	last_attacker_kind = -1
@@ -617,11 +679,11 @@ func _tick_eye_height(delta: float) -> void:
 		crouch_eye_height if _stance == Stance.CROUCHING else stand_eye_height
 	)
 	_eye_height = move_toward(_eye_height, target, stance_ease_speed * delta)
-	# The landing drop and the head bob are composed into the stance height
-	# rather than written separately, because all three want to own
-	# head.position.y and the last writer in a frame would otherwise simply
-	# erase the others.
-	head.position.y = _eye_height - _landing_offset + _bob_vertical
+	# The landing drop, the head bob, and the death collapse are all composed
+	# into the stance height rather than written separately, because all four
+	# want to own head.position.y and the last writer in a frame would
+	# otherwise simply erase the others.
+	head.position.y = _eye_height - _landing_offset + _bob_vertical - _death_drop
 
 	var fov_target := (
 		_base_fov + sprint_fov_bonus if _stance == Stance.SPRINTING else _base_fov
@@ -724,6 +786,49 @@ func _tick_landing(delta: float) -> void:
 		_landing_target = 0.0
 
 
+## Collapse the view on death: knees buckle first in a quick partial drop,
+## then the rest of the fall eases out so the view lands rather than slides
+## to a stop. Composes into head.position.y (_tick_eye_height) and
+## head.rotation.z (_tick_lean), the two axes that already own those writes.
+func _tick_death(delta: float) -> void:
+	if not _dying:
+		return
+
+	_death_time = minf(_death_time + delta, death_duration)
+	var t := _death_time / maxf(death_duration, 0.001)
+	var progress := _death_collapse_progress(t)
+
+	# Drop relative to the eye height the player actually had, not always
+	# standing height — stance input is disabled on death so _eye_height holds
+	# still, but a player who died crouched (_eye_height == crouch_eye_height,
+	# 1.05) has less distance to fall than a standing one, and computing this
+	# against stand_eye_height unconditionally put the crouched case's camera
+	# under the floor. Clamped at zero for the same reason: death_eye_height
+	# (0.35) sits below crouch_eye_height, but nothing here guarantees that
+	# ordering stays true if either is retuned.
+	_death_drop = progress * maxf(_eye_height - death_eye_height, 0.0)
+	_death_roll = progress * deg_to_rad(death_roll_degrees) * _death_roll_sign
+
+
+## 0..1 collapse progress for a given 0..1 point in the death timeline.
+##
+## Two eased phases chained on one timeline rather than a single ease-out for
+## the whole duration, because one curve reads as gentle from the very first
+## frame — this needs the opening instant to read as a knee giving out, and
+## only then the slower, heavier fall that finishes by easing to a stop
+## instead of sliding into it.
+func _death_collapse_progress(t: float) -> float:
+	var knee_span := maxf(death_knee_fraction, 0.001)
+	if t <= death_knee_fraction:
+		var knee_t := t / knee_span
+		return death_knee_depth_fraction * (1.0 - pow(1.0 - knee_t, 2.0))
+
+	var rest_span := maxf(1.0 - death_knee_fraction, 0.001)
+	var rest_t := (t - death_knee_fraction) / rest_span
+	var rest_ease := 1.0 - pow(1.0 - rest_t, 3.0)
+	return death_knee_depth_fraction + (1.0 - death_knee_depth_fraction) * rest_ease
+
+
 ## Roll the view into a sideways move.
 ##
 ## On the head rather than on the camera, deliberately. _tick_shake owns the
@@ -734,19 +839,20 @@ func _tick_landing(delta: float) -> void:
 func _tick_lean(input_vector: Vector2, delta: float) -> void:
 	var wanted := 0.0
 
-	# Only while actually moving under power. Leaning while stood still — which
-	# holding a strafe key against a wall would do — is a camera tilting for no
-	# reason the player can see.
-	if is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.6:
+	# Only while actually moving under power, and never while dying — input is
+	# disabled on death, but velocity can still be non-zero for a moment, and a
+	# corpse leaning into that reads as a bug, not a collapse.
+	if not _dying and is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.6:
 		wanted = -input_vector.x * deg_to_rad(lean_degrees)
 
 	_lean_roll = lerpf(_lean_roll, wanted, clampf(lean_speed * delta, 0.0, 1.0))
 
-	# The flinch's roll rides on top of the lean rather than through a second
-	# write to head.rotation.z — _tick_lean is the one place that axis is
-	# assigned, so both effects have to leave through this single line.
+	# The flinch's roll and the death roll both ride on top of the lean rather
+	# than through a second write to head.rotation.z — _tick_lean is the one
+	# place that axis is assigned, so every effect has to leave through this
+	# single line.
 	var flinch_roll := -_flinch.x / maxf(flinch_distance, 0.001) * deg_to_rad(flinch_roll_degrees)
-	head.rotation.z = _lean_roll + flinch_roll
+	head.rotation.z = _lean_roll + flinch_roll + _death_roll
 
 
 ## Knock the view away from a hit, then settle it back.
@@ -784,7 +890,10 @@ func _tick_head_bob(delta: float) -> void:
 	var stance_scale := head_bob_crouch_scale if _stance == Stance.CROUCHING else 1.0
 
 	var target := 0.0
-	if is_on_floor():
+	# A dying body can still be sliding on residual velocity for a moment;
+	# without the _dying check the bob would keep reading footsteps off a
+	# corpse instead of easing out with the rest of the collapse.
+	if is_on_floor() and not _dying:
 		target = clampf(horizontal_speed / head_bob_reference_speed, 0.0, 1.4)
 	target *= stance_scale * shake_scale
 
