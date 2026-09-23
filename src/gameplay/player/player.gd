@@ -190,6 +190,14 @@ var _stance: int = Stance.WALKING
 var _eye_height := 0.0
 var _base_fov := 0.0
 
+## The ZombieTypes.Kind of whichever zombie most recently landed contact,
+## or -1 when nothing has. Kept separate from take_damage() rather than added
+## as a parameter there: take_damage() is also called by non-zombie sources
+## (and its signature is depended on by other callers), so attribution is
+## recorded as its own step immediately before the damage call instead of
+## widening a shared entry point for one caller's bookkeeping.
+var last_attacker_kind := -1
+
 
 func _ready() -> void:
 	_spawn_transform = global_transform
@@ -231,6 +239,15 @@ func take_damage(amount: float, from_position := Vector3.ZERO,
 	_flinch_target = Vector2(-sin(bearing), cos(bearing)) * flinch_distance * strength
 
 	return applied
+
+
+## Records which zombie kind is about to land a hit, for the STATS screen's
+## "killed by" breakdown. Called by the attacker immediately before its own
+## take_damage() call rather than folded into take_damage() itself, since
+## take_damage() is a shared entry point other, non-zombie sources also call
+## and its signature must not change for them.
+func note_attacker(kind: int) -> void:
+	last_attacker_kind = kind
 
 
 ## Add camera shake. 0.2 is a gunshot, 0.6 is being hit.
@@ -489,6 +506,7 @@ func reset_to_spawn() -> void:
 	head.rotation.z = 0.0
 	_set_stance(Stance.WALKING)
 	health.reset()
+	last_attacker_kind = -1
 
 
 ## --- Stance -----------------------------------------------------------------

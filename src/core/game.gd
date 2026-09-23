@@ -752,12 +752,14 @@ func _on_levelled_up(level: int, choices: Array[Dictionary]) -> void:
 
 
 func _on_player_died() -> void:
-	# Records.tally_death(kind) would belong here, crediting whichever zombie
-	# landed the killing blow, but Health.take_damage() and both the
-	# health.died and player.died signals carry no attacker information.
-	# Plumbing that through is a damage-path change outside this task's
-	# scope, so career deaths-by-kind is left unrecorded for now.
+	# health.died and player.died still carry no attacker information — the
+	# damage path itself is unchanged. Instead, the zombie that lands contact
+	# calls player.note_attacker() immediately before its own take_damage()
+	# call, so last_attacker_kind is whichever zombie's hit finally emptied
+	# the health bar, cheap to check here without touching that path.
 	if state == RoundState.PLAYING:
+		if player.last_attacker_kind >= 0:
+			Records.tally_death(player.last_attacker_kind)
 		_end_round(RoundState.LOST)
 
 
