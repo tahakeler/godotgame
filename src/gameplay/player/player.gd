@@ -66,6 +66,32 @@ enum Stance { WALKING, SPRINTING, CROUCHING }
 @export var pitch_limit_degrees := 89.0
 @export var invert_look_y := false
 
+@export_group("Landing")
+## Fall speed below which a landing is not worth feeling, in metres per second.
+##
+## Stepping off a ledge and walking down a ramp both land at some speed, and a
+## dip on every one of those reads as a camera that cannot keep still.
+@export var landing_speed_floor := 4.5
+## Fall speed at which the landing dip is at full depth.
+@export var landing_speed_full := 13.0
+## How far the view drops at full depth, in metres.
+@export var landing_dip := 0.16
+## How quickly the view falls into the dip and rises back out of it.
+@export var landing_fall_speed := 3.4
+@export var landing_recover_speed := 1.9
+## Camera shake added by a landing at full depth. Small: a landing is a thud
+## underfoot, not an explosion, and the drop is doing most of the work.
+@export var landing_trauma := 0.22
+
+@export_group("Lean")
+## How far the view rolls into a sideways move, in degrees.
+##
+## Deliberately small. Enough that strafing has a direction rather than being a
+## slide, not so much that the horizon becomes something the player is fighting.
+@export var lean_degrees := 1.3
+## How quickly the roll follows the input, and returns when it stops.
+@export var lean_speed := 7.0
+
 @export_group("Camera shake")
 @export var shake_decay := 2.4
 @export var shake_frequency := 26.0
@@ -88,6 +114,14 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 
 var _look_enabled := true
 var _spawn_transform: Transform3D
 var _distance_since_footstep := 0.0
+## Current landing drop, in metres, composed into the stance eye height.
+var _landing_offset := 0.0
+var _landing_target := 0.0
+## Whether the player was on the floor last frame, and how fast they were
+## falling before they touched it. Sampled before move_and_slide, because that
+## is the call that zeroes the downward velocity on contact.
+var _was_on_floor := true
+var _fall_speed := 0.0
 ## Shake builds up from events and decays continuously. Squaring it on use
 ## means small knocks stay subtle while a burst of hits reads as violent.
 var _trauma := 0.0
@@ -248,7 +282,15 @@ func _physics_process(delta: float) -> void:
 	velocity.z = horizontal.z
 
 	_try_step_up(delta)
+
+	# Sampled before the move: move_and_slide zeroes the downward velocity the
+	# moment the floor is touched, so afterwards there is nothing left to say
+	# how hard the landing was.
+	_fall_speed = maxf(0.0, -velocity.y)
+
 	move_and_slide()
+	_tick_landing(delta)
+	_tick_lean(input_vector, delta)
 	_tick_footsteps(delta)
 	_tick_shake(delta)
 
@@ -477,7 +519,10 @@ func _tick_eye_height(delta: float) -> void:
 		crouch_eye_height if _stance == Stance.CROUCHING else stand_eye_height
 	)
 	_eye_height = move_toward(_eye_height, target, stance_ease_speed * delta)
-	head.position.y = _eye_height
+	# The landing drop is composed into the stance height rather than written
+	# separately, because both want to own head.position.y and the last writer
+	# in a frame would otherwise simply erase the other.
+	head.position.y = _eye_height - _landing_offset
 
 	var fov_target := (
 		_base_fov + sprint_fov_bonus if _stance == Stance.SPRINTING else _base_fov
@@ -539,3 +584,63 @@ func _try_step_up(delta: float) -> void:
 
 	global_position.y += climb
 	velocity.y = maxf(velocity.y, 0.0)
+
+
+## Drop the view when the player hits the ground, in proportion to the fall.
+##
+## The weight of a first-person character is almost entirely implied — there is
+## no body on screen to land on its feet — so the only thing that says a fall
+## had any mass is what the camera does when it stops. Without this a two-storey
+## drop and a step off a kerb are the same event.
+##
+## Falls quickly and recovers slowly, because that asymmetry is what reads as
+## absorbing an impact rather than bouncing off one.
+func _tick_landing(delta: float) -> void:
+	var grounded := is_on_floor()
+
+	if grounded and not _was_on_floor:
+		var over := _fall_speed - landing_speed_floor
+		if over > 0.0:
+			var span := maxf(landing_speed_full - landing_speed_floor, 0.01)
+			var depth := clampf(over / span, 0.0, 1.0)
+			_landing_target = landing_dip * depth
+			# Routed through add_trauma so the accessibility shake setting
+			# applies to it like everything else — a player who turned shake
+			# off has said they do not want the camera shaken by impacts.
+			add_trauma(landing_trauma * depth)
+
+	_was_on_floor = grounded
+
+	# Toward the dip fast, back out of it slowly.
+	if _landing_offset < _landing_target:
+		_landing_offset = move_toward(
+			_landing_offset, _landing_target, landing_fall_speed * delta
+		)
+		if is_equal_approx(_landing_offset, _landing_target):
+			_landing_target = 0.0
+	else:
+		_landing_offset = move_toward(
+			_landing_offset, 0.0, landing_recover_speed * delta
+		)
+		_landing_target = 0.0
+
+
+## Roll the view into a sideways move.
+##
+## On the head rather than on the camera, deliberately. _tick_shake owns the
+## camera's roll and zeroes it whenever trauma runs out, so a lean written
+## there would be erased every time the player stopped being shot at — the same
+## trap that comment warns about for pitch. Two nodes, one writer each, and the
+## two rotations compose on their own.
+func _tick_lean(input_vector: Vector2, delta: float) -> void:
+	var wanted := 0.0
+
+	# Only while actually moving under power. Leaning while stood still — which
+	# holding a strafe key against a wall would do — is a camera tilting for no
+	# reason the player can see.
+	if is_on_floor() and Vector2(velocity.x, velocity.z).length() > 0.6:
+		wanted = -input_vector.x * deg_to_rad(lean_degrees)
+
+	head.rotation.z = lerpf(
+		head.rotation.z, wanted, clampf(lean_speed * delta, 0.0, 1.0)
+	)
