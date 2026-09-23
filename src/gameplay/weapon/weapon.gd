@@ -32,6 +32,13 @@ signal dry_fired()
 signal target_hit(target: Node, damage_dealt: float)
 ## Rounds scraped together after running completely dry.
 signal scrounged(amount: int)
+## Reserve ammo landed on `kind`, `amount` rounds' worth, from a distribution
+## pass. `distribute_reserve_ammo` routes rounds by need rather than by what
+## is in the player's hands, which is correct for supply but means the
+## destination is otherwise invisible: a crate can fill the holstered shotgun
+## and the player has no way to know it happened. This signal exists so the
+## HUD can say so.
+signal reserve_gained(kind: WeaponTypes.Kind, amount: int)
 ## A decoy has left the hand. Game wires its landing to the noise system.
 signal decoy_thrown(decoy: Decoy)
 ## Where a bullet landed, the surface normal, and whether it was a zombie.
@@ -999,6 +1006,11 @@ func reserve_capacity() -> int:
 ## still the player's either way.
 func distribute_reserve_ammo(amount: int) -> int:
 	var taken := 0
+	# Tallied per kind and emitted once each after the loop, not once per
+	# round: a kill can spray a dozen individual awards across two weapons in
+	# the same frame, and a signal per round would ask the HUD to coalesce
+	# what the source already knows in one pass.
+	var gained_by_kind: Dictionary = {}
 
 	# One round at a time, re-asking each time. Amounts here are small — a kill
 	# is worth a handful — and handing them out individually is what stops a
@@ -1010,6 +1022,10 @@ func distribute_reserve_ammo(amount: int) -> int:
 			break
 		_award_one(target)
 		taken += 1
+		gained_by_kind[target] = int(gained_by_kind.get(target, 0)) + 1
+
+	for target_kind in gained_by_kind:
+		reserve_gained.emit(target_kind, int(gained_by_kind[target_kind]))
 
 	return taken
 
