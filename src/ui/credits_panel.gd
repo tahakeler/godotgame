@@ -39,6 +39,51 @@ const ASSET_PACKS := [
 		"licence": "CC0 1.0",
 		"used": "The zombies — rigged mesh, skins, and the idle and run animations",
 	},
+	{
+		"name": "Ancient Caverns and A Lurking Evil — by congusbongus (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The low drone under exploration and the tense bed when something is near",
+	},
+	{
+		"name": "Dark Cavern Ambient — by Paul Wortmann (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The second exploration bed",
+	},
+	{
+		"name": "Cave In — by StarNinjas (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "Rock falling somewhere you cannot see",
+	},
+	{
+		"name": "Heartbeat Sounds — by bart (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The heartbeat",
+	},
+	{
+		"name": "Female High Pitched Scream SFX — by WuxiaScrub (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The distant scream",
+	},
+	{
+		"name": "Wolf Monster Sound — by CaveboyTup (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The distant howl",
+	},
+	{
+		"name": "Metal Impact Sounds — by BMacZero (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The distant metal clang",
+	},
+	{
+		"name": "Footsteps — by GboxMikeFozzy (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "Footsteps that are not yours",
+	},
+	{
+		"name": "Dark Stinger 1 — by Kresiek The Furry (OpenGameArt)",
+		"licence": "CC0 1.0",
+		"used": "The sudden low hit",
+	},
 ]
 
 ## Things made for this project rather than brought in.
@@ -67,8 +112,8 @@ func _build() -> void:
 
 	_add_heading("A S S E T S")
 	_add_body(
-		"Art and audio by Kenney (kenney.nl), released into the public domain "
-		+ "under Creative Commons CC0 1.0."
+		"Most art and audio is by Kenney (kenney.nl) under CC0 1.0. The listed "
+		+ "sounds and music are CC0 works by the authors named."
 	)
 
 	for pack in ASSET_PACKS:

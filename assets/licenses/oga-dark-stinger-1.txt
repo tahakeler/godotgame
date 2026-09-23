@@ -1,0 +1,13 @@
+Dark Stinger 1
+by Kresiek The Furry (OpenGameArt)
+
+Source page: https://opengameart.org/content/dark-stinger-1
+Author:      Kresiek The Furry
+Licence:     CC0 (Creative Commons Zero 1.0 Universal, public domain dedication)
+Licence URL: http://creativecommons.org/publicdomain/zero/1.0/
+
+Licence statement as shown on the source page:
+  License(s): CC0  (links to http://creativecommons.org/publicdomain/zero/1.0/)
+
+Verified on the source page on 2026-09-23.
+Files used in this project: assets/audio/sourced/stingers/dark_stinger_01.ogg
