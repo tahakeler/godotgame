@@ -70,14 +70,29 @@ ERROR_PATTERN='SCRIPT ERROR|Parse Error|ERROR:|Failed to load|Cannot open|error 
 # snapshots — they exist for the remote debugger.
 BENIGN_PATTERN='resources still in use at exit|Could not create ObjectDB Snapshots directory'
 
+# Seconds any one step may run before it is killed and failed. The slowest
+# step (the collision audit) takes about 80 s; a step still running after 300
+# has hung. It happened: verify_no_phantom_fire sat for over nine minutes in
+# one run and passes in ten seconds in every other, and with no limit the whole
+# gate simply never finished — which reads as "still running", not as a
+# failure. macOS ships no `timeout`, so perl's alarm does the job: SIGALRM kills
+# the exec'd process and the step exits 142.
+STEP_TIMEOUT="${STEP_TIMEOUT:-300}"
+
 run_step() {
   local name="$1"
   local log="$LOG_DIR/${name}.log"
   shift
 
   echo "--- $name ---"
-  "$@" >"$log" 2>&1
+  perl -e 'alarm shift; exec @ARGV' "$STEP_TIMEOUT" "$@" >"$log" 2>&1
   local code=$?
+
+  if [[ $code -eq 142 ]]; then
+    echo "FAIL: $name timed out after ${STEP_TIMEOUT}s — it hung"
+    fail_count=$((fail_count + 1))
+    return 1
+  fi
 
   local errors
   errors="$(grep -E "$ERROR_PATTERN" "$log" | grep -vE "$BENIGN_PATTERN" || true)"
