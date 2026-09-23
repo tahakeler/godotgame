@@ -132,6 +132,7 @@ run_step "noise" "$GODOT" --headless --script tests/manual/verify_noise.gd
 run_step "acoustics" "$GODOT" --headless --script tests/manual/verify_acoustics.gd
 run_step "dread" "$GODOT" --headless --script tests/manual/verify_dread.gd
 run_step "score" "$GODOT" --headless --script tests/manual/verify_score.gd
+run_step "vitals" "$GODOT" --headless --script tests/manual/verify_vitals.gd
 run_step "caches" "$GODOT" --headless --script tests/manual/verify_caches.gd
 run_step "interaction" "$GODOT" --headless --script tests/manual/verify_interaction.gd
 run_step "interaction-lifecycle" "$GODOT" --headless --script tests/manual/verify_interaction_lifecycle.gd

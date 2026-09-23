@@ -83,6 +83,7 @@ var _last_close_hit_msec := -CLOSE_NOTICE_COOLDOWN_MSEC
 @onready var hud: HUD = $HUD
 @onready var sounds: SoundBank = $SoundBank
 @onready var ambience: Ambience = $Ambience
+@onready var vitals: VitalsAudio = $VitalsAudio
 @onready var dread: DreadDirector = $DreadDirector
 @onready var effects: EffectSpawner = $EffectSpawner
 @onready var pause_menu: PauseMenu = $PauseMenu
@@ -103,6 +104,7 @@ var _baselines: Dictionary = {}
 func _ready() -> void:
 	spawner.zombie_died.connect(_on_zombie_died)
 	player.died.connect(_on_player_died)
+	player.health.changed.connect(vitals.set_health)
 	pause_menu.resumed.connect(_on_resumed)
 	# The menu asks; the round state stays here. Same entry point the restart
 	# control uses, so both routes produce an identical round.
@@ -518,6 +520,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	else:
 		# There is nothing to pause once the round is over, so the same control
 		# leaves for the menu — which is what the results screen offers.
+		GameSettings.set_sfx_muffle(0.0)
 		get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 	get_viewport().set_input_as_handled()
@@ -535,6 +538,10 @@ func _process(delta: float) -> void:
 
 	if state != RoundState.PLAYING:
 		return
+
+	# Only while playing: a hit that lands after the round is over must not
+	# muffle the results screen.
+	vitals.tick(delta)
 
 	relays.tick(delta)
 	dread.tick(delta, ambience.threat())
@@ -558,6 +565,7 @@ func _process(delta: float) -> void:
 ## the restart control — nothing is reloaded, so there is no scene transition
 ## and no chance of a stale node surviving into the new round.
 func start_round() -> void:
+	vitals.reset()
 	_apply_difficulty()
 
 	_apply_mode()
@@ -814,6 +822,8 @@ func _on_player_died() -> void:
 
 
 func _end_round(result: RoundState) -> void:
+	# Every ending clears the low-health cue, a win at 10% health included.
+	vitals.reset()
 	state = result
 
 	spawner.stop()
