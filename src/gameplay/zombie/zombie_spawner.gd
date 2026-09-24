@@ -35,6 +35,9 @@ signal zombie_winding_up(at: Vector3, kind: ZombieTypes.Kind)
 
 @export_group("Limits")
 @export var max_alive := 20
+## Every zombie heads for the player from the moment it spawns (the owner's
+## call: the horde always comes). Off, zombies wait for a noise or a sighting.
+@export var relentless_hunt := true
 ## Zombies never spawn closer to the player than this.
 @export var minimum_spawn_distance := 14.0
 ## How far a hunting zombie's alarm passes to the ones around it.
@@ -364,6 +367,7 @@ func _spawn_one() -> void:
 	zombie.global_position = spawn_position + Vector3.UP * 0.1
 	zombie.contact_damage *= damage_scale
 	zombie.set_target(_target)
+	zombie.relentless = relentless_hunt
 
 	zombie.raised_alarm.connect(_on_alarm_raised)
 	zombie.noticed_player.connect(

@@ -82,6 +82,15 @@ enum Awareness {
 ## uncertainty back into individuals without touching the belief system that
 ## actually drives where they are trying to go.
 @export_range(0.0, 0.5) var hesitation_chance := 0.08
+## Always coming. Set by the spawner for real rounds: a zombie that is not
+## hunting keeps catching the player's scent and heads straight for them at
+## full speed, instead of waiting for a sound or a sighting. Off by default so
+## a zombie built on its own (the tests, the tools) keeps the pure senses model.
+@export var relentless := false
+## Seconds between scent updates. Short enough to follow a moving player
+## round corners, long enough that a crowd does not re-path every frame.
+@export var scent_interval := 1.25
+var _scent_remaining := 0.0
 @export var hesitation_duration := Vector2(0.15, 0.4)
 
 @export_group("Separation")
@@ -379,6 +388,8 @@ var ammo_value := 3
 const BODY_RADIUS_RATIO := 0.22
 ## Height the exported attack_range below was tuned against.
 const REFERENCE_HEIGHT := 2.0
+## A waypoint closer than this on the flat counts as reached; see _next_waypoint.
+const WAYPOINT_FLAT_REACHED := 0.35
 ## Close enough to a sound to count as having reached it.
 const ARRIVAL_DISTANCE := 2.0
 
@@ -1122,6 +1133,7 @@ func _can_see_target() -> bool:
 ## Run down the belief: walk to it, search around it, then give up on it.
 func _tick_awareness(delta: float) -> void:
 	_tick_alarm(delta)
+	_tick_scent(delta)
 
 	match awareness:
 		Awareness.SEARCHING:
@@ -1145,6 +1157,21 @@ func _tick_awareness(delta: float) -> void:
 				_begin_search()
 			elif _investigate_remaining <= 0.0:
 				_begin_search()
+
+
+## Relentless zombies always know roughly where the player is. Not while
+## hunting (sight already tracks the player live) and not while retreating (a
+## Stalker breaking off is doing so on purpose and comes back on its own).
+func _tick_scent(delta: float) -> void:
+	if not relentless or _target == null or is_stopped:
+		return
+	if awareness == Awareness.HUNTING or awareness == Awareness.RETREATING:
+		return
+	_scent_remaining -= delta
+	if _scent_remaining > 0.0:
+		return
+	_scent_remaining = scent_interval * _rng.randf_range(0.8, 1.2)
+	_believe(_target.global_position)
 
 
 ## Keep shouting while hunting, for the kinds that shout on purpose.
@@ -1299,9 +1326,33 @@ func _tick_repath(delta: float) -> void:
 	# pause to think about it. Reserved for the states where a beat of
 	# stillness reads as noticing or reconsidering rather than a hitch in
 	# something that is supposed to be relentless.
-	if awareness != Awareness.HUNTING and _rng.randf() < hesitation_chance:
+	if not relentless and awareness != Awareness.HUNTING and _rng.randf() < hesitation_chance:
 		_hesitate_remaining = _rng.randf_range(hesitation_duration.x, hesitation_duration.y)
 
+
+## The next point to steer at, measured flat.
+##
+## The labyrinth's navmesh sits up to 0.7 m above the floor a body actually
+## stands on in places, and NavigationAgent3D counts a waypoint as reached in
+## 3D against path_desired_distance (0.6 m). The first waypoint there is the
+## zombie's own spot lifted 0.7 m, which is never "reached", so the agent kept
+## handing it back and the zombie steered at a point directly above itself:
+## zero horizontal speed, forever. Measured: 13 of 20 zombies in a round stood
+## still like that while "investigating" 15-23 m away. When the agent's
+## answer is overhead, take the first path point that is actually ahead.
+func _next_waypoint() -> Vector3:
+	var next := _agent.get_next_path_position()
+	var flat := next - global_position
+	flat.y = 0.0
+	if flat.length() >= WAYPOINT_FLAT_REACHED:
+		return next
+	var path := _agent.get_current_navigation_path()
+	for i in range(_agent.get_current_navigation_path_index(), path.size()):
+		var ahead: Vector3 = path[i] - global_position
+		ahead.y = 0.0
+		if ahead.length() > WAYPOINT_FLAT_REACHED:
+			return path[i]
+	return next
 
 func _move_toward_target(delta: float) -> void:
 	# Reeling from a hit. Held still rather than merely slowed, because the
@@ -1315,7 +1366,7 @@ func _move_toward_target(delta: float) -> void:
 		_accelerate_toward(Vector3.ZERO, delta)
 		return
 
-	var next_position := _agent.get_next_path_position()
+	var next_position := _next_waypoint()
 	var to_next := next_position - global_position
 	to_next.y = 0.0
 
