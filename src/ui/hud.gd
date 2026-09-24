@@ -52,8 +52,18 @@ const HEALTH_DELTA_DRAIN := 55.0
 const HEALTH_DELTA_COLOUR := Color(1.0, 0.82, 0.55, 0.5)
 
 ## Compass bearings in degrees, and how much of the horizon the strip shows.
-const COMPASS_POINTS := {"N": 0.0, "E": 90.0, "S": 180.0, "W": -90.0}
+const COMPASS_POINTS := {
+	"N": 0.0, "NE": 45.0, "E": 90.0, "SE": 135.0,
+	"S": 180.0, "SW": -135.0, "W": -90.0, "NW": -45.0,
+}
 const COMPASS_VISIBLE_ARC := 160.0
+const COMPASS_TICK_STEP := 15.0
+
+## A kill's score readout: how long it takes to rise and clear, how far it
+## rises, and how many can be stacked before the oldest is cut off.
+const KILL_POPUP_DURATION := 0.8
+const KILL_POPUP_RISE := 26.0
+const KILL_POPUP_MAX_STACK := 3
 
 @export var damage_marker_lifetime := 1.1
 @export var hitmarker_duration := 0.22
@@ -120,6 +130,13 @@ var _weapon: Weapon
 @onready var _crosshair_down: ColorRect = $Crosshair/Down
 @onready var _crosshair_left: ColorRect = $Crosshair/Left
 @onready var _crosshair_right: ColorRect = $Crosshair/Right
+@onready var _ammo_backing: Control = $AmmoBacking
+@onready var _vitals_backing: Control = $VitalsBacking
+@onready var _compass_backing: Control = $CompassBacking
+@onready var _kill_feedback: Control = %KillFeedback
+
+## Score popups stacked under the crosshair after a kill: {label, age}.
+var _kill_popups: Array = []
 
 var _damage_markers: Array[Dictionary] = []
 ## Where the objective chevron points, in world space, and whether to draw it.
@@ -154,6 +171,10 @@ func _ready() -> void:
 	_throw_arc.draw.connect(_draw_throw_arc)
 	_compass.draw.connect(_draw_compass)
 	_health_delta.draw.connect(_draw_health_delta)
+	_ammo_backing.draw.connect(_draw_backing_plate.bind(_ammo_backing))
+	_vitals_backing.draw.connect(_draw_backing_plate.bind(_vitals_backing))
+	_compass_backing.draw.connect(_draw_backing_plate.bind(_compass_backing))
+	_build_health_segments()
 	_ready_minimap()
 	_ready_melee()
 
@@ -179,6 +200,7 @@ func _process(delta: float) -> void:
 	_tick_map(delta)
 	_tick_melee(delta)
 	_tick_resupply_pulses(delta)
+	_tick_kill_popups(delta)
 
 	# The bearing changes every time the player turns, which is constantly.
 	_compass.queue_redraw()
@@ -366,14 +388,16 @@ func _on_health_changed(current: float, maximum: float) -> void:
 	_health_label.text = "%d" % roundi(current)
 
 	# Colour comes from the active palette rather than being hard-coded, so the
-	# colour-vision setting reaches the one readout where red-green is the
-	# difference between fine and nearly dead. The bar length and the number say
-	# the same thing, so colour is never carrying it alone.
+	# colour-vision setting reaches the one readout. Three steps rather than
+	# two — full health reads neutral white, wounded reads amber, critical
+	# reads red — so the bar carries the warning before the number is read.
 	var fraction := current / maxf(maximum, 1.0)
 	_health_bar.modulate = (
 		GameSettings.colour(self, "danger", Color(0.85, 0.24, 0.2))
+		if fraction <= 0.2
+		else GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
 		if fraction <= LOW_HEALTH_FRACTION
-		else GameSettings.colour(self, "safe", Color(0.42, 0.72, 0.45))
+		else Color(0.94, 0.945, 0.96)
 	)
 
 
@@ -850,6 +874,47 @@ func _on_zombie_killed(_at: Vector3, _experience: int, _ammo: int) -> void:
 	)
 	_hitmarker.modulate.a = 1.0
 	_hitmarker.scale = Vector2.ONE * KILL_MARKER_SCALE
+	_spawn_kill_popup(_experience)
+
+
+## A CoD-style score readout for the kill just confirmed, rising and clearing
+## under the crosshair before the next one can land on top of it.
+func _spawn_kill_popup(experience: int) -> void:
+	if _kill_feedback == null:
+		return
+
+	if _kill_popups.size() >= KILL_POPUP_MAX_STACK:
+		var oldest: Dictionary = _kill_popups.pop_front()
+		(oldest["label"] as Label).queue_free()
+
+	var label := Label.new()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.text = "ELIMINATED   +%d XP" % experience
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override(
+		"font_color", GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	)
+	label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
+	label.add_theme_constant_override("outline_size", 3)
+	label.position = Vector2(0.0, _kill_popups.size() * 20.0)
+	label.size = Vector2(200.0, 20.0)
+	_kill_feedback.add_child(label)
+	_kill_popups.append({"label": label, "age": 0.0})
+
+
+## Rise and fade every score popup in flight; free the ones whose time is up.
+func _tick_kill_popups(delta: float) -> void:
+	for index in range(_kill_popups.size() - 1, -1, -1):
+		var entry: Dictionary = _kill_popups[index]
+		entry["age"] = float(entry["age"]) + delta
+		var label: Label = entry["label"]
+		var fraction: float = clampf(float(entry["age"]) / KILL_POPUP_DURATION, 0.0, 1.0)
+		label.modulate.a = 1.0 - fraction
+		label.position.y = (index * 20.0) - fraction * KILL_POPUP_RISE
+		if float(entry["age"]) >= KILL_POPUP_DURATION:
+			label.queue_free()
+			_kill_popups.remove_at(index)
 
 
 ## Drain the pale bar down to the real one, so a hit leaves a visible wound.
@@ -871,6 +936,42 @@ func _tick_health_delta(delta: float) -> void:
 		_health_delta_value, _health_bar.value, HEALTH_DELTA_DRAIN * delta
 	)
 	_health_delta.queue_redraw()
+
+
+## A dark, gently skewed plate behind a HUD readout, in the R6/CoD idiom — the
+## numbers read over stone, not over open air. Drawn as an angled quad rather
+## than a StyleBoxFlat skew (unverified against the pinned 4.7 reference), so
+## the panel edge still reads as leaning without touching an unconfirmed API.
+func _draw_backing_plate(panel: Control) -> void:
+	var size := panel.size
+	var lean := minf(12.0, size.x * 0.06)
+	var points := PackedVector2Array([
+		Vector2(lean, 0.0), Vector2(size.x, 0.0),
+		Vector2(size.x - lean, size.y), Vector2(0.0, size.y),
+	])
+	panel.draw_colored_polygon(points, Color(0.035, 0.04, 0.055, 0.35))
+	var accent := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	panel.draw_line(
+		Vector2(lean, 0.0), Vector2(size.x, 0.0),
+		Color(accent.r, accent.g, accent.b, 0.55), 2.0
+	)
+
+
+## Ten dividers over the health bar, so it reads as a segmented gauge rather
+## than a number that has to be parsed. Built once at ready — the bar's width
+## never changes, only its fill.
+func _build_health_segments() -> void:
+	var segments := 10
+	for index in range(1, segments):
+		var divider := ColorRect.new()
+		divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		divider.color = Color(0.02, 0.02, 0.03, 0.6)
+		divider.set_anchors_preset(Control.PRESET_FULL_RECT)
+		divider.anchor_left = float(index) / segments
+		divider.anchor_right = float(index) / segments
+		divider.offset_left = -1.0
+		divider.offset_right = 1.0
+		_health_bar.add_child(divider)
 
 
 func _draw_health_delta() -> void:
@@ -921,28 +1022,52 @@ func _draw_compass() -> void:
 	var bearing := atan2(facing.x, -facing.z)
 	var width := _compass.size.x
 	var centre := width * 0.5
+	var half_arc := deg_to_rad(COMPASS_VISIBLE_ARC * 0.5)
+
+	# Tick marks every 15 degrees, taller every 45 — the R6/CoD tape reading,
+	# so the strip carries fine bearing even between the lettered points.
+	var degrees := -180.0
+	while degrees <= 180.0:
+		var tick_offset := angle_difference(bearing, deg_to_rad(degrees))
+		if absf(tick_offset) <= half_arc:
+			var tick_x: float = centre + tick_offset / half_arc * centre
+			var major := absf(fmod(degrees, 45.0)) < 0.01
+			var tick_fade: float = 1.0 - absf(tick_offset) / half_arc
+			_compass.draw_rect(
+				Rect2(tick_x - 0.5, 18.0, 1.0, 9.0 if major else 5.0),
+				Color(0.886, 0.914, 0.965, (0.18 if major else 0.1) + 0.3 * tick_fade)
+			)
+		degrees += COMPASS_TICK_STEP
 
 	for point in COMPASS_POINTS:
 		var offset := angle_difference(bearing, deg_to_rad(COMPASS_POINTS[point]))
 
 		# Only the arc actually in front of the player is drawn; the rest would
 		# be a ring of labels pointing at the back of their head.
-		if absf(offset) > deg_to_rad(COMPASS_VISIBLE_ARC * 0.5):
+		if absf(offset) > half_arc:
 			continue
 
-		var x: float = centre + offset / deg_to_rad(COMPASS_VISIBLE_ARC * 0.5) * centre
-		var fade: float = 1.0 - absf(offset) / deg_to_rad(COMPASS_VISIBLE_ARC * 0.5)
+		var x: float = centre + offset / half_arc * centre
+		var fade: float = 1.0 - absf(offset) / half_arc
 
 		var colour := Color(0.886, 0.914, 0.965, 0.25 + 0.45 * fade)
+		var label_size := 13 if point.length() == 1 else 10
 		_compass.draw_string(
 			ThemeDB.fallback_font, Vector2(x - 6.0, 14.0), point,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, colour
+			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, colour
 		)
 
-	# The centre tick is what the labels are read against.
-	_compass.draw_rect(
-		Rect2(centre - 1.0, 18.0, 2.0, 6.0),
-		GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+	var accent := GameSettings.colour(self, "accent", Color(0.878, 0.631, 0.235))
+
+	# The centre notch is what the tape scrolls beneath — the fixed pointer.
+	_compass.draw_rect(Rect2(centre - 1.0, 18.0, 2.0, 11.0), accent)
+
+	# The exact bearing, read under the notch, for the degree the letters and
+	# ticks only approximate.
+	var heading := fposmod(rad_to_deg(bearing), 360.0)
+	_compass.draw_string(
+		ThemeDB.fallback_font, Vector2(centre - 18.0, 44.0),
+		"%03d°" % roundi(heading), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, accent
 	)
 
 	_draw_objective_chevron(bearing, centre)

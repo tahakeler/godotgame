@@ -66,15 +66,25 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
+[node name="CompassBacking" type="Control" parent="."]
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_top = 76.0
+offset_right = 200.0
+offset_bottom = 138.0
+mouse_filter = 2
+
 [node name="Compass" type="Control" parent="."]
 unique_name_in_owner = true
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -190.0
-offset_top = 86.0
+offset_top = 82.0
 offset_right = 190.0
-offset_bottom = 110.0
+offset_bottom = 134.0
 mouse_filter = 2
 
 [node name="PromptLabel" type="Label" parent="."]
@@ -184,6 +194,19 @@ offset_bottom = 16.0
 rotation = -0.785398
 color = Color(1, 0.95, 0.85, 1)
 
+[node name="KillFeedback" type="Control" parent="."]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = 34.0
+offset_right = 100.0
+offset_bottom = 34.0
+mouse_filter = 2
+
 [node name="TopBar" type="VBoxContainer" parent="."]
 anchors_preset = 5
 anchor_left = 0.5
@@ -259,15 +282,25 @@ anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 30.0
-offset_top = -124.0
+offset_top = -140.0
 offset_right = 300.0
-offset_bottom = -108.0
+offset_bottom = -124.0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.5)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 11
 text = "T O R C H   O F F"
+
+[node name="VitalsBacking" type="Control" parent="."]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -118.0
+offset_right = 314.0
+offset_bottom = -14.0
+mouse_filter = 2
 
 [node name="VitalsBlock" type="VBoxContainer" parent="."]
 anchors_preset = 2
@@ -277,6 +310,7 @@ offset_left = 30.0
 offset_top = -104.0
 offset_right = 300.0
 offset_bottom = -28.0
+grow_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 4
 
@@ -312,12 +346,15 @@ theme_override_constants/separation = 12
 
 [node name="HealthLabel" type="Label" parent="VitalsBlock/HealthRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(62, 0)
+custom_minimum_size = Vector2(78, 0)
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.937, 0.945, 0.961, 1)
+theme_override_colors/font_color = Color(0.976, 0.976, 0.984, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 30
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.5)
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 36
 text = "100"
 vertical_alignment = 1
 
@@ -337,7 +374,7 @@ text = "V I T A L S"
 
 [node name="HealthBar" type="ProgressBar" parent="VitalsBlock/HealthRow/HealthColumn"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 8)
+custom_minimum_size = Vector2(0, 11)
 size_flags_horizontal = 3
 mouse_filter = 2
 max_value = 100.0
@@ -351,6 +388,18 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
+[node name="AmmoBacking" type="Control" parent="."]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -344.0
+offset_top = -196.0
+offset_right = -16.0
+offset_bottom = -12.0
+mouse_filter = 2
+
 [node name="AmmoBlock" type="VBoxContainer" parent="."]
 anchors_preset = 3
 anchor_left = 1.0
@@ -358,9 +407,11 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -330.0
-offset_top = -152.0
+offset_top = -180.0
 offset_right = -30.0
 offset_bottom = -26.0
+grow_horizontal = 0
+grow_vertical = 0
 mouse_filter = 2
 alignment = 2
 theme_override_constants/separation = 5
@@ -390,13 +441,23 @@ theme_override_constants/separation = 8
 [node name="MagazineLabel" type="Label" parent="AmmoBlock/CountRow"]
 unique_name_in_owner = true
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.937, 0.945, 0.961, 1)
+theme_override_colors/font_color = Color(0.976, 0.976, 0.984, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 40
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.5)
+theme_override_constants/shadow_offset_x = 0
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 54
 text = "8"
 horizontal_alignment = 2
 vertical_alignment = 1
+
+[node name="Slash" type="Label" parent="AmmoBlock/CountRow"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 0.7)
+theme_override_font_sizes/font_size = 24
+text = "/"
+vertical_alignment = 2
 
 [node name="ReserveLabel" type="Label" parent="AmmoBlock/CountRow"]
 unique_name_in_owner = true
@@ -404,7 +465,7 @@ mouse_filter = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 20
 text = "24"
 vertical_alignment = 2
 
