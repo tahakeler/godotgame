@@ -267,11 +267,17 @@ func bind(game: Game, player: Player, weapon: Weapon, spawner: ZombieSpawner) ->
 ## still running when it is not. The results screen should be the only thing
 ## asking for attention.
 func _set_round_readouts_visible(shown: bool) -> void:
+	# The headshot callout is not a readout: it is only ever shown for a moment
+	# by show_headshot(). Showing it with the rest at round start left HEADSHOT
+	# stuck on screen, so it is always cleared here instead, either way.
+	_headshot_remaining = 0.0
+	if _headshot_label != null:
+		_headshot_label.visible = false
 	# The vignettes too: they are driven by live threat and health, and a frame
 	# still pulsing with danger behind "EXTRACTED" says the fight goes on.
 	for node in [_crosshair, _top_bar, _objective_block, _vitals_block, _ammo_block,
 			_vignette, _hurt_vignette, _compass, _compass_backing, _vitals_backing,
-			_ammo_backing, _torch_label, _kill_feedback, _minimap, _headshot_label]:
+			_ammo_backing, _torch_label, _kill_feedback, _minimap]:
 		if node != null:
 			node.visible = shown
 
