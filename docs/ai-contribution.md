@@ -3,12 +3,29 @@
 Required by the assignment: *"Develop at least one feature through MCP and
 identify the assistant's scene or script changes."*
 
-This project was developed with **Claude Code** (Claude Opus 5) acting as an AI
-assistant through the terminal, driven by the
+This project was developed with **Claude Code** (an AI coding assistant) working
+in the terminal, driven by the
 [Claude Code Game Studios](https://github.com/Donchitos/Claude-Code-Game-Studios)
-agent framework. Claude Code operates over a tool protocol (file read/write,
-shell, git) — the same integration model MCP defines for exposing tools to an
-assistant.
+agent framework. Most of the game was written through Claude Code's own file,
+shell and git tools, **not** through MCP.
+
+**The feature built through MCP is Headshots.** It was built with the
+[godot-ai](https://github.com/hi-godot/godot-ai) MCP server (add-on v4.2.3,
+`addons/godot_ai/`) connected to the live Godot editor. Every change below was
+made by an MCP tool call, not by editing files directly:
+
+| MCP tool | Target | Change |
+|---|---|---|
+| `script_patch` | `src/gameplay/weapon/weapon.gd` | `headshot` signal, `headshot_multiplier` (2x); the hit path asks `Zombie.is_head_hit()` before applying damage |
+| `script_patch` | `src/gameplay/zombie/zombie.gd` | `is_head_hit()` (top 16% of the capsule height) and the `head_fraction` export |
+| `scene_open`, `node_create`, `node_set_property` (x17), `scene_save` | `src/ui/hud.tscn` | New `HeadshotLabel` node: centred above the crosshair, red, outlined, mouse-ignoring, hidden by default |
+| `script_patch` | `src/ui/hud.gd` | `show_headshot()` and its fade; hidden on the results screen; HEADSHOTS stat on the results screen |
+| `script_patch` | `src/core/game.gd` | `headshots` counter, reset on restart, counted only while the round is live |
+
+The MCP's own diagnostics caught one mistake along the way: the first
+`zombie.gd` patch used `head_fraction` before the second patch declared it
+(`Parse Error: Identifier "head_fraction" not declared`), and the next patch
+resolved it. Commit: `feat: headshots — built through the godot-ai MCP`.
 
 ---
 
