@@ -264,7 +264,8 @@ func _set_round_readouts_visible(shown: bool) -> void:
 	# The vignettes too: they are driven by live threat and health, and a frame
 	# still pulsing with danger behind "EXTRACTED" says the fight goes on.
 	for node in [_crosshair, _top_bar, _objective_block, _vitals_block, _ammo_block,
-			_vignette, _hurt_vignette]:
+			_vignette, _hurt_vignette, _compass, _compass_backing, _vitals_backing,
+			_ammo_backing, _torch_label, _kill_feedback, _minimap]:
 		if node != null:
 			node.visible = shown
 
