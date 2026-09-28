@@ -87,6 +87,9 @@ enum Awareness {
 ## full speed, instead of waiting for a sound or a sighting. Off by default so
 ## a zombie built on its own (the tests, the tools) keeps the pure senses model.
 @export var relentless := false
+## Top share of the body's height that counts as the head for a headshot.
+## 0.16 of a 2 m Shambler is the top 32 cm: head and neck, not shoulders.
+@export_range(0.05, 0.4) var head_fraction := 0.16
 ## Seconds between scent updates. Short enough to follow a moving player
 ## round corners, long enough that a crowd does not re-path every frame.
 @export var scent_interval := 1.25
@@ -613,6 +616,17 @@ func set_target(target: Node3D) -> void:
 
 	if is_inside_tree():
 		_agent.target_position = last_known_position
+
+
+## Whether a hit at `hit_position` (world space) landed in the head: the top
+## `head_fraction` of the body's height. Asked by the weapon before it applies
+## damage. Kept here because the body's height is the zombie's own business:
+## a Brute's head is 2.6 m up, a Screamer's 1.7 m.
+func is_head_hit(hit_position: Vector3) -> bool:
+	if _collider == null or not (_collider.shape is CapsuleShape3D):
+		return false
+	var height: float = (_collider.shape as CapsuleShape3D).height
+	return hit_position.y - global_position.y >= height * (1.0 - head_fraction)
 
 
 ## Damage entry point used by the weapon's raycast.

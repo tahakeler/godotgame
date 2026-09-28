@@ -1,6 +1,6 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://ntbibconm1qq"]
 
-[ext_resource type="Script" path="res://src/ui/hud.gd" id="1_hud"]
+[ext_resource type="Script" uid="uid://b7j10103xst7c" path="res://src/ui/hud.gd" id="1_hud"]
 
 [sub_resource type="Gradient" id="Gradient_vignette"]
 offsets = PackedFloat32Array(0.45, 1)
@@ -14,30 +14,28 @@ fill = 1
 fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(1, 0.5)
 
-[node name="HUD" type="CanvasLayer"]
+[node name="HUD" type="CanvasLayer" unique_id=146621340]
 script = ExtResource("1_hud")
 
-[node name="Vignette" type="TextureRect" parent="."]
+[node name="Vignette" type="TextureRect" parent="." unique_id=1849865783]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 texture = SubResource("GradientTexture2D_vignette")
 expand_mode = 1
-stretch_mode = 0
 
-[node name="HurtVignette" type="TextureRect" parent="."]
+[node name="HurtVignette" type="TextureRect" parent="." unique_id=1580433174]
 unique_name_in_owner = true
+modulate = Color(1, 0.25, 0.2, 0)
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-modulate = Color(1, 0.25, 0.2, 0)
 texture = SubResource("GradientTexture2D_vignette")
 expand_mode = 1
-stretch_mode = 0
 
-[node name="DamageFlash" type="ColorRect" parent="."]
+[node name="DamageFlash" type="ColorRect" parent="." unique_id=695094843]
 unique_name_in_owner = true
 anchors_preset = 15
 anchor_right = 1.0
@@ -45,28 +43,32 @@ anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.7, 0.05, 0.03, 0)
 
-[node name="DamageIndicator" type="Control" parent="."]
+[node name="DamageIndicator" type="Control" parent="." unique_id=674047046]
 unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="ThrowArc" type="Control" parent="."]
+[node name="ThrowArc" type="Control" parent="." unique_id=559619852]
 unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="NoiseRing" type="Control" parent="."]
+[node name="NoiseRing" type="Control" parent="." unique_id=1096077147]
 unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="CompassBacking" type="Control" parent="."]
+[node name="CompassBacking" type="Control" parent="." unique_id=888582603]
+layout_mode = 3
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
@@ -76,8 +78,9 @@ offset_right = 200.0
 offset_bottom = 138.0
 mouse_filter = 2
 
-[node name="Compass" type="Control" parent="."]
+[node name="Compass" type="Control" parent="." unique_id=1649485140]
 unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
@@ -87,7 +90,7 @@ offset_right = 190.0
 offset_bottom = 134.0
 mouse_filter = 2
 
-[node name="PromptLabel" type="Label" parent="."]
+[node name="PromptLabel" type="Label" parent="." unique_id=1708522836]
 unique_name_in_owner = true
 anchors_preset = 7
 anchor_left = 0.5
@@ -98,15 +101,14 @@ offset_left = -300.0
 offset_top = -186.0
 offset_right = 300.0
 offset_bottom = -160.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.937, 0.945, 0.961, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.7)
 theme_override_constants/outline_size = 4
 theme_override_font_sizes/font_size = 17
-text = ""
 horizontal_alignment = 1
 
-[node name="Crosshair" type="Control" parent="."]
+[node name="Crosshair" type="Control" parent="." unique_id=353758791]
+layout_mode = 3
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -114,88 +116,99 @@ anchor_right = 0.5
 anchor_bottom = 0.5
 mouse_filter = 2
 
-[node name="Up" type="ColorRect" parent="Crosshair"]
-mouse_filter = 2
+[node name="Up" type="ColorRect" parent="Crosshair" unique_id=679604978]
+layout_mode = 0
 offset_left = -1.0
 offset_top = -13.0
 offset_right = 1.0
 offset_bottom = -5.0
+mouse_filter = 2
 color = Color(0.95, 0.95, 0.95, 0.85)
 
-[node name="Down" type="ColorRect" parent="Crosshair"]
-mouse_filter = 2
+[node name="Down" type="ColorRect" parent="Crosshair" unique_id=95097597]
+layout_mode = 0
 offset_left = -1.0
 offset_top = 5.0
 offset_right = 1.0
 offset_bottom = 13.0
+mouse_filter = 2
 color = Color(0.95, 0.95, 0.95, 0.85)
 
-[node name="Left" type="ColorRect" parent="Crosshair"]
-mouse_filter = 2
+[node name="Left" type="ColorRect" parent="Crosshair" unique_id=1246442719]
+layout_mode = 0
 offset_left = -13.0
 offset_top = -1.0
 offset_right = -5.0
 offset_bottom = 1.0
+mouse_filter = 2
 color = Color(0.95, 0.95, 0.95, 0.85)
 
-[node name="Right" type="ColorRect" parent="Crosshair"]
-mouse_filter = 2
+[node name="Right" type="ColorRect" parent="Crosshair" unique_id=2118864728]
+layout_mode = 0
 offset_left = 5.0
 offset_top = -1.0
 offset_right = 13.0
 offset_bottom = 1.0
+mouse_filter = 2
 color = Color(0.95, 0.95, 0.95, 0.85)
 
-[node name="Dot" type="ColorRect" parent="Crosshair"]
-mouse_filter = 2
+[node name="Dot" type="ColorRect" parent="Crosshair" unique_id=353699380]
+layout_mode = 0
 offset_left = -1.5
 offset_top = -1.5
 offset_right = 1.5
 offset_bottom = 1.5
+mouse_filter = 2
 color = Color(1, 0.35, 0.3, 0.9)
 
-[node name="Hitmarker" type="Control" parent="Crosshair"]
+[node name="Hitmarker" type="Control" parent="Crosshair" unique_id=1061968672]
 unique_name_in_owner = true
+anchors_preset = 0
 mouse_filter = 2
 
-[node name="UpLeft" type="ColorRect" parent="Crosshair/Hitmarker"]
-mouse_filter = 2
+[node name="UpLeft" type="ColorRect" parent="Crosshair/Hitmarker" unique_id=937941109]
+layout_mode = 0
 offset_left = -16.0
 offset_top = -16.0
 offset_right = -7.0
 offset_bottom = -14.0
 rotation = -0.785398
+mouse_filter = 2
 color = Color(1, 0.95, 0.85, 1)
 
-[node name="UpRight" type="ColorRect" parent="Crosshair/Hitmarker"]
-mouse_filter = 2
+[node name="UpRight" type="ColorRect" parent="Crosshair/Hitmarker" unique_id=1228533302]
+layout_mode = 0
 offset_left = 7.0
 offset_top = -16.0
 offset_right = 16.0
 offset_bottom = -14.0
 rotation = 0.785398
+mouse_filter = 2
 color = Color(1, 0.95, 0.85, 1)
 
-[node name="DownLeft" type="ColorRect" parent="Crosshair/Hitmarker"]
-mouse_filter = 2
+[node name="DownLeft" type="ColorRect" parent="Crosshair/Hitmarker" unique_id=1940651560]
+layout_mode = 0
 offset_left = -16.0
 offset_top = 14.0
 offset_right = -7.0
 offset_bottom = 16.0
 rotation = 0.785398
+mouse_filter = 2
 color = Color(1, 0.95, 0.85, 1)
 
-[node name="DownRight" type="ColorRect" parent="Crosshair/Hitmarker"]
-mouse_filter = 2
+[node name="DownRight" type="ColorRect" parent="Crosshair/Hitmarker" unique_id=150194513]
+layout_mode = 0
 offset_left = 7.0
 offset_top = 14.0
 offset_right = 16.0
 offset_bottom = 16.0
 rotation = -0.785398
+mouse_filter = 2
 color = Color(1, 0.95, 0.85, 1)
 
-[node name="KillFeedback" type="Control" parent="."]
+[node name="KillFeedback" type="Control" parent="." unique_id=1451751250]
 unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -207,7 +220,7 @@ offset_right = 100.0
 offset_bottom = 34.0
 mouse_filter = 2
 
-[node name="TopBar" type="VBoxContainer" parent="."]
+[node name="TopBar" type="VBoxContainer" parent="." unique_id=1588198010]
 anchors_preset = 5
 anchor_left = 0.5
 anchor_right = 0.5
@@ -218,9 +231,9 @@ offset_bottom = 78.0
 mouse_filter = 2
 theme_override_constants/separation = 5
 
-[node name="ExtractionLabel" type="Label" parent="TopBar"]
+[node name="ExtractionLabel" type="Label" parent="TopBar" unique_id=1488542401]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.886, 0.914, 0.965, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
@@ -228,12 +241,13 @@ theme_override_font_sizes/font_size = 27
 text = "EXTRACTION  02:00"
 horizontal_alignment = 1
 
-[node name="TimerRule" type="ColorRect" parent="TopBar"]
+[node name="TimerRule" type="ColorRect" parent="TopBar" unique_id=2135133930]
 custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
 mouse_filter = 2
 color = Color(0.886, 0.914, 0.965, 0.22)
 
-[node name="ObjectiveBlock" type="VBoxContainer" parent="."]
+[node name="ObjectiveBlock" type="VBoxContainer" parent="." unique_id=1161689468]
 offset_left = 30.0
 offset_top = 26.0
 offset_right = 300.0
@@ -241,42 +255,41 @@ offset_bottom = 96.0
 mouse_filter = 2
 theme_override_constants/separation = 3
 
-[node name="Caption" type="Label" parent="ObjectiveBlock"]
-mouse_filter = 2
+[node name="Caption" type="Label" parent="ObjectiveBlock" unique_id=321349725]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
-theme_override_constants/outline_size = 2
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.5)
+theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 11
 text = "S E C T O R"
 
-[node name="KillsLabel" type="Label" parent="ObjectiveBlock"]
+[node name="KillsLabel" type="Label" parent="ObjectiveBlock" unique_id=921048911]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.937, 0.945, 0.961, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 19
 text = "KILLS  0"
 
-[node name="ZombiesLabel" type="Label" parent="ObjectiveBlock"]
+[node name="ZombiesLabel" type="Label" parent="ObjectiveBlock" unique_id=2107444909]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.729, 0.478, 0.443, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 15
 text = "HOSTILES  0"
 
-[node name="ObjectiveLabel" type="Label" parent="ObjectiveBlock"]
+[node name="ObjectiveLabel" type="Label" parent="ObjectiveBlock" unique_id=505763705]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 13
-text = ""
 
-[node name="TorchLabel" type="Label" parent="."]
+[node name="TorchLabel" type="Label" parent="." unique_id=543377719]
 unique_name_in_owner = true
 anchors_preset = 2
 anchor_top = 1.0
@@ -285,14 +298,14 @@ offset_left = 30.0
 offset_top = -140.0
 offset_right = 300.0
 offset_bottom = -124.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.5)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 11
 text = "T O R C H   O F F"
 
-[node name="VitalsBacking" type="Control" parent="."]
+[node name="VitalsBacking" type="Control" parent="." unique_id=1427111277]
+layout_mode = 3
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -302,7 +315,7 @@ offset_right = 314.0
 offset_bottom = -14.0
 mouse_filter = 2
 
-[node name="VitalsBlock" type="VBoxContainer" parent="."]
+[node name="VitalsBlock" type="VBoxContainer" parent="." unique_id=857728549]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -314,14 +327,15 @@ grow_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="ProgressRow" type="HBoxContainer" parent="VitalsBlock"]
+[node name="ProgressRow" type="HBoxContainer" parent="VitalsBlock" unique_id=1860855197]
+layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 10
 
-[node name="LevelLabel" type="Label" parent="VitalsBlock/ProgressRow"]
+[node name="LevelLabel" type="Label" parent="VitalsBlock/ProgressRow" unique_id=2642535]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(46, 0)
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
@@ -329,66 +343,69 @@ theme_override_font_sizes/font_size = 14
 text = "LV 1"
 vertical_alignment = 1
 
-[node name="ExperienceBar" type="ProgressBar" parent="VitalsBlock/ProgressRow"]
+[node name="ExperienceBar" type="ProgressBar" parent="VitalsBlock/ProgressRow" unique_id=885046534]
 unique_name_in_owner = true
+modulate = Color(0.878, 0.631, 0.235, 1)
 custom_minimum_size = Vector2(0, 3)
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 mouse_filter = 2
-modulate = Color(0.878, 0.631, 0.235, 1)
 max_value = 4.0
-value = 0.0
 show_percentage = false
 
-[node name="HealthRow" type="HBoxContainer" parent="VitalsBlock"]
+[node name="HealthRow" type="HBoxContainer" parent="VitalsBlock" unique_id=1591730465]
+layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 12
 
-[node name="HealthLabel" type="Label" parent="VitalsBlock/HealthRow"]
+[node name="HealthLabel" type="Label" parent="VitalsBlock/HealthRow" unique_id=1249544407]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(78, 0)
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.976, 0.976, 0.984, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
-theme_override_constants/outline_size = 3
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.5)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/shadow_offset_x = 0
 theme_override_constants/shadow_offset_y = 2
+theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 36
 text = "100"
 vertical_alignment = 1
 
-[node name="HealthColumn" type="VBoxContainer" parent="VitalsBlock/HealthRow"]
+[node name="HealthColumn" type="VBoxContainer" parent="VitalsBlock/HealthRow" unique_id=1875891551]
+layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
 mouse_filter = 2
 theme_override_constants/separation = 3
 
-[node name="Caption" type="Label" parent="VitalsBlock/HealthRow/HealthColumn"]
-mouse_filter = 2
+[node name="Caption" type="Label" parent="VitalsBlock/HealthRow/HealthColumn" unique_id=1828400907]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.5)
 theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 11
 text = "V I T A L S"
 
-[node name="HealthBar" type="ProgressBar" parent="VitalsBlock/HealthRow/HealthColumn"]
+[node name="HealthBar" type="ProgressBar" parent="VitalsBlock/HealthRow/HealthColumn" unique_id=758895448]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 11)
+layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-max_value = 100.0
 value = 100.0
 show_percentage = false
 
-[node name="HealthDelta" type="Control" parent="VitalsBlock/HealthRow/HealthColumn/HealthBar"]
+[node name="HealthDelta" type="Control" parent="VitalsBlock/HealthRow/HealthColumn/HealthBar" unique_id=20303518]
 unique_name_in_owner = true
-anchors_preset = 15
+anchors_preset = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="AmmoBacking" type="Control" parent="."]
+[node name="AmmoBacking" type="Control" parent="." unique_id=443294726]
+layout_mode = 3
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
@@ -400,7 +417,7 @@ offset_right = -16.0
 offset_bottom = -12.0
 mouse_filter = 2
 
-[node name="AmmoBlock" type="VBoxContainer" parent="."]
+[node name="AmmoBlock" type="VBoxContainer" parent="." unique_id=194301229]
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
@@ -413,55 +430,56 @@ offset_bottom = -26.0
 grow_horizontal = 0
 grow_vertical = 0
 mouse_filter = 2
-alignment = 2
 theme_override_constants/separation = 5
+alignment = 2
 
-[node name="WeaponStatusLabel" type="Label" parent="AmmoBlock"]
+[node name="WeaponStatusLabel" type="Label" parent="AmmoBlock" unique_id=1206186253]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.8, 0.35, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 15
-text = ""
 horizontal_alignment = 2
 
-[node name="MagazinePips" type="HBoxContainer" parent="AmmoBlock"]
+[node name="MagazinePips" type="HBoxContainer" parent="AmmoBlock" unique_id=731053658]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
 mouse_filter = 2
-alignment = 2
 theme_override_constants/separation = 4
-
-[node name="CountRow" type="HBoxContainer" parent="AmmoBlock"]
-mouse_filter = 2
 alignment = 2
-theme_override_constants/separation = 8
 
-[node name="MagazineLabel" type="Label" parent="AmmoBlock/CountRow"]
-unique_name_in_owner = true
+[node name="CountRow" type="HBoxContainer" parent="AmmoBlock" unique_id=974563259]
+layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="MagazineLabel" type="Label" parent="AmmoBlock/CountRow" unique_id=264204284]
+unique_name_in_owner = true
+layout_mode = 2
 theme_override_colors/font_color = Color(0.976, 0.976, 0.984, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
-theme_override_constants/outline_size = 3
 theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.5)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/shadow_offset_x = 0
 theme_override_constants/shadow_offset_y = 2
+theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 54
 text = "8"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="Slash" type="Label" parent="AmmoBlock/CountRow"]
-mouse_filter = 2
+[node name="Slash" type="Label" parent="AmmoBlock/CountRow" unique_id=2096579388]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 0.7)
 theme_override_font_sizes/font_size = 24
 text = "/"
 vertical_alignment = 2
 
-[node name="ReserveLabel" type="Label" parent="AmmoBlock/CountRow"]
+[node name="ReserveLabel" type="Label" parent="AmmoBlock/CountRow" unique_id=969054460]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
 theme_override_constants/outline_size = 3
@@ -469,8 +487,8 @@ theme_override_font_sizes/font_size = 20
 text = "24"
 vertical_alignment = 2
 
-[node name="AmmoCaption" type="Label" parent="AmmoBlock"]
-mouse_filter = 2
+[node name="AmmoCaption" type="Label" parent="AmmoBlock" unique_id=833717604]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.5)
 theme_override_constants/outline_size = 2
@@ -478,24 +496,40 @@ theme_override_font_sizes/font_size = 11
 text = "M A G   Â·   R E S E R V E"
 horizontal_alignment = 2
 
-
-[node name="Overlay" type="Control" parent="."]
+[node name="WeaponRow" type="HBoxContainer" parent="AmmoBlock" unique_id=766738886]
 unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+alignment = 2
+
+[node name="MeleeHint" type="Label" parent="AmmoBlock" unique_id=643008973]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 11
+horizontal_alignment = 2
+
+[node name="Overlay" type="Control" parent="." unique_id=1166519419]
+unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Backdrop" type="ColorRect" parent="Overlay"]
-anchors_preset = 15
+[node name="Backdrop" type="ColorRect" parent="Overlay" unique_id=1001102850]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 color = Color(0.02, 0.02, 0.04, 0.72)
 
-[node name="OverlayTitle" type="Label" parent="Overlay"]
+[node name="OverlayTitle" type="Label" parent="Overlay" unique_id=2101742210]
 unique_name_in_owner = true
-anchors_preset = 8
+layout_mode = 0
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -504,16 +538,15 @@ offset_left = -400.0
 offset_top = -120.0
 offset_right = 400.0
 offset_bottom = -40.0
-mouse_filter = 2
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.9)
 theme_override_constants/outline_size = 8
 theme_override_font_sizes/font_size = 72
 text = "EXTRACTED"
 horizontal_alignment = 1
 
-[node name="RecordLabel" type="Label" parent="Overlay"]
+[node name="RecordLabel" type="Label" parent="Overlay" unique_id=1192165490]
 unique_name_in_owner = true
-anchors_preset = 8
+layout_mode = 0
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -522,7 +555,6 @@ offset_left = -400.0
 offset_top = -166.0
 offset_right = 400.0
 offset_bottom = -132.0
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.85)
 theme_override_constants/outline_size = 6
@@ -530,8 +562,8 @@ theme_override_font_sizes/font_size = 24
 text = "N E W   B E S T"
 horizontal_alignment = 1
 
-[node name="ResultsColumn" type="VBoxContainer" parent="Overlay"]
-anchors_preset = 8
+[node name="ResultsColumn" type="VBoxContainer" parent="Overlay" unique_id=202574132]
+layout_mode = 0
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
@@ -543,45 +575,50 @@ offset_bottom = 250.0
 mouse_filter = 2
 theme_override_constants/separation = 26
 
-[node name="StatsRule" type="ColorRect" parent="Overlay/ResultsColumn"]
+[node name="StatsRule" type="ColorRect" parent="Overlay/ResultsColumn" unique_id=1443105117]
 custom_minimum_size = Vector2(0, 1)
+layout_mode = 2
 mouse_filter = 2
 color = Color(0.886, 0.914, 0.965, 0.2)
 
-[node name="StatsRow" type="HBoxContainer" parent="Overlay/ResultsColumn"]
+[node name="StatsRow" type="HBoxContainer" parent="Overlay/ResultsColumn" unique_id=140211840]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 76)
+layout_mode = 2
 mouse_filter = 2
-alignment = 1
 theme_override_constants/separation = 60
+alignment = 1
 
-[node name="OverlayDetail" type="Label" parent="Overlay/ResultsColumn"]
+[node name="OverlayDetail" type="Label" parent="Overlay/ResultsColumn" unique_id=1132757590]
 unique_name_in_owner = true
-mouse_filter = 2
+layout_mode = 2
 theme_override_colors/font_color = Color(0.463, 0.494, 0.553, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.6)
 theme_override_constants/outline_size = 3
 theme_override_font_sizes/font_size = 16
-text = ""
 horizontal_alignment = 1
 
-[node name="Buttons" type="HBoxContainer" parent="Overlay/ResultsColumn"]
+[node name="Buttons" type="HBoxContainer" parent="Overlay/ResultsColumn" unique_id=1558940650]
 custom_minimum_size = Vector2(0, 54)
-alignment = 1
+layout_mode = 2
 theme_override_constants/separation = 20
+alignment = 1
 
-[node name="PlayAgainButton" type="Button" parent="Overlay/ResultsColumn/Buttons"]
+[node name="PlayAgainButton" type="Button" parent="Overlay/ResultsColumn/Buttons" unique_id=39591785]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(230, 52)
+layout_mode = 2
 text = "PLAY AGAIN"
 
-[node name="MenuButton" type="Button" parent="Overlay/ResultsColumn/Buttons"]
+[node name="MenuButton" type="Button" parent="Overlay/ResultsColumn/Buttons" unique_id=1060822359]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(230, 52)
+layout_mode = 2
 text = "MAIN MENU"
 
-[node name="MiniMap" type="Control" parent="."]
+[node name="MiniMap" type="Control" parent="." unique_id=1134719103]
 unique_name_in_owner = true
+layout_mode = 3
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -591,18 +628,21 @@ offset_right = -28.0
 offset_bottom = 192.0
 mouse_filter = 2
 
-[node name="WeaponRow" type="HBoxContainer" parent="AmmoBlock"]
+[node name="HeadshotLabel" type="Label" parent="." unique_id=1272474584]
 unique_name_in_owner = true
-mouse_filter = 2
-alignment = 2
-theme_override_constants/separation = 10
-
-[node name="MeleeHint" type="Label" parent="AmmoBlock"]
-unique_name_in_owner = true
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.878, 0.631, 0.235, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.55)
-theme_override_constants/outline_size = 2
-theme_override_font_sizes/font_size = 11
-text = ""
-horizontal_alignment = 2
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -96.0
+offset_right = 160.0
+offset_bottom = -62.0
+theme_override_colors/font_color = Color(0.9098039, 0.28235295, 0.22745098, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.7019608)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 24
+text = "HEADSHOT"
+horizontal_alignment = 1
