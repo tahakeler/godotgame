@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>LAST MAGAZINE — Assignment 2 Report — Taha Keler</title>
+<title>LAST MAGAZINE - Assignment 2 Report - Taha Keler</title>
 <style>
   @page { size: A4; margin: 15mm 16mm 15mm 16mm; }
-  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 9.5pt; line-height: 1.38; color: #111; }
-  h1 { font-size: 20pt; margin: 0 0 1px 0; letter-spacing: 0.5px; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; font-size: 9.5pt; line-height: 1.4; color: #111; }
+  h1 { font-size: 20pt; margin: 0 0 1px 0; }
   .sub { color: #555; margin: 0 0 8px 0; font-size: 9.3pt; }
   h2 { font-size: 12.5pt; margin: 13px 0 5px 0; padding-bottom: 2px; border-bottom: 1.5px solid #c98a2b; }
   h3 { font-size: 10.5pt; margin: 9px 0 3px 0; }
@@ -16,27 +16,26 @@
   th { background: #f1ece3; }
   code { font-family: Menlo, Consolas, monospace; font-size: 8.1pt; background: #f4f4f4; padding: 0 2px; }
   figure { margin: 5px 0 7px 0; page-break-inside: avoid; }
-  figure img { width: 100%; border: 1px solid #999; }
+  figure img { width: 100%; border: 1px solid #999; display: block; }
   figcaption { font-size: 8.2pt; color: #333; margin-top: 2px; }
   .two { display: flex; gap: 8px; }
   .two figure { flex: 1; }
+  .row { display: flex; gap: 6px; align-items: flex-start; page-break-inside: avoid; }
   .kv td:first-child { width: 21%; font-weight: 600; background: #faf7f1; }
   .pass { color: #0a6b2d; font-weight: 700; }
   .prompt { background: #f6f3ee; border-left: 3px solid #c98a2b; padding: 4px 7px; margin: 3px 0 6px 0; font-size: 8.8pt; }
   .appendix { page-break-before: always; }
-  ul { margin: 2px 0 6px 18px; padding: 0; }
-  li { margin: 1px 0; }
 </style>
 </head>
 <body>
 
 <h1>LAST MAGAZINE</h1>
-<p class="sub">Assignment 2 report · Taha Keler · Godot 4.7.2 (GDScript) · an original 3D game, not a tutorial extension</p>
+<p class="sub">Assignment 2 report · Taha Keler · Godot 4.7.2 (GDScript) · original 3D game (not a tutorial extension)</p>
 
 <h2>1. Game brief</h2>
-<p>LAST MAGAZINE is a first-person survival horror shooter I built from scratch in Godot 4.7. You're stuck in a dark stone labyrinth with a pistol, a shotgun and a rifle, and zombies keep coming for you. The catch is ammunition: there's never enough, and every kill gives back only a little, so you have to keep fighting to keep shooting. You also have a torch, a melee shove and a decoy you can throw, and there are supply caches and medkits hidden around the map. I pushed the atmosphere hard: cave reverb, muffled sounds behind walls, fake footsteps behind you when it's quiet, and a heartbeat when you're low on health.</p>
-<p><b>Goal and result.</b> In the default <i>Extraction</i> mode you have to survive until a 2-minute extraction clock hits zero, and every kill shortens the clock. <b>Win:</b> the clock reaches zero while you're alive ("EXTRACTED"). <b>Loss:</b> your health hits zero ("YOU DIED"). There are three more modes on the same loop: <i>Last Stand</i> (survive 5 minutes), <i>Endless</i> (score = how long you last) and <i>Signal</i> (arm three relays, then get back to the start).</p>
-<p><b>Progress display.</b> The HUD shows the extraction countdown, kills, hostiles alive, health (number and segmented bar), magazine and reserve ammo, a compass strip and a minimap. <b>Restart:</b> <i>Play again</i> on the results screen, or <b>Enter</b> at any time, calls <code>Game.start_round()</code>. That resets the player (position, health, stance), the weapons (magazines and reserves), the zombies (all removed and the spawner reset), pickups, objectives, timers and counters.</p>
+<p>LAST MAGAZINE is a first person survival horror shooter that I made from scratch in Godot 4.7. You are stuck inside a dark stone labyrinth with a pistol, a shotgun and a rifle, and the zombies just keep coming at you. The main idea is ammo. You never really have enough of it, and every kill only gives a little bit back, so you have to keep fighting if you want to keep shooting. You also get a torch, a melee shove and a decoy you can throw, and there are supply caches and medkits hidden around the map. I spent a lot of time on the atmosphere too: there is cave reverb, sounds get muffled behind walls, you sometimes hear fake footsteps behind you when it's quiet, and your heartbeat kicks in when your health is low.</p>
+<p><b>Goal and result.</b> In the default mode, <i>Extraction</i>, you have to stay alive until a 2 minute extraction clock runs out, and every kill takes some time off the clock. <b>Win:</b> the clock hits zero and you are still alive ("EXTRACTED"). <b>Loss:</b> your health hits zero ("YOU DIED"). There are three other modes that use the same loop: <i>Last Stand</i> (survive 5 minutes), <i>Endless</i> (your score is how long you last) and <i>Signal</i> (arm three relays and then get back to where you started).</p>
+<p><b>Progress display.</b> The HUD shows the extraction countdown, kills, how many zombies are alive, your health (a number and a segmented bar), magazine and reserve ammo, a compass strip and a minimap. <b>Restart:</b> you can press <i>Play again</i> on the results screen, or hit <b>Enter</b> any time. Both call <code>Game.start_round()</code>, which resets the player (position, health, stance), the weapons (magazines and reserves), the zombies (all removed, spawner reset), the pickups, objectives, timers and counters.</p>
 <table>
 <tr><th>Action</th><th>Key</th><th>Action</th><th>Key</th></tr>
 <tr><td>Move / look</td><td>W A S D / mouse or trackpad</td><td>Reload</td><td>R</td></tr>
@@ -44,102 +43,109 @@
 <tr><td>Sprint / crouch / jump</td><td>Shift / Ctrl or C / Space</td><td>Torch / melee / decoy</td><td>F / V / G</td></tr>
 <tr><td>Interact (caches, medkits, relays)</td><td>Hold E</td><td>Restart / pause</td><td>Enter / Esc</td></tr>
 </table>
-<p><b>Interaction and collision.</b> The mouse and keyboard drive a <code>CharacterBody3D</code> in 3D, and several collisions trigger gameplay. The weapon's raycast hitting a zombie's collision capsule deals damage and kills it at zero. A zombie's lunge reaching the player's body deals contact damage. An ammo cache's <code>Area3D</code> detects the player overlapping it (<code>body_entered</code>), and that's what lets you resupply from it.</p>
+<p><b>Interaction and collision.</b> The mouse and keyboard control a <code>CharacterBody3D</code> in 3D, and a few different collisions do something in the game. When the gun's raycast hits a zombie's collision capsule it does damage, and the zombie dies at zero. When a zombie's lunge reaches the player's body, the player takes damage. And each ammo cache has an <code>Area3D</code> that notices when the player walks into it (<code>body_entered</code>), which is what lets you take ammo from it.</p>
 
 <figure style="width:74%; margin-left:auto; margin-right:auto">
 <img src="img/01_game_running.jpg">
-<figcaption><b>Figure 1.</b> The game running: a zombie coming at me through the labyrinth. Top: extraction countdown and compass. Top left: kills and hostiles. Top right: minimap. Bottom left: health. Bottom right: magazine / reserve ammo and weapon slots.</figcaption>
+<figcaption><b>Figure 1.</b> The game running, with a zombie coming at me in the labyrinth. At the top is the extraction countdown and compass, top left is kills and hostiles, top right is the minimap, bottom left is health and bottom right is ammo and the weapon slots.</figcaption>
 </figure>
 
 <h2>2. Assets</h2>
+<p>The two biggest things in the game, the map and the zombies, I made myself in Blender, and I used ChatGPT (Astra 6) to help me while I was working on them. The map is built out of pieces from Kenney's Modular Dungeon Kit, and the zombies are built from MakeHuman's free assets. Here is what they look like:</p>
+<div class="row">
+<figure style="flex: 2.2"><img src="img/12_map_topdown.jpg"><figcaption><b>Figure 2.</b> Top down view of my map, the Amethyst Labyrinth.</figcaption></figure>
+<figure style="flex: 1"><img src="img/13_zombie_normal.jpg"><figcaption><b>Figure 3.</b> Normal zombie.</figcaption></figure>
+<figure style="flex: 1"><img src="img/14_zombie_heavy.jpg"><figcaption><b>Figure 4.</b> Heavy (fat) zombie.</figcaption></figure>
+<figure style="flex: 1"><img src="img/15_zombie_runner.jpg"><figcaption><b>Figure 5.</b> Runner zombie.</figcaption></figure>
+</div>
 <table>
 <tr><th>Asset</th><th>Source</th><th>Licence</th><th>Where it's used</th></tr>
-<tr><td>Amethyst Labyrinth (map, colour map, stone shaders)</td><td>Self-made in Blender from Kenney's <a href="https://kenney.nl/assets/modular-dungeon-kit">Modular Dungeon Kit</a>, with help from ChatGPT (Astra 6)</td><td>My own work; kit CC0 1.0</td><td><code>amethyst_labyrinth/</code>, the whole play space</td></tr>
-<tr><td>Zombie pack: normal, heavy and runner bodies, textures and animations</td><td>Self-made in Blender with help from ChatGPT (Astra 6), from MakeHuman community assets: <a href="https://github.com/makehumancommunity/mpfb2">MPFB2</a> rig, <a href="https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html">system assets</a>, <a href="https://static.makehumancommunity.org/assets/assetpacks/skins02.html">skins02</a> (Mindfront Aksel skin)</td><td>My own work; sources CC0 1.0 (MPFB code is GPLv3, but its assets and output are CC0)</td><td><code>assets/models/zombies/</code>, all five zombie types</td></tr>
-<tr><td>Blaster Kit (weapon model, cases)</td><td>Kenney</td><td>CC0 1.0</td><td>First-person weapon, floor props</td></tr>
-<tr><td>RPG Audio (footsteps, reloads, impacts, groans)</td><td>Kenney</td><td>CC0 1.0</td><td>Most sound effects</td></tr>
-<tr><td>Modular Cave Kit; Animated Characters: Survivors</td><td>Kenney</td><td>CC0 1.0</td><td>My earlier cave and zombie model; still in the project files, not used in play</td></tr>
-<tr><td>Horror music loops, stingers, distant calls, footsteps, drips, debris, heartbeat, breathing (18 files, 16 authors)</td><td>OpenGameArt</td><td>CC0 1.0 (I checked every page)</td><td>Music, "phantom" dread sounds, low-health heartbeat. One licence file per source in <code>assets/licenses/</code></td></tr>
-<tr><td>Gunshots, Brute growl, Screamer, cave drone, tension pulse</td><td>Self-made (synthesised by <code>tools/generate_audio.gd</code>)</td><td>My own work</td><td><code>assets/audio/generated/</code></td></tr>
-<tr><td>HUD, menus, tracers, effects, pickups</td><td>Self-made; simple primitives (boxes, spheres, ColorRects) as placeholders where it made sense</td><td>My own work</td><td><code>src/ui/</code>, <code>src/gameplay/</code></td></tr>
-<tr><td>Godot AI add-on (MCP bridge)</td><td>hi-godot/godot-ai v4.2.3</td><td>MIT</td><td><code>addons/godot_ai/</code>, editor tooling; its runtime helper is stripped from the export</td></tr>
+<tr><td>Amethyst Labyrinth (map, colour map, stone shaders)</td><td>Made by me in Blender from Kenney's <a href="https://kenney.nl/assets/modular-dungeon-kit">Modular Dungeon Kit</a>, with help from ChatGPT (Astra 6)</td><td>My own work, kit is CC0 1.0</td><td><code>amethyst_labyrinth/</code>, the whole play area</td></tr>
+<tr><td>Zombie pack: normal, heavy and runner (bodies, textures, animations)</td><td>Made by me in Blender with help from ChatGPT (Astra 6), using MakeHuman assets: the <a href="https://github.com/makehumancommunity/mpfb2">MPFB2</a> rig, the <a href="https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html">system assets</a> and the <a href="https://static.makehumancommunity.org/assets/assetpacks/skins02.html">skins02</a> pack (Mindfront Aksel skin)</td><td>My own work, sources CC0 1.0 (the MPFB code is GPLv3 but its assets and output are CC0)</td><td><code>assets/models/zombies/</code>, all five zombie types</td></tr>
+<tr><td>Blaster Kit (gun model, cases)</td><td>Kenney</td><td>CC0 1.0</td><td>First person gun, props on the floor</td></tr>
+<tr><td>RPG Audio (footsteps, reloads, impacts, groans)</td><td>Kenney</td><td>CC0 1.0</td><td>Most of the sound effects</td></tr>
+<tr><td>Modular Cave Kit, Animated Characters: Survivors</td><td>Kenney</td><td>CC0 1.0</td><td>My older cave map and zombie model. Still in the project files but not used in play</td></tr>
+<tr><td>Horror music, stingers, distant calls, footsteps, drips, debris, heartbeat, breathing (18 files, 16 authors)</td><td>OpenGameArt</td><td>CC0 1.0 (I checked every page)</td><td>Music, the fake "phantom" sounds and the low health heartbeat. There's a licence file for each one in <code>assets/licenses/</code></td></tr>
+<tr><td>Gunshots, Brute growl, Screamer, cave drone, tension pulse</td><td>Made by me (generated with <code>tools/generate_audio.gd</code>)</td><td>My own work</td><td><code>assets/audio/generated/</code></td></tr>
+<tr><td>HUD, menus, tracers, effects, pickups</td><td>Made by me, with simple shapes (boxes, spheres, ColorRects) as placeholders where that was enough</td><td>My own work</td><td><code>src/ui/</code>, <code>src/gameplay/</code></td></tr>
+<tr><td>Godot AI add-on (the MCP bridge)</td><td>hi-godot/godot-ai v4.2.3</td><td>MIT</td><td><code>addons/godot_ai/</code>, only for the editor. Its helper is removed from the exported game</td></tr>
 </table>
-<p>Everything third-party is also credited in <code>CREDITS.md</code> and on the in-game <b>Credits</b> screen.</p>
+<p>All of this is also credited in <code>CREDITS.md</code> and on the Credits screen inside the game.</p>
 
 <h2>3. The two features</h2>
 
-<h3>Feature 1 — Ammunition and reload</h3>
+<h3>Feature 1: Ammunition and reload</h3>
 <table class="kv">
-<tr><td>Trigger</td><td>Left click (<code>fire</code>) and <b>R</b> (<code>reload</code>). Firing an empty magazine also starts a reload automatically.</td></tr>
-<tr><td>State change and owner</td><td>The <b><code>Weapon</code></b> node (<code>Player/Head/Camera/Weapon</code>, <code>src/gameplay/weapon/weapon.gd</code>) owns <code>magazine_ammo</code> and <code>reserve_ammo</code>. <code>try_fire()</code> takes one round; an empty magazine blocks the shot and emits <code>dry_fired</code>. <code>try_reload()</code> starts a timed reload (1.5 s on the pistol) that moves rounds from reserve into the magazine. It won't start with a full magazine or an empty reserve. Kills refund a bit of reserve ammo.</td></tr>
-<tr><td>Visible result</td><td>The HUD (<code>src/ui/hud.gd</code>: <code>_on_ammo_changed</code>, <code>_on_reload_started</code>, <code>_on_dry_fired</code>) updates the count, turns it red at 0 and shows <b>RELOADING</b>. The gun dips and rolls while reloading, and an empty trigger clicks.</td></tr>
-<tr><td>Scenes / scripts</td><td><code>weapon.gd</code>, <code>weapon.tscn</code>, <code>weapon_types.gd</code>; <code>hud.gd</code>, <code>hud.tscn</code>; <code>game.gd</code> (kill refunds).</td></tr>
-<tr><td>Built through MCP?</td><td>No. The AI assistant (Claude Code) wrote it with its own file and shell tools. The file list is in <code>docs/ai-contribution.md</code>.</td></tr>
+<tr><td>Trigger</td><td>Left click (<code>fire</code>) and <b>R</b> (<code>reload</code>). If you try to shoot with an empty magazine it also starts a reload on its own.</td></tr>
+<tr><td>State change and owner</td><td>The <b><code>Weapon</code></b> node (<code>Player/Head/Camera/Weapon</code>, script <code>src/gameplay/weapon/weapon.gd</code>) owns <code>magazine_ammo</code> and <code>reserve_ammo</code>. <code>try_fire()</code> takes away one round. If the magazine is empty the shot is blocked and it emits <code>dry_fired</code>. <code>try_reload()</code> starts a timed reload (1.5 s for the pistol) that moves rounds from the reserve into the magazine. It won't start if the magazine is already full or the reserve is empty. Kills give a bit of reserve ammo back.</td></tr>
+<tr><td>Visible result</td><td>The HUD (<code>src/ui/hud.gd</code>: <code>_on_ammo_changed</code>, <code>_on_reload_started</code>, <code>_on_dry_fired</code>) updates the number, turns it red at 0 and shows <b>RELOADING</b>. The gun also dips down and rolls while it reloads, and you hear a click when you pull the trigger on an empty gun.</td></tr>
+<tr><td>Scenes / scripts</td><td><code>weapon.gd</code>, <code>weapon.tscn</code>, <code>weapon_types.gd</code>, <code>hud.gd</code>, <code>hud.tscn</code>, <code>game.gd</code> (ammo from kills).</td></tr>
+<tr><td>Built through MCP?</td><td>No. The AI assistant (Claude Code) wrote this one using its normal file and terminal tools. The list of files is in <code>docs/ai-contribution.md</code>.</td></tr>
 </table>
 <table>
 <tr><th>Check</th><th>Input</th><th>Expected</th><th>Actual</th><th></th></tr>
-<tr><td>Normal</td><td>Full pistol (10 / 24): fire once, then reload</td><td>Magazine 10 → 9; after the reload 10, reserve 24 → 23</td><td>Shot fired, 10 → 9; reload started; magazine 10, reserve 23</td><td class="pass">Pass</td></tr>
-<tr><td>Boundary</td><td>Magazine 0 and reserve 0: press fire, then reload</td><td>No shot, magazine stays 0, dry-fire feedback; reload refused</td><td><code>try_fire()</code> returned false, magazine 0, one <code>dry_fired</code>; <code>try_reload()</code> returned false</td><td class="pass">Pass</td></tr>
+<tr><td>Normal</td><td>Full pistol (10 / 24), fire once and then reload</td><td>Magazine goes 10 to 9, after the reload it's 10 again and the reserve goes 24 to 23</td><td>Shot fired, 10 to 9, reload started, magazine 10, reserve 23</td><td class="pass">Pass</td></tr>
+<tr><td>Boundary</td><td>Magazine 0 and reserve 0, press fire and then reload</td><td>No shot, magazine stays 0, dry fire click, reload refused</td><td><code>try_fire()</code> returned false, magazine 0, one <code>dry_fired</code>, <code>try_reload()</code> returned false</td><td class="pass">Pass</td></tr>
 </table>
 <div class="two">
-<figure><img src="img/03_ammo_empty.jpg"><figcaption><b>Figure 2.</b> Magazine empty: the count goes red (0 / 24) and RELOADING shows.</figcaption></figure>
-<figure><img src="img/05_reloaded.jpg"><figcaption><b>Figure 3.</b> After the reload: 10 in the magazine, reserve down by what went in.</figcaption></figure>
+<figure><img src="img/03_ammo_empty.jpg"><figcaption><b>Figure 6.</b> Empty magazine. The count turns red (0 / 24) and RELOADING shows up.</figcaption></figure>
+<figure><img src="img/05_reloaded.jpg"><figcaption><b>Figure 7.</b> After the reload, 10 in the magazine and the reserve went down.</figcaption></figure>
 </div>
 
-<h3>Feature 2 — Headshots (built through the godot-ai MCP)</h3>
+<h3>Feature 2: Headshots (built through the godot-ai MCP)</h3>
 <table class="kv">
-<tr><td>Trigger</td><td>A round from the weapon's raycast hits a zombie in the head zone, the top 16% of its body height (<code>Zombie.is_head_hit()</code>). On a 2.6 m Brute that's anything above 2.18 m.</td></tr>
-<tr><td>State change and owner</td><td>The <b><code>Weapon</code></b> node doubles that round's damage (<code>headshot_multiplier</code> = 2) and emits <code>headshot</code>. The <b><code>Game</code></b> node (<code>src/core/game.gd</code>) owns the <code>headshots</code> counter: +1 per headshot while the round is live, reset to 0 on restart.</td></tr>
-<tr><td>Visible result</td><td>A red <b>HEADSHOT</b> callout flashes above the crosshair and fades out (<code>HeadshotLabel</code> in <code>hud.tscn</code>, driven by <code>HUD.show_headshot()</code>). The zombie visibly drops faster, and the results screen shows a <b>HEADSHOTS</b> count.</td></tr>
+<tr><td>Trigger</td><td>A bullet from the gun's raycast hits a zombie in the head zone, which is the top 16% of its body height (<code>Zombie.is_head_hit()</code>). On the 2.6 m Brute that means anything above 2.18 m.</td></tr>
+<tr><td>State change and owner</td><td>The <b><code>Weapon</code></b> node doubles the damage for that bullet (<code>headshot_multiplier</code> = 2) and emits <code>headshot</code>. The <b><code>Game</code></b> node (<code>src/core/game.gd</code>) owns the <code>headshots</code> counter. It goes up by 1 for every headshot while the round is running and goes back to 0 when you restart.</td></tr>
+<tr><td>Visible result</td><td>A red <b>HEADSHOT</b> label flashes above the crosshair and fades out (<code>HeadshotLabel</code> in <code>hud.tscn</code>, shown by <code>HUD.show_headshot()</code>). The zombie goes down noticeably faster, and the results screen shows how many <b>HEADSHOTS</b> you got.</td></tr>
 <tr><td>Scenes / scripts</td><td><code>weapon.gd</code>, <code>zombie.gd</code>, <code>game.gd</code>, <code>hud.gd</code>, <code>hud.tscn</code>.</td></tr>
-<tr><td>Built through MCP?</td><td><b>Yes.</b> I connected Claude Code to the running Godot editor with the godot-ai MCP server, and every change was made with MCP tool calls. <code>script_patch</code> was used on all four scripts. In the scene, <code>scene_open</code>, <code>node_create</code> (the new <code>HeadshotLabel</code>), 17 <code>node_set_property</code> calls (text, anchors, offsets, colours, outline, mouse filter, hidden by default) and <code>scene_save</code> built the callout. The MCP's own diagnostics caught one mistake as it happened: the first <code>zombie.gd</code> patch used <code>head_fraction</code> before it was declared, and the next patch fixed it.</td></tr>
+<tr><td>Built through MCP?</td><td><b>Yes.</b> I connected Claude Code to my open Godot editor with the godot-ai MCP server, and every change for this feature was done with MCP tool calls. It used <code>script_patch</code> on all four scripts. For the scene it used <code>scene_open</code>, <code>node_create</code> to add the new <code>HeadshotLabel</code>, 17 <code>node_set_property</code> calls (text, anchors, offsets, colours, outline, mouse filter, hidden at the start) and <code>scene_save</code>. The MCP also caught a mistake by itself: the first patch to <code>zombie.gd</code> used <code>head_fraction</code> before it was declared, and the next patch fixed it.</td></tr>
 </table>
 <table>
 <tr><th>Check</th><th>Input</th><th>Expected</th><th>Actual</th><th></th></tr>
-<tr><td>Normal</td><td>Pistol (26 damage) aimed at a Brute's head (165 hp) from 5 m</td><td>52 damage (2x), headshots 0 → 1, callout shown</td><td>Health 165 → 113 (52), headshots 0 → 1, callout visible</td><td class="pass">Pass</td></tr>
-<tr><td>Boundary</td><td>Same shot aimed 8 cm below the head zone; plus a hit 1 cm under and 1 cm over the zone's edge</td><td>26 damage (1x), counter unchanged; 1 cm under = not a headshot, 1 cm over = headshot</td><td>Health 165 → 139 (26), headshots stayed at 1; <code>is_head_hit</code> false / true</td><td class="pass">Pass</td></tr>
+<tr><td>Normal</td><td>Pistol (26 damage) aimed at a Brute's head (165 hp) from 5 m</td><td>52 damage (2x), headshots 0 to 1, label shows</td><td>Health 165 to 113 (52), headshots 0 to 1, label visible</td><td class="pass">Pass</td></tr>
+<tr><td>Boundary</td><td>Same shot but aimed 8 cm below the head zone, plus one hit 1 cm under and one 1 cm over the edge of the zone</td><td>26 damage (1x), counter stays the same. 1 cm under is not a headshot, 1 cm over is</td><td>Health 165 to 139 (26), headshots stayed at 1, <code>is_head_hit</code> false / true</td><td class="pass">Pass</td></tr>
 </table>
 <div class="two">
-<figure><img src="img/10_headshot.jpg"><figcaption><b>Figure 4.</b> A headshot on a Brute: the HEADSHOT callout above the crosshair.</figcaption></figure>
-<figure><img src="img/11_results_headshots.jpg"><figcaption><b>Figure 5.</b> The results screen with the new HEADSHOTS count.</figcaption></figure>
+<figure><img src="img/10_headshot.jpg"><figcaption><b>Figure 8.</b> A headshot on a Brute, with the HEADSHOT label above the crosshair.</figcaption></figure>
+<figure><img src="img/11_results_headshots.jpg"><figcaption><b>Figure 9.</b> The results screen with the new HEADSHOTS count.</figcaption></figure>
 </div>
 
-<h3>Supporting mechanic — Player health (the loss condition)</h3>
-<p>Health is what ends the round. <b>Trigger:</b> a zombie's lunge reaches the player (<code>Zombie._try_land_hit</code>). <b>State owner:</b> the <code>Health</code> node under <code>Player</code> (<code>src/gameplay/health.gd</code>). <b>Visible result:</b> the number and bar drop, a red arc points at whoever hit you, the edges of the screen pulse red below 35%, and at 0 you get <b>YOU DIED</b>. I tested it the same way: a Shambler's hit takes you from 100 to 88 (normal). Taking 12 damage at 5 health leaves you at exactly 0 (boundary): not negative, one death, round lost, and a second hit is ignored. After restart it's back to 100 health, 0 kills and 10 / 24 ammo.</p>
+<h3>Also: player health (how you lose)</h3>
+<p>Health is what ends the round. <b>Trigger:</b> a zombie's lunge reaches the player (<code>Zombie._try_land_hit</code>). <b>State owner:</b> the <code>Health</code> node under <code>Player</code> (<code>src/gameplay/health.gd</code>). <b>Visible result:</b> the number and bar go down, a red arc points at whoever hit you, the edges of the screen pulse red under 35%, and at 0 you get <b>YOU DIED</b>. I tested this the same way. A Shambler's hit takes you from 100 to 88 (normal). Getting hit for 12 at 5 health leaves you at exactly 0 (boundary), not a negative number, with one death, the round lost, and a second hit that gets ignored. After restarting you're back to 100 health, 0 kills and 10 / 24 ammo.</p>
 
-<h2>4. Corrective prompt log — mouse look didn't work</h2>
+<h2>4. Corrective prompt log: mouse look didn't work</h2>
 <table class="kv">
-<tr><td>What I wanted</td><td>Moving the mouse or my MacBook trackpad turns the first-person camera. My rule from the start: camera look is mouse or trackpad only, never arrow keys.</td></tr>
-<tr><td>What I got</td><td>In play the camera didn't respond to the mouse at all, even though every automated test passed.</td></tr>
+<tr><td>What I wanted</td><td>Moving the mouse or my MacBook trackpad turns the camera. From the start I said camera look should only be mouse or trackpad, never the arrow keys.</td></tr>
+<tr><td>What I got</td><td>When I played, the camera didn't move with the mouse at all, even though every automated test passed.</td></tr>
 </table>
-<p><b>Original prompt</b> (my requirement from the early sessions): <i>camera look must use the mouse or trackpad, never the arrow keys, and it has to work on a MacBook trackpad.</i> <b>Response:</b> the assistant built the <code>Player</code> as a <code>CharacterBody3D</code> with clamped mouse look in <code>_unhandled_input</code>, capturing the mouse on click (commit "Add first-person player controller"). Later it added a HUD with a five-piece crosshair.</p>
-<p><b>Follow-up prompt 1</b> (mine, word for word):</p>
+<p><b>Original prompt</b> (my requirement from the early sessions): <i>camera look has to use the mouse or trackpad, never the arrow keys, and it has to work on a MacBook trackpad.</i> <b>Response:</b> the assistant made the <code>Player</code> a <code>CharacterBody3D</code> with mouse look in <code>_unhandled_input</code> that captures the mouse when you click (commit "Add first-person player controller"). Later on it also added a HUD with a crosshair made of five small pieces.</p>
+<p><b>Follow-up prompt 1</b> (mine, copied exactly):</p>
 <div class="prompt">"for the mini map can you jsut get the 2d view of the original map and do it like that, also the mouse doesnt work, fix that immidiatelly and continue on what you where doing"</div>
-<p><b>Response 1</b> (the assistant, word for word): <i>"Found it. <code>ColorRect</code> defaults to <code>mouse_filter = STOP</code>, and the crosshair's five rects sit dead centre — which is exactly where a captured cursor is pinned. They swallow every <code>InputEventMouseMotion</code> before <code>_unhandled_input</code> ever runs. Every headless test passes because none of them has a cursor sitting over a Control."</i> It also told me straight that it couldn't reproduce the bug headlessly, so <i>"the final word is yours at the keyboard."</i></p>
-<p><b>Cause.</b> In Godot, a <code>Control</code> under the cursor eats mouse events before gameplay code sees them, and <code>_unhandled_input</code> only gets what nobody else consumed. The crosshair pieces were <code>ColorRect</code>s left on the default <code>MOUSE_FILTER_STOP</code>, sitting exactly where the captured cursor lives, so the player never got a single mouse-motion event. The tests missed it because headless Godot never hovers a Control.</p>
-<p><b>Fix.</b> Every crosshair piece in <code>src/ui/hud.tscn</code> was set to <code>mouse_filter = 2</code> (IGNORE). A regression test was added (<code>tests/manual/verify_look.gd</code>, <code>test_look_nothing_on_the_hud_swallows_the_mouse</code>) that sends real motion events from the cursor position and fails if any HUD control stops them. From then on I held every new HUD element to the same rule, including the later HUD restyle and the MCP-built HEADSHOT label.</p>
-<p><b>Follow-up prompt 2, the evidence</b> (mine, word for word, after I played it on the MacBook):</p>
+<p><b>Response 1</b> (the assistant, copied exactly): <i>"Found it. <code>ColorRect</code> defaults to <code>mouse_filter = STOP</code>, and the crosshair's five rects sit dead centre — which is exactly where a captured cursor is pinned. They swallow every <code>InputEventMouseMotion</code> before <code>_unhandled_input</code> ever runs. Every headless test passes because none of them has a cursor sitting over a Control."</i> It was also honest that it couldn't reproduce the bug in its own tests, so <i>"the final word is yours at the keyboard."</i></p>
+<p><b>Cause.</b> In Godot, any <code>Control</code> under the mouse gets the mouse events first, and <code>_unhandled_input</code> only gets whatever nothing else used. The crosshair pieces were <code>ColorRect</code>s left on the default <code>MOUSE_FILTER_STOP</code>, and they were sitting exactly where the captured mouse is, so the player never got any mouse movement at all. The tests didn't catch it because headless Godot never has a mouse over a Control.</p>
+<p><b>Fix.</b> Every crosshair piece in <code>src/ui/hud.tscn</code> got set to <code>mouse_filter = 2</code> (IGNORE). We also added a test for it (<code>tests/manual/verify_look.gd</code>, <code>test_look_nothing_on_the_hud_swallows_the_mouse</code>) that sends real mouse movement from where the cursor is and fails if anything on the HUD blocks it. After that I kept the same rule for every new HUD piece, including the HUD redesign and the HEADSHOT label that the MCP made.</p>
+<p><b>Follow-up prompt 2, the proof</b> (mine, copied exactly, after I played it on my MacBook):</p>
 <div class="prompt">"Its good, the mouse finally works, tho there is a problem, i would prefer that the zombies always run at me …"</div>
-<p>So it's confirmed on real hardware, and the regression test passes in the project's check script (<code>tools/check.sh</code>, exit 0). The appendix has a second correction.</p>
+<p>So it works on real hardware, and the test for it passes in the project's check script (<code>tools/check.sh</code>, exit 0). There's a second correction in the appendix.</p>
 
 <!-- ===================== APPENDIX ===================== -->
 <div class="appendix">
-<h2>Appendix A — The exported build, running without the editor</h2>
-<figure><img src="img/08_exported_build.jpg"><figcaption><b>Figure A1.</b> The exported macOS build (<code>build/macos/LastMagazine.app</code>, ad-hoc signed, universal binary) running on its own, no editor. The exported binary recorded this frame itself (<code>--write-movie</code>). The Windows build (<code>build/windows/LastMagazine.exe</code> + <code>LastMagazine.pck</code>) was exported from the same project.</figcaption></figure>
+<h2>Appendix A: the exported build running without the editor</h2>
+<figure><img src="img/08_exported_build.jpg"><figcaption><b>Figure A1.</b> The exported macOS build (<code>build/macos/LastMagazine.app</code>, ad-hoc signed, universal binary) running on its own without the editor. The exported game recorded this frame itself (<code>--write-movie</code>). The Windows build (<code>build/windows/LastMagazine.exe</code> + <code>LastMagazine.pck</code>) was exported from the same project.</figcaption></figure>
 <div class="two">
 <figure><img src="img/06_result_lost.jpg"><figcaption><b>Figure A2.</b> The loss screen at 0 health.</figcaption></figure>
-<figure><img src="img/07_after_restart.jpg"><figcaption><b>Figure A3.</b> Right after restart: 100 health, 0 kills, 0 hostiles, 10 / 24 ammo, fresh clock.</figcaption></figure>
+<figure><img src="img/07_after_restart.jpg"><figcaption><b>Figure A3.</b> Right after restarting: 100 health, 0 kills, 0 hostiles, 10 / 24 ammo and a new clock.</figcaption></figure>
 </div>
-<figure style="width:60%"><img src="img/02_health_damage.jpg"><figcaption><b>Figure A4.</b> Taking damage: health 36, a red arc toward the attacker, red screen edge.</figcaption></figure>
+<figure style="width:60%"><img src="img/02_health_damage.jpg"><figcaption><b>Figure A4.</b> Taking damage: health at 36, a red arc pointing at the attacker and red screen edges.</figcaption></figure>
 
-<h2>Appendix B — A second correction: zombies standing still</h2>
-<p><b>My prompt</b> (word for word): <span class="prompt">"i would prefer that the zombies always run at me, instead of just staying there in there places"</span></p>
-<p><b>First result (wrong):</b> the assistant made every zombie keep "catching my scent" so it always heads for me. It then measured a real round (Endless, 20 zombies, me standing still) and found it hadn't worked. No zombie was unaware any more, but 13 of 20 still stood still while "investigating" 15–23 m away, and the average distance was stuck at 15.0 m after a minute.</p>
-<p><b>Cause:</b> my labyrinth's navigation mesh sits up to 0.7 m above the floor in places, and Godot's <code>NavigationAgent3D</code> counts a waypoint as reached in 3D using <code>path_desired_distance</code> = 0.6 m. So the first waypoint was the zombie's own spot lifted 0.7 m. It was never "reached", and the zombie kept steering at a point right above its head at zero speed.</p>
-<p><b>Fix:</b> <code>Zombie._next_waypoint()</code> in <code>src/gameplay/zombie/zombie.gd</code> measures waypoints flat and skips to the first path point that's actually ahead. <b>Evidence:</b> the same measurement afterwards had all 20 zombies within 6 m by 50 s, average distance 1.4 m.</p>
+<h2>Appendix B: a second correction, zombies standing still</h2>
+<p><b>My prompt</b> (copied exactly): <span class="prompt">"i would prefer that the zombies always run at me, instead of just staying there in there places"</span></p>
+<p><b>First result (wrong):</b> the assistant made every zombie keep "smelling" where I am so it always walks towards me. Then it measured a real round (Endless, 20 zombies, me standing still) and it hadn't actually worked. None of the zombies were unaware anymore, but 13 out of 20 were still standing still while "investigating" 15 to 23 m away, and the average distance stayed at 15.0 m after a whole minute.</p>
+<p><b>Cause:</b> the navigation mesh on my labyrinth sits up to 0.7 m above the floor in some places, and Godot's <code>NavigationAgent3D</code> only counts a waypoint as reached within <code>path_desired_distance</code> = 0.6 m, measured in 3D. So the first waypoint was basically the zombie's own spot lifted 0.7 m up. It never got "reached", and the zombie just kept aiming at a point right above its head without moving.</p>
+<p><b>Fix:</b> <code>Zombie._next_waypoint()</code> in <code>src/gameplay/zombie/zombie.gd</code> now measures waypoints flat on the ground and skips to the first point that's actually ahead. <b>Proof:</b> the same test afterwards had all 20 zombies within 6 m by 50 seconds, with an average distance of 1.4 m.</p>
 
-<h2>Appendix C — Where the AI changed the project</h2>
-<p>I built this with an AI assistant (Claude Code). The Blender assets (the map and the zombie pack) I made with help from ChatGPT (Astra 6). The files it wrote are listed in <code>docs/ai-contribution.md</code>, including the exact MCP tool calls behind the headshot feature, and the full history is in the project's Git log.</p>
+<h2>Appendix C: where the AI changed the project</h2>
+<p>I made this game with an AI assistant (Claude Code). The files it wrote are listed in <code>docs/ai-contribution.md</code>, including the exact MCP tool calls behind the headshot feature, and the full history is in the project's Git log. The Blender assets (the map and the zombies) I made with help from ChatGPT (Astra 6).</p>
 </div>
 
 </body>
