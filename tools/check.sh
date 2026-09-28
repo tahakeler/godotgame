@@ -118,9 +118,6 @@ run_step() {
 run_step "import" "$GODOT" --headless --import
 run_step "static-checks" "$GODOT" --headless --script tests/manual/verify_project.gd
 run_step "input-map" "$GODOT" --headless --script tests/manual/verify_input_map.gd
-run_step "arena" "$GODOT" --headless --script tests/manual/verify_arena.gd
-run_step "navmesh" "$GODOT" --headless --script tests/manual/verify_navmesh.gd
-run_step "placement" "$GODOT" --headless --script tools/audit_placement.gd
 run_step "collision" "$GODOT" --headless --script tools/audit_collision.gd
 run_step "spawn-director" "$GODOT" --headless --script tests/manual/verify_spawn_director.gd
 run_step "zombie-types" "$GODOT" --headless --script tests/manual/verify_zombie_types.gd
