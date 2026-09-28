@@ -20,11 +20,6 @@ const ENGINE_LINE := "Built with Godot Engine 4.7 — MIT Licence"
 ## work contributed.
 const ASSET_PACKS := [
 	{
-		"name": "Modular Cave Kit",
-		"licence": "CC0 1.0",
-		"used": "The original procedural cave (still in the project; the shipped map is the Amethyst Labyrinth)",
-	},
-	{
 		"name": "Modular Dungeon Kit",
 		"licence": "CC0 1.0",
 		"used": "The pieces the Amethyst Labyrinth map was built from in Blender",
@@ -38,11 +33,6 @@ const ASSET_PACKS := [
 		"name": "RPG Audio",
 		"licence": "CC0 1.0",
 		"used": "Reloads, impacts, footsteps, zombie groans and the round results",
-	},
-	{
-		"name": "Animated Characters: Survivors",
-		"licence": "CC0 1.0",
-		"used": "The earlier zombie model (still in the project files, not used in play)",
 	},
 	{
 		"name": "MakeHuman community assets — MPFB2, system assets, skins02 (Mindfront Aksel skin)",
@@ -154,8 +144,8 @@ func _build() -> void:
 
 	_add_heading("A S S E T S")
 	_add_body(
-		"Most art and audio is by Kenney (kenney.nl) under CC0 1.0. The listed "
-		+ "sounds and music are CC0 works by the authors named."
+		"Every third-party asset is CC0 1.0: Kenney (kenney.nl), the MakeHuman "
+		+ "community, and the OpenGameArt authors named below."
 	)
 
 	for pack in ASSET_PACKS:
@@ -175,8 +165,7 @@ func _build() -> void:
 	_add_body(
 		"Parts of this project were written with Claude Code acting as an AI "
 		+ "assistant (the headshot feature through the godot-ai MCP). The "
-		+ "Blender assets were made with help from ChatGPT (Astra 6). Details "
-		+ "are in docs/ai-contribution.md."
+		+ "Blender assets were made with help from ChatGPT (Astra 6)."
 	)
 
 

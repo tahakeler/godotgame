@@ -1,7 +1,12 @@
 class_name Arena
 extends NavigationRegion3D
 
-## The play space, assembled from Kenney Modular Cave Kit pieces (CC0).
+## The play space: the authored Amethyst Labyrinth (dungeon_arena.tscn sets
+## external_map). Pickups, spawns, objectives and the minimap all read from it.
+##
+## The older procedural cave generator is still in this file but no longer
+## runs: its Modular Cave Kit assets were removed, so an Arena without an
+## authored map refuses to build rather than loading files that are gone.
 ##
 ## The kit is built on a 4-unit grid: every piece is centred on its own origin,
 ## rooms are 12x12 or 20x20, and corridors are 4x4.
@@ -702,29 +707,7 @@ func _ready() -> void:
 		_adopt_external_map()
 		return
 
-	_build_layout()
-	_build_collision_shell()
-	_build_platforms()
-	_build_cover()
-	_build_props()
-	_build_spawn_points()
-
-	if bake_navigation:
-		_bake()
-
-	# Roof dressing is added after baking so overhead rock cannot become
-	# a disconnected walkable surface.
-	if ceiling_enabled:
-		_build_ceiling()
-
-	_build_caches()
-	_build_medkits()
-	_build_doorways()
-	_build_landmarks()
-	_build_ring_debris()
-
-	if dust_enabled and quality >= GameSettings.Quality.MEDIUM:
-		_build_dust()
+	push_error("Arena: no authored map set. The procedural cave was removed; use dungeon_arena.tscn.")
 
 
 ## Source everything from an authored map instead of generating a cave.
