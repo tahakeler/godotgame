@@ -28,6 +28,7 @@ supporting the work is encouraged at [kenney.nl](https://kenney.nl/).
 | [RPG Audio](https://kenney.nl/assets/rpg-audio) | 1.0 | CC0 1.0 | All sound effects — firing, dry-fire, reload, impacts, zombie groans, footsteps, round results |
 | [Animated Characters: Survivors](https://kenney.nl/assets/animated-characters-survivors) | 1.0 | CC0 1.0 | The earlier zombie model. Still in the project files, not used in play |
 | [MakeHuman community assets](https://github.com/makehumancommunity/mpfb2) (MPFB, system assets, Mindfront Aksel skin) | — | CC0 1.0 | Source bodies, rig, clothing, eyes and skins of the zombie pack. See `assets/licenses/zombie-pack-makehuman-cc0.txt` |
+| [Godot AI](https://github.com/hi-godot/godot-ai) MCP add-on | 4.2.3 | MIT | Editor add-on connecting the AI assistant to the Godot editor over MCP (development only; not in the exported game). Licence at `addons/godot_ai/LICENSE` |
 
 ### Sourced horror audio (OpenGameArt, CC0)
 
