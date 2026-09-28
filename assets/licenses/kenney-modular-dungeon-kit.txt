@@ -1,0 +1,10 @@
+Modular Dungeon Kit
+by Kenney (www.kenney.nl)
+
+Source page: https://kenney.nl/assets/modular-dungeon-kit
+Licence:     Creative Commons Zero, CC0 1.0 (public domain dedication)
+             http://creativecommons.org/publicdomain/zero/1.0/
+Statement on the source page: "Creative Commons CC0" (checked 2026-09-28).
+
+Used for: the pieces the Amethyst Labyrinth map was built from in Blender
+(amethyst_labyrinth/).

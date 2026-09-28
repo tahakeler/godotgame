@@ -25,6 +25,11 @@ const ASSET_PACKS := [
 		"used": "The original procedural cave (still in the project; the shipped map is the Amethyst Labyrinth)",
 	},
 	{
+		"name": "Modular Dungeon Kit",
+		"licence": "CC0 1.0",
+		"used": "The pieces the Amethyst Labyrinth map was built from in Blender",
+	},
+	{
 		"name": "Blaster Kit",
 		"licence": "CC0 1.0",
 		"used": "The weapon viewmodel and the cases scattered across the floor",
@@ -40,7 +45,7 @@ const ASSET_PACKS := [
 		"used": "The earlier zombie model (still in the project files, not used in play)",
 	},
 	{
-		"name": "MakeHuman community assets — MPFB, system assets, Mindfront Aksel skin",
+		"name": "MakeHuman community assets — MPFB2, system assets, skins02 (Mindfront Aksel skin)",
 		"licence": "CC0 1.0",
 		"used": "The source bodies, rig, clothing, eyes and skins of the zombie pack",
 	},
@@ -123,8 +128,8 @@ const ASSET_PACKS := [
 
 ## Things made for this project rather than brought in.
 const ORIGINAL_WORK := [
-	"The zombie pack — the normal, heavy and runner zombies, their textures and animations, made in Blender for this game",
-	"The Amethyst Labyrinth — the map, modelled in Blender for this game",
+	"The zombie pack — the normal, heavy and runner zombies, their textures and animations, made in Blender for this game from MakeHuman CC0 assets",
+	"The Amethyst Labyrinth — the map, built in Blender for this game from Kenney's Modular Dungeon Kit",
 	"All game code, scenes and UI",
 	"Gunshots, the Brute's growl, the Screamer, the cave bed and the tension pulse, synthesised by tools/generate_audio.gd",
 	"All lighting, materials and environment setup",
@@ -169,8 +174,9 @@ func _build() -> void:
 	_add_heading("A S S I S T A N C E")
 	_add_body(
 		"Parts of this project were written with Claude Code acting as an AI "
-		+ "assistant. The specific features it authored are listed in "
-		+ "docs/ai-contribution.md."
+		+ "assistant (the headshot feature through the godot-ai MCP). The "
+		+ "Blender assets were made with help from ChatGPT (Astra 6). Details "
+		+ "are in docs/ai-contribution.md."
 	)
 
 
