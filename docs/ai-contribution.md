@@ -9,6 +9,10 @@ in the terminal, driven by the
 agent framework. Most of the game was written through Claude Code's own file,
 shell and git tools, **not** through MCP.
 
+The Blender assets (the Amethyst Labyrinth map and the zombie pack) were made
+with help from **ChatGPT (Astra 6)** inside the Blender workflow; they are
+credited in `CREDITS.md`.
+
 **The feature built through MCP is Headshots.** It was built with the
 [godot-ai](https://github.com/hi-godot/godot-ai) MCP server (add-on v4.2.3,
 `addons/godot_ai/`) connected to the live Godot editor. Every change below was

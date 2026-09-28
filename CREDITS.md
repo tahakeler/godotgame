@@ -24,10 +24,11 @@ supporting the work is encouraged at [kenney.nl](https://kenney.nl/).
 | Pack | Version | Licence | Used for |
 |------|---------|---------|----------|
 | [Modular Cave Kit](https://kenney.nl/assets/modular-cave-kit) | 1.0 | CC0 1.0 | The original procedural cave generator. Kept in the project; the shipped map is the Amethyst Labyrinth, modelled in Blender for this game |
+| [Modular Dungeon Kit](https://kenney.nl/assets/modular-dungeon-kit) | — | CC0 1.0 | The pieces the Amethyst Labyrinth map was built from in Blender |
 | [Blaster Kit](https://kenney.nl/assets/blaster-kit) | 2.1 | CC0 1.0 | The player's weapon viewmodel (`blaster-a`) and the weapon cases used as floor dressing |
 | [RPG Audio](https://kenney.nl/assets/rpg-audio) | 1.0 | CC0 1.0 | All sound effects — firing, dry-fire, reload, impacts, zombie groans, footsteps, round results |
 | [Animated Characters: Survivors](https://kenney.nl/assets/animated-characters-survivors) | 1.0 | CC0 1.0 | The earlier zombie model. Still in the project files, not used in play |
-| [MakeHuman community assets](https://github.com/makehumancommunity/mpfb2) (MPFB, system assets, Mindfront Aksel skin) | — | CC0 1.0 | Source bodies, rig, clothing, eyes and skins of the zombie pack. See `assets/licenses/zombie-pack-makehuman-cc0.txt` |
+| MakeHuman community assets: [MPFB2](https://github.com/makehumancommunity/mpfb2), [system assets](https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html), [skins02](https://static.makehumancommunity.org/assets/assetpacks/skins02.html) (Mindfront Aksel skin) | — | CC0 1.0 (MPFB code is GPLv3; its assets and output are CC0) | Source bodies, rig, clothing, eyes and skins of the zombie pack. See `assets/licenses/zombie-pack-makehuman-cc0.txt` |
 | [Godot AI](https://github.com/hi-godot/godot-ai) MCP add-on | 4.2.3 | MIT | Editor add-on connecting the AI assistant to the Godot editor over MCP (development only; not in the exported game). Licence at `addons/godot_ai/LICENSE` |
 
 ### Sourced horror audio (OpenGameArt, CC0)
@@ -78,14 +79,17 @@ third-party licence applies to them.
 ## Self-Created Content
 
 - All GDScript source code in `src/`
-- The Amethyst Labyrinth map (`amethyst_labyrinth/`), modelled in Blender for this game
-- The zombie pack (`assets/models/zombies/`): normal, heavy and runner zombies, textures and animation clips, made in Blender for this game from MakeHuman CC0 sources
+- The Amethyst Labyrinth map (`amethyst_labyrinth/`), built in Blender for this game from Kenney's Modular Dungeon Kit, with help from ChatGPT (Astra 6)
+- The zombie pack (`assets/models/zombies/`): normal, heavy and runner zombies, textures and animation clips, made in Blender for this game from MakeHuman CC0 sources, with help from ChatGPT (Astra 6)
 - All scene files (`.tscn`) and the UI theme
 - The gunshot and Brute growl, synthesised by `tools/generate_audio.gd`
 - All lighting, materials, and environment setup
 - Project icon (`icon.svg`)
 
 ## AI Contribution
+
+The Blender assets (the Amethyst Labyrinth map and the zombie pack) were made
+with help from **ChatGPT (Astra 6)** as an assistant inside the Blender workflow.
 
 Portions of this project's scenes and scripts were developed with
 [Claude Code](https://claude.com/claude-code) acting as an AI assistant. The

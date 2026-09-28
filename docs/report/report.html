@@ -54,8 +54,8 @@
 <h2>2. Assets</h2>
 <table>
 <tr><th>Asset</th><th>Source</th><th>Licence</th><th>Where it's used</th></tr>
-<tr><td>Amethyst Labyrinth (map, colour map, stone shaders)</td><td>Self-made in Blender</td><td>My own work</td><td><code>amethyst_labyrinth/</code>, the whole play space</td></tr>
-<tr><td>Zombie pack: normal, heavy and runner bodies, textures and animations</td><td>Self-made in Blender from MakeHuman community assets (MPFB rig, system assets, Mindfront Aksel skin)</td><td>My own work; sources CC0 1.0</td><td><code>assets/models/zombies/</code>, all five zombie types</td></tr>
+<tr><td>Amethyst Labyrinth (map, colour map, stone shaders)</td><td>Self-made in Blender from Kenney's <a href="https://kenney.nl/assets/modular-dungeon-kit">Modular Dungeon Kit</a>, with help from ChatGPT (Astra 6)</td><td>My own work; kit CC0 1.0</td><td><code>amethyst_labyrinth/</code>, the whole play space</td></tr>
+<tr><td>Zombie pack: normal, heavy and runner bodies, textures and animations</td><td>Self-made in Blender with help from ChatGPT (Astra 6), from MakeHuman community assets: <a href="https://github.com/makehumancommunity/mpfb2">MPFB2</a> rig, <a href="https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html">system assets</a>, <a href="https://static.makehumancommunity.org/assets/assetpacks/skins02.html">skins02</a> (Mindfront Aksel skin)</td><td>My own work; sources CC0 1.0 (MPFB code is GPLv3, but its assets and output are CC0)</td><td><code>assets/models/zombies/</code>, all five zombie types</td></tr>
 <tr><td>Blaster Kit (weapon model, cases)</td><td>Kenney</td><td>CC0 1.0</td><td>First-person weapon, floor props</td></tr>
 <tr><td>RPG Audio (footsteps, reloads, impacts, groans)</td><td>Kenney</td><td>CC0 1.0</td><td>Most sound effects</td></tr>
 <tr><td>Modular Cave Kit; Animated Characters: Survivors</td><td>Kenney</td><td>CC0 1.0</td><td>My earlier cave and zombie model; still in the project files, not used in play</td></tr>
@@ -139,7 +139,7 @@
 <p><b>Fix:</b> <code>Zombie._next_waypoint()</code> in <code>src/gameplay/zombie/zombie.gd</code> measures waypoints flat and skips to the first path point that's actually ahead. <b>Evidence:</b> the same measurement afterwards had all 20 zombies within 6 m by 50 s, average distance 1.4 m.</p>
 
 <h2>Appendix C — Where the AI changed the project</h2>
-<p>I built this with an AI assistant (Claude Code). The files it wrote are listed in <code>docs/ai-contribution.md</code>, including the exact MCP tool calls behind the headshot feature, and the full history is in the project's Git log.</p>
+<p>I built this with an AI assistant (Claude Code). The Blender assets (the map and the zombie pack) I made with help from ChatGPT (Astra 6). The files it wrote are listed in <code>docs/ai-contribution.md</code>, including the exact MCP tool calls behind the headshot feature, and the full history is in the project's Git log.</p>
 </div>
 
 </body>
