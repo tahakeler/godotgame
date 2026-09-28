@@ -30,6 +30,15 @@ signal reload_finished()
 signal fired(from: Vector3, to: Vector3)
 signal dry_fired()
 signal target_hit(target: Node, damage_dealt: float)
+## A round struck a zombie in the head (Zombie.is_head_hit). Emitted once per
+## pellet that lands high, before the damage is applied, so Game can count it
+## and the HUD can show it even when the hit kills.
+signal headshot(target: Node, at: Vector3)
+
+## Damage multiplier for a round that lands in the head zone. At two, a single
+## pistol headshot (26 -> 52) drops a Shambler (50 hp) that takes two body
+## shots, which is what makes aiming high worth the risk.
+@export var headshot_multiplier := 2.0
 ## Rounds scraped together after running completely dry.
 signal scrounged(amount: int)
 ## Reserve ammo landed on `kind`, `amount` rounds' worth, from a distribution
@@ -1793,10 +1802,16 @@ func _trace_shot() -> void:
 			var is_flesh := collider != null and collider.has_method("take_damage")
 
 			if is_flesh:
-				collider.take_damage(damage, result.position, direction)
+				# Headshot: the round landed in the top of the body. Decided
+				# by the zombie, which knows its own height.
+				var dealt := damage
+				if collider.has_method("is_head_hit") and collider.is_head_hit(result.position):
+					dealt = damage * headshot_multiplier
+					headshot.emit(collider, result.position)
+				collider.take_damage(dealt, result.position, direction)
 				if struck == null:
 					struck = collider
-				damage_dealt += damage
+				damage_dealt += dealt
 
 			impacted.emit(
 				result.position, result.get("normal", Vector3.UP), is_flesh

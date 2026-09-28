@@ -134,6 +134,11 @@ var _weapon: Weapon
 @onready var _vitals_backing: Control = $VitalsBacking
 @onready var _compass_backing: Control = $CompassBacking
 @onready var _kill_feedback: Control = %KillFeedback
+## "HEADSHOT" callout above the crosshair (built through the godot-ai MCP).
+@onready var _headshot_label: Label = %HeadshotLabel
+## Seconds the headshot callout stays up; it fades over the last half.
+const HEADSHOT_CALLOUT_TIME := 0.7
+var _headshot_remaining := 0.0
 
 ## Score popups stacked under the crosshair after a kill: {label, age}.
 var _kill_popups: Array = []
@@ -194,6 +199,7 @@ func _process(delta: float) -> void:
 	_tick_flash(delta)
 	_tick_hitmarker(delta)
 	_tick_hurt_vignette(delta)
+	_tick_headshot(delta)
 	_tick_noise_ring(delta)
 	_tick_crosshair(delta)
 	_tick_health_delta(delta)
@@ -265,7 +271,7 @@ func _set_round_readouts_visible(shown: bool) -> void:
 	# still pulsing with danger behind "EXTRACTED" says the fight goes on.
 	for node in [_crosshair, _top_bar, _objective_block, _vitals_block, _ammo_block,
 			_vignette, _hurt_vignette, _compass, _compass_backing, _vitals_backing,
-			_ammo_backing, _torch_label, _kill_feedback, _minimap]:
+			_ammo_backing, _torch_label, _kill_feedback, _minimap, _headshot_label]:
 		if node != null:
 			node.visible = shown
 
@@ -538,6 +544,10 @@ func _build_results(kills: int, duration: float) -> void:
 	if _game != null and _game.shots_fired > 0:
 		var accuracy := float(_game.shots_hit) / float(_game.shots_fired)
 		_add_stat("%d%%" % roundi(accuracy * 100.0), "ACCURACY")
+
+	# Headshots are counted by Game from the weapon's headshot signal.
+	if _game != null and "headshots" in _game:
+		_add_stat(str(_game.headshots), "HEADSHOTS")
 
 
 func _add_stat(value: String, caption: String) -> void:
@@ -876,6 +886,26 @@ func _on_zombie_killed(_at: Vector3, _experience: int, _ammo: int) -> void:
 	_hitmarker.modulate.a = 1.0
 	_hitmarker.scale = Vector2.ONE * KILL_MARKER_SCALE
 	_spawn_kill_popup(_experience)
+
+
+## Flash the HEADSHOT callout. Called by Game when the weapon reports a round
+## landing in a zombie's head zone; a second headshot restarts the timer.
+func show_headshot() -> void:
+	if _headshot_label == null:
+		return
+	_headshot_remaining = HEADSHOT_CALLOUT_TIME
+	_headshot_label.modulate.a = 1.0
+	_headshot_label.visible = true
+
+
+func _tick_headshot(delta: float) -> void:
+	if _headshot_remaining <= 0.0:
+		return
+	_headshot_remaining = maxf(0.0, _headshot_remaining - delta)
+	var half := HEADSHOT_CALLOUT_TIME * 0.5
+	_headshot_label.modulate.a = clampf(_headshot_remaining / half, 0.0, 1.0)
+	if _headshot_remaining <= 0.0:
+		_headshot_label.visible = false
 
 
 ## A CoD-style score readout for the kill just confirmed, rising and clearing

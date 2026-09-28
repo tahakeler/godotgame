@@ -72,6 +72,8 @@ var kills := 0
 ## round, so accuracy on the results screen is for that run only.
 var shots_fired := 0
 var shots_hit := 0
+## Rounds this round that landed in a zombie's head zone (Weapon.headshot).
+var headshots := 0
 var _threat_remaining := 0.0
 var _threat_elapsed := 0.0
 var _last_close_hit_msec := -CLOSE_NOTICE_COOLDOWN_MSEC
@@ -468,6 +470,15 @@ func _wire_statistics() -> void:
 	weapon.target_hit.connect(func(_target: Node, _damage: float) -> void:
 		shots_hit += 1
 	)
+	# Headshots: counted for the results screen and called out on the HUD.
+	# Only while the round is live, so a stray shot after it ends counts for
+	# nothing.
+	weapon.headshot.connect(func(_target: Node, _at: Vector3) -> void:
+		if state != RoundState.PLAYING:
+			return
+		headshots += 1
+		hud.show_headshot()
+	)
 
 
 ## Route gameplay signals to visual effects and camera feel, for the same reason
@@ -583,6 +594,7 @@ func start_round() -> void:
 	kills = 0
 	shots_fired = 0
 	shots_hit = 0
+	headshots = 0
 	elapsed_time = 0.0
 	time_remaining = round_duration
 
